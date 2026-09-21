@@ -1,0 +1,868 @@
+<title>Painel Infrações de Ponto</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --page:           #f9f9f7;
+    --surface:        #fcfcfb;
+    --surface-raised:  #ffffff;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+
+    --s1: #2a78d6; /* >7 dias trabalhados — blue */
+    --s2: #eb6834; /* interjornada — orange */
+    --s3: #1baf7a; /* >2h extras — aqua */
+
+    --good:     #0ca30c;
+    --warning:  #fab219;
+    --serious:  #ec835a;
+    --critical: #d03b3b;
+
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:           #0d0d0d;
+      --surface:        #1a1a19;
+      --surface-raised: #212120;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.12);
+
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+
+      --good:     #0ca30c;
+      --warning:  #fab219;
+      --serious:  #ec835a;
+      --critical: #e66767;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:           #0d0d0d;
+    --surface:        #1a1a19;
+    --surface-raised: #212120;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.12);
+
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+
+    --good:     #0ca30c;
+    --warning:  #fab219;
+    --serious:  #ec835a;
+    --critical: #e66767;
+    color-scheme: dark;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    background:var(--page);
+    color:var(--text-primary);
+    font-family:var(--sans);
+    margin:0;
+    padding-inline:20px;
+    padding-block:28px 48px;
+  }
+  h1,h2,h3{ text-wrap:balance; margin:0; }
+  .num{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  .wrap{ max-width:1180px; margin-inline:auto; display:flex; flex-direction:column; gap:28px; }
+
+  /* ---------- header ---------- */
+  header{ display:flex; flex-direction:column; gap:14px; }
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--s1); font-weight:600;
+  }
+  .title-row{ display:flex; flex-wrap:wrap; align-items:baseline; gap:12px 20px; justify-content:space-between; }
+  h1{ font-size:26px; font-weight:700; letter-spacing:-.01em; }
+  .subtitle{ color:var(--text-secondary); font-size:13.5px; margin-top:4px; }
+  .cycle-badge{
+    font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--text-primary);
+    background:var(--surface-raised); border:1px solid var(--border); border-radius:999px;
+    padding:7px 14px; white-space:nowrap;
+  }
+  .cycle-badge b{ color:var(--s1); font-weight:600; }
+
+  /* ---------- change log strip ---------- */
+  .changelog{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:10px;
+  }
+  @media (max-width:820px){ .changelog{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:480px){ .changelog{ grid-template-columns:1fr; } }
+  .change-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:13px 14px; display:flex; flex-direction:column; gap:5px;
+  }
+  .change-card .tag{
+    display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px;
+    letter-spacing:.04em; text-transform:uppercase; font-weight:600;
+  }
+  .change-card .tag.fix{ color:var(--critical); }
+  .change-card .tag.sync{ color:var(--s1); }
+  .change-card .tag.metric{ color:var(--s3); }
+  .change-card .tag.visual{ color:var(--s2); }
+  .change-card .tag .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .change-card p{ margin:0; font-size:12.5px; line-height:1.45; color:var(--text-secondary); }
+  .change-card strong{ color:var(--text-primary); }
+
+  .import-log{ display:flex; flex-direction:column; gap:0; }
+  .import-row{
+    display:grid; grid-template-columns:150px 1fr; gap:14px; padding:10px 0; align-items:baseline;
+    border-bottom:1px solid var(--grid);
+  }
+  .import-row:last-child{ border-bottom:none; }
+  @media (max-width:600px){ .import-row{ grid-template-columns:1fr; gap:4px; } }
+  .import-row .src{ font-family:var(--mono); font-size:11.5px; font-weight:600; color:var(--s1); white-space:nowrap; }
+  .import-row .detail{ font-size:12.5px; color:var(--text-secondary); line-height:1.5; }
+  .import-row .detail b{ color:var(--text-primary); font-weight:600; }
+  .import-note{
+    margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); font-size:11.5px;
+    color:var(--text-muted); line-height:1.5;
+  }
+
+  /* ---------- section shell ---------- */
+  section{ display:flex; flex-direction:column; gap:12px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .section-head h2{ font-size:15px; font-weight:600; }
+  .section-head .hint{ font-size:12px; color:var(--text-muted); }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px;
+  }
+
+  /* ---------- KPI tiles ---------- */
+  .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media (max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:480px){ .kpi-grid{ grid-template-columns:1fr; } }
+  .kpi{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:14px 16px; display:flex; flex-direction:column; gap:6px; min-width:0;
+  }
+  .kpi .label{ font-size:11px; color:var(--text-muted); letter-spacing:.02em; }
+  .kpi .value{ font-size:24px; font-weight:600; line-height:1.1; }
+  .kpi .value.small{ font-size:16px; font-weight:600; }
+  .kpi .delta{ font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:4px; width:fit-content; }
+  .kpi .delta.up-bad{ color:var(--critical); }
+  .kpi .delta.down-good{ color:var(--good); }
+  .kpi .sub{ font-size:11.5px; color:var(--text-secondary); }
+
+  /* ---------- before/after GO ---------- */
+  .go-compare{ display:grid; grid-template-columns:1fr 1.6fr; gap:18px; }
+  @media (max-width:760px){ .go-compare{ grid-template-columns:1fr; } }
+  .go-before{
+    border:1px dashed var(--critical); border-radius:10px; padding:14px 16px;
+    display:flex; flex-direction:column; gap:8px; background:color-mix(in srgb, var(--critical) 6%, transparent);
+  }
+  .go-before .label{ font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--critical); font-weight:700; }
+  .go-before .bar-row{ display:flex; align-items:center; gap:8px; }
+  .go-before .bar-track{ flex:1; height:14px; background:var(--grid); border-radius:4px; overflow:hidden; }
+  .go-before .bar-fill{ height:100%; background:var(--critical); border-radius:4px; }
+  .go-before .name{ font-size:11.5px; color:var(--text-secondary); }
+  .go-before .missing{ font-size:12px; color:var(--critical); font-weight:600; }
+  .go-before .ghost-row{ display:flex; align-items:center; gap:8px; opacity:.45; }
+  .go-before .ghost-track{ flex:1; height:8px; border:1px dashed var(--critical); border-radius:4px; }
+
+  .bars{ display:flex; flex-direction:column; gap:10px; }
+  .bar-item{ display:grid; grid-template-columns:190px 1fr 46px; align-items:center; gap:10px; }
+  .bar-item .bname{ font-size:12px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-item .btotal{ font-size:12.5px; text-align:right; font-weight:600; }
+  .stack-track{ position:relative; height:16px; background:var(--grid); border-radius:4px; overflow:hidden; display:flex; }
+  .seg{ height:100%; }
+  .seg + .seg{ box-shadow:-2px 0 0 0 var(--surface); }
+  .tooltip{
+    position:fixed; pointer-events:none; z-index:50; background:var(--surface-raised); color:var(--text-primary);
+    border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:11.5px; line-height:1.5;
+    box-shadow:0 8px 24px rgba(0,0,0,.18); opacity:0; transform:translateY(4px); transition:opacity .12s, transform .12s;
+    max-width:240px;
+  }
+  .tooltip.show{ opacity:1; transform:translateY(0); }
+  .tooltip .t-title{ font-weight:600; margin-bottom:4px; }
+  .tooltip .t-row{ display:flex; justify-content:space-between; gap:14px; }
+  .tooltip .t-row .k{ color:var(--text-secondary); }
+
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--text-secondary); }
+  .legend .item{ display:inline-flex; align-items:center; gap:6px; }
+  .legend .swatch{ width:9px; height:9px; border-radius:2px; }
+
+  /* ---------- evolution mini ---------- */
+  .evo-wrap{ display:flex; align-items:flex-end; gap:28px; flex-wrap:wrap; }
+  .evo-bars{ display:flex; align-items:flex-end; gap:22px; height:130px; }
+  .evo-bar{ display:flex; flex-direction:column; align-items:center; gap:8px; width:64px; }
+  .evo-bar .col{ width:34px; border-radius:5px 5px 0 0; background:var(--s1); }
+  .evo-bar .col.prev{ background:var(--text-muted); }
+  .evo-bar .v{ font-size:12.5px; font-weight:600; }
+  .evo-bar .l{ font-size:10px; color:var(--text-muted); text-align:center; line-height:1.3; }
+  .evo-note{ font-size:12px; color:var(--text-secondary); max-width:320px; line-height:1.55; }
+  .evo-note b{ color:var(--text-primary); }
+
+  /* ---------- table ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  thead th{
+    text-align:left; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted);
+    font-weight:600; padding:0 10px 8px; border-bottom:1px solid var(--grid);
+  }
+  thead th.num-col, tbody td.num-col{ text-align:right; }
+  tbody td{ padding:9px 10px; border-bottom:1px solid var(--grid); vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody td.name{ font-weight:500; }
+  tbody td.muted{ color:var(--text-secondary); }
+  .rank{ font-family:var(--mono); color:var(--text-muted); width:22px; display:inline-block; }
+  .badge{
+    display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600;
+    padding:3px 8px; border-radius:999px; font-family:var(--mono);
+  }
+  .badge.reinc{ background:color-mix(in srgb, var(--critical) 14%, transparent); color:var(--critical); }
+  .badge.ok{ background:color-mix(in srgb, var(--good) 12%, transparent); color:var(--good); }
+  .table-scroll{ overflow-x:auto; }
+  .mini-track{ width:70px; height:6px; background:var(--grid); border-radius:3px; overflow:hidden; display:inline-block; vertical-align:middle; margin-left:8px; }
+  .mini-fill{ height:100%; background:var(--s1); }
+
+  /* ---------- clickable infraction total ---------- */
+  .total-link{
+    background:none; border:none; padding:0; margin:0; cursor:pointer;
+    font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:inherit; font-weight:inherit;
+    color:var(--s1); text-decoration:underline; text-decoration-color:color-mix(in srgb, var(--s1) 40%, transparent);
+    text-underline-offset:2px; display:inline-flex; align-items:center; gap:2px;
+  }
+  .total-link:hover{ color:var(--text-primary); text-decoration-color:var(--text-primary); }
+  .total-link:focus-visible{ outline:2px solid var(--s1); outline-offset:2px; border-radius:3px; }
+  .total-link.muted-link{ color:var(--text-secondary); text-decoration-color:var(--border); }
+
+  /* ---------- detail modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center;
+    padding:48px 16px; z-index:100; overflow-y:auto;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal-panel{
+    background:var(--surface-raised); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px;
+    box-shadow:0 24px 64px rgba(0,0,0,.28); max-height:calc(100vh - 96px); display:flex; flex-direction:column;
+  }
+  .modal-head{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px 18px;
+    border-bottom:1px solid var(--grid);
+  }
+  .modal-head .m-name{ font-size:14.5px; font-weight:600; }
+  .modal-head .m-sub{ font-size:11.5px; color:var(--text-muted); margin-top:3px; }
+  .modal-close{
+    background:none; border:none; cursor:pointer; color:var(--text-muted); padding:4px; border-radius:6px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .modal-close:hover{ color:var(--text-primary); background:var(--surface); }
+  .modal-body{ overflow-y:auto; padding:8px 18px 18px; }
+  .modal-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text-secondary); padding:8px 0 4px; }
+  .modal-legend .item{ display:inline-flex; align-items:center; gap:5px; }
+  .modal-legend .swatch{ width:8px; height:8px; border-radius:2px; }
+  .detail-table{ width:100%; border-collapse:collapse; font-size:12px; }
+  .detail-table th{
+    text-align:left; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted);
+    font-weight:600; padding:8px 8px 6px; border-bottom:1px solid var(--grid); position:sticky; top:0; background:var(--surface-raised);
+  }
+  .detail-table td{ padding:7px 8px; border-bottom:1px solid var(--grid); vertical-align:middle; }
+  .detail-table td.date{ font-family:var(--mono); white-space:nowrap; }
+  .detail-table td.time{ font-family:var(--mono); color:var(--text-secondary); white-space:nowrap; }
+  .type-chips{ display:flex; gap:4px; flex-wrap:wrap; }
+  .type-chip{
+    font-size:9.5px; font-weight:700; font-family:var(--mono); padding:2px 6px; border-radius:5px; color:#fff;
+    white-space:nowrap;
+  }
+
+  /* ---------- hierarchy blocks (by GA) ---------- */
+  .hier-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .hier-toolbar button{
+    font-family:var(--sans); font-size:11.5px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:6px 11px; cursor:pointer;
+  }
+  .hier-toolbar button:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+
+  .hier-blocks{ display:flex; flex-direction:column; gap:10px; }
+  .ga-block{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  }
+  .ga-block > summary{
+    list-style:none; cursor:pointer; padding:13px 16px; display:flex; align-items:center; gap:14px;
+    flex-wrap:wrap; justify-content:space-between;
+  }
+  .ga-block > summary::-webkit-details-marker{ display:none; }
+  .ga-block > summary .chevron{
+    width:16px; height:16px; flex:none; color:var(--text-muted); transition:transform .15s;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .ga-block[open] > summary .chevron{ transform:rotate(90deg); }
+  .ga-head-main{ display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 320px; }
+  .ga-head-main .go-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .ga-head-text{ min-width:0; }
+  .ga-head-text .ga-name{ font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ga-head-text .go-line{ font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ga-head-stats{ display:flex; align-items:center; gap:16px; flex:none; }
+  .ga-stat{ text-align:right; }
+  .ga-stat .n{ font-size:14px; font-weight:600; display:block; }
+  .ga-stat .l{ font-size:9.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .ga-stat.total .n{ font-size:16px; }
+
+  .ga-body{ border-top:1px solid var(--grid); padding:4px 16px 14px; }
+  .ga-table{ width:100%; border-collapse:collapse; font-size:12px; }
+  .ga-table th{
+    text-align:left; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted);
+    font-weight:600; padding:10px 8px 6px; position:sticky; top:0; background:var(--surface);
+  }
+  .ga-table th.num-col, .ga-table td.num-col{ text-align:right; }
+  .ga-table td{ padding:6px 8px; border-top:1px solid var(--grid); vertical-align:middle; }
+  .ga-table td.name{ font-weight:500; }
+  .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
+
+  footer{ display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:space-between; align-items:center;
+    font-size:11.5px; color:var(--text-muted); border-top:1px solid var(--grid); padding-top:16px; }
+  footer .num{ color:var(--text-secondary); }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Jarvis MCLL · alloha FIBRA</div>
+    <div class="title-row">
+      <div>
+        <h1>Painel Infrações de Ponto</h1>
+        <div class="subtitle">Consolidado por GO, GA e evolução mensal — visão pós-correção do workbook</div>
+      </div>
+      <div class="cycle-badge">Ciclo selecionado · <b id="cycle-label">—</b></div>
+    </div>
+  </header>
+
+  <section>
+    <div class="section-head">
+      <h2>Correções e atualizações aplicadas ao workbook</h2>
+      <span class="hint">0 erros de fórmula em ~122.800 fórmulas recalculadas</span>
+    </div>
+    <div class="changelog">
+      <div class="change-card">
+        <span class="tag fix"><span class="dot"></span>Bug corrigido</span>
+        <p><strong>3 de 4 Gestores Operacionais</strong> tinham suas infrações somem do resumo por GO. Lista agora é dinâmica, com fallback automático de mapeamento.</p>
+      </div>
+      <div class="change-card">
+        <span class="tag sync"><span class="dot"></span>Ciclo sincronizado</span>
+        <p>DASHBOARD, PAINEL FCA e RESUMO COLABORADORES agora compartilham <strong>um único filtro mestre</strong> de ciclo.</p>
+      </div>
+      <div class="change-card">
+        <span class="tag metric"><span class="dot"></span>Novas métricas</span>
+        <p><strong>% do efetivo afetado</strong>, média de infrações por afetado, top reincidente e sinalização de reincidência ciclo a ciclo.</p>
+      </div>
+      <div class="change-card">
+        <span class="tag visual"><span class="dot"></span>Leitura visual</span>
+        <p>Escalas de cor por magnitude nas tabelas de GO, GA e no resumo de colaboradores.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Última importação de dados</h2>
+      <span class="hint" id="import-timestamp"></span>
+    </div>
+    <div class="card import-log" id="import-log"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Indicadores do ciclo selecionado</h2></div>
+    <div class="kpi-grid" id="kpi-grid"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Correção: infrações por GO (Gestor Operacional)</h2>
+      <span class="hint">soma dos 4 GOs = total do ciclo</span>
+    </div>
+    <div class="card go-compare">
+      <div class="go-before">
+        <span class="label">Antes da correção</span>
+        <div class="bar-row">
+          <span class="name" style="width:150px">WANDERSON M. P. COSTA</span>
+          <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+          <span class="num" style="font-size:12.5px; font-weight:600;">839</span>
+        </div>
+        <div class="ghost-row"><span class="name" style="width:150px">3 outros GOs reais</span><div class="ghost-track"></div><span class="missing">oculto</span></div>
+        <p style="font-size:11.5px; color:var(--text-secondary); margin:2px 0 0; line-height:1.5;">
+          As linhas em branco da tabela nunca eram preenchidas — <strong>816 infrações</strong> de IVANDRO, WALMIR e WELLINGTON ficavam fora do resumo e do gráfico.
+        </p>
+      </div>
+      <div>
+        <div class="bars" id="go-bars"></div>
+        <div class="legend" style="margin-top:12px;">
+          <span class="item"><span class="swatch" style="background:var(--s1)"></span>&gt;7 dias trab.</span>
+          <span class="item"><span class="swatch" style="background:var(--s2)"></span>Interjornada</span>
+          <span class="item"><span class="swatch" style="background:var(--s3)"></span>&gt;2h extras</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Infrações por GA (Gestor de Área)</h2>
+      <span class="hint">16 GAs · ordenado por total</span>
+    </div>
+    <div class="card">
+      <div class="bars" id="ga-bars"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Evolução por ciclo</h2>
+      <span class="hint">apenas 2 ciclos com dados reais até o momento</span>
+    </div>
+    <div class="card evo-wrap">
+      <div class="evo-bars" id="evo-bars"></div>
+      <p class="evo-note">A base <b>BASE BI HE BH</b> começou a receber dados em julho/2026. A janela de 24 ciclos do Dashboard mostra "Sem dados" para os demais meses — comportamento esperado, não é uma falha.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Top colaboradores por infrações no ciclo</h2>
+      <span class="hint"><span id="afetados-hint"></span></span>
+    </div>
+    <div class="card table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:28px"></th>
+            <th>Colaborador</th>
+            <th>GA</th>
+            <th class="num-col">Total</th>
+            <th>Reincidência</th>
+          </tr>
+        </thead>
+        <tbody id="top-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Colaboradores por hierarquia</h2>
+      <span class="hint">16 blocos por GA · <span id="hier-total-hint"></span></span>
+    </div>
+    <div class="hier-toolbar">
+      <button type="button" id="hier-expand">Expandir todos</button>
+      <button type="button" id="hier-collapse">Recolher todos</button>
+    </div>
+    <div class="hier-blocks" id="hier-blocks"></div>
+  </section>
+
+  <footer>
+    <span>Fonte: <span class="num">PAINEL INFRAÇÕES.xlsx</span> · backup preservado antes das edições</span>
+    <span>Gerado a partir do workbook corrigido — <span class="num" id="footer-cycle"></span></span>
+  </footer>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-name">
+    <div class="modal-head">
+      <div>
+        <div class="m-name" id="modal-name"></div>
+        <div class="m-sub" id="modal-sub"></div>
+      </div>
+      <button type="button" class="modal-close" id="modal-close" aria-label="Fechar">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-legend">
+        <span class="item"><span class="swatch" style="background:var(--s1)"></span>&gt;7 dias trab.</span>
+        <span class="item"><span class="swatch" style="background:var(--s2)"></span>Interjornada</span>
+        <span class="item"><span class="swatch" style="background:var(--s3)"></span>&gt;2h extras</span>
+      </div>
+      <table class="detail-table">
+        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Infração(ões) do dia</th></tr></thead>
+        <tbody id="modal-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const DATA = {
+    ciclo: "15/08/2026 a 14/09/2026",
+    cicloAnterior: "15/07/2026 a 14/08/2026",
+    total: 839,
+    totalAnterior: 771,
+    variacaoAbs: 68,
+    variacaoPct: 9,
+    tipoRecorrente: "> 2 Horas Extras",
+    pctEfetivo: 69,
+    afetados: 114,
+    colaboradores: 165,
+    mediaAfetado: 7.4,
+    topReincidente: { nome: "TARCILIO MENDES LEMOS", total: 27 },
+    totalReincidentes: 101,
+    porGo: [
+      { nome: "WANDERSON MARCELLUS PENHA COSTA", d7: 1, interj: 5, hex: 17, total: 23 },
+      { nome: "IVANDRO PESSOA DA NOBREGA ALENCAR", d7: 43, interj: 281, hex: 387, total: 711 },
+      { nome: "WALMIR FERNANDES DA SILVA", d7: 12, interj: 3, hex: 90, total: 105 },
+      { nome: "WELLINGTON MARCIO FIGUEIRA", d7: 0, interj: 0, hex: 0, total: 0 }
+    ],
+    porGa: [
+      { nome: "RAFAEL NUNES DO NASCIMENTO", d7: 18, interj: 91, hex: 123, total: 232 },
+      { nome: "MIGUEL BARROS DE CARVALHO JUNIOR", d7: 7, interj: 83, hex: 132, total: 222 },
+      { nome: "MARCOS RODRIGUES CARVALHO", d7: 13, interj: 69, hex: 83, total: 165 },
+      { nome: "CLAUDIO DE SOUSA VISGUEIRA", d7: 5, interj: 38, hex: 49, total: 92 },
+      { nome: "ALEKSEI THOMAS OLIVEIRA DE ABREU", d7: 1, interj: 1, hex: 12, total: 14 },
+      { nome: "RUAN LABRE GABRIEL DA SILVA", d7: 2, interj: 0, hex: 21, total: 23 },
+      { nome: "FRANCISCO SALES FURTADO JUNIOR", d7: 1, interj: 1, hex: 19, total: 21 },
+      { nome: "NAAN CARLOS CABRAL OLIVEIRA", d7: 6, interj: 0, hex: 14, total: 20 },
+      { nome: "ROBERVAL SILVA RODRIGUES", d7: 3, interj: 2, hex: 13, total: 18 },
+      { nome: "LEONARDO CARDOSO SILVA", d7: 0, interj: 0, hex: 17, total: 17 },
+      { nome: "WAGNER LUZ FIGUEIREDO", d7: 0, interj: 4, hex: 5, total: 9 },
+      { nome: "DASHIEL DOSTOIEVSKI SALES SOARES", d7: 0, interj: 0, hex: 6, total: 6 },
+      { nome: "IVANDRO PESSOA DA NOBREGA ALENCAR", d7: 0, interj: 0, hex: 0, total: 0 },
+      { nome: "WALMIR FERNANDES DA SILVA", d7: 0, interj: 0, hex: 0, total: 0 },
+      { nome: "WANDERSON MARCELLUS PENHA COSTA", d7: 0, interj: 0, hex: 0, total: 0 },
+      { nome: "WELLINGTON MARCIO FIGUEIRA", d7: 0, interj: 0, hex: 0, total: 0 }
+    ],
+    evolucao: [
+      { ciclo: "15/07/2026 a 14/08/2026", total: 771, label: "Jul → Ago" },
+      { ciclo: "15/08/2026 a 14/09/2026", total: 839, label: "Ago → Set" }
+    ],
+    top: [
+      { nome: "TARCILIO MENDES LEMOS", ga: "MARCOS RODRIGUES CARVALHO", total: 27, reinc: true },
+      { nome: "RICARDO WILATO SILVA COSTA", ga: "MARCOS RODRIGUES CARVALHO", total: 24, reinc: true },
+      { nome: "JOSE DA ROCHA DIAS RODRIGUES", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 23, reinc: true },
+      { nome: "MARIO SARAIVA BANDEIRA", ga: "RAFAEL NUNES DO NASCIMENTO", total: 23, reinc: true },
+      { nome: "CICERO SANTOS ALVES", ga: "RAFAEL NUNES DO NASCIMENTO", total: 22, reinc: true },
+      { nome: "KLERISON LUCAS NASCIMENTO SAMPAIO", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 21, reinc: true },
+      { nome: "ANTONIO JOSE ALVES PEREIRA", ga: "RAFAEL NUNES DO NASCIMENTO", total: 20, reinc: true },
+      { nome: "GEARDSON PEREIRA OLIVEIRA", ga: "MARCOS RODRIGUES CARVALHO", total: 19, reinc: true },
+      { nome: "LEONARDO ALCANTARA LEMOS", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 19, reinc: true },
+      { nome: "WILSON RODRIGUES OLIVEIRA", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 19, reinc: true },
+      { nome: "SALOMAO FREITAS SILVA", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 18, reinc: true },
+      { nome: "TIAGO ALVES BARBOSA", ga: "RAFAEL NUNES DO NASCIMENTO", total: 18, reinc: true },
+      { nome: "VITOR HUGO RODRIGUES DE SOUSA", ga: "RAFAEL NUNES DO NASCIMENTO", total: 18, reinc: true },
+      { nome: "JOSE NILTON DA SILVA SOUSA", ga: "MIGUEL BARROS DE CARVALHO JUNIOR", total: 17, reinc: true },
+      { nome: "JOSE PEDRO DOS SANTOS FRANCO", ga: "MARCOS RODRIGUES CARVALHO", total: 15, reinc: true }
+    ],
+    importacao: {
+      timestamp: '20/09/2026 21:46',
+      itens: [
+        { fonte: 'BASE.xlsx', origem: 'D:\\infrações\\BASE', detalhe: '1.166 registros na origem \u00b7 0 linha(s) alterada(s) \u00b7 0 linha(s) antiga(s) removida(s) (base substitu\u00edda por completo)' },
+        { fonte: 'BASE HIERARQUIA', origem: 'D:\\infrações\\HIERARQUIA\\HIERARQUIA.xlsx', detalhe: '0 colaborador(es) com GA atualizado \u00b7 0 novo(s) colaborador(es) adicionado(s) \u00b7 <b>15 presentes na base atual mas ausentes no arquivo importado</b> (mantidos, n\u00e3o removidos automaticamente)' },
+        { fonte: 'MAPA GO x GA', origem: 'D:\\infrações\\HIERARQUIA\\HIERARQUIA.xlsx', detalhe: '0 GA(s) com GO atualizado \u00b7 0 novo(s) GA(s) adicionado(s)' }
+      ],
+      nota: 'Importa\u00e7\u00e3o executada via script reutiliz\u00e1vel (importar_atualizacao.py, salvo em D:\\infra\u00e7\u00f5es). O painel HTML n\u00e3o acessa o disco local \u2014 a importa\u00e7\u00e3o real acontece nesta sess\u00e3o com Claude; para uma nova rodada, atualize os arquivos-modelo nas pastas BASE/ e HIERARQUIA/ e pe\u00e7a para importar novamente. Log completo tamb\u00e9m fica registrado na aba "LOG IMPORTA\u00c7\u00d5ES" do workbook.'
+    },
+    detalhes: {"ciclo":"15/08/2026 a 14/09/2026","detalhes":{"JOSE DA ROCHA DIAS RODRIGUES":[{"data":"15/08/2026","entrada":"08:24","saida":"22:21","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"08:02","saida":"23:12","d7":1,"interj":1,"hex":0},{"data":"20/08/2026","entrada":"07:55","saida":"22:00","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:02","saida":"17:00","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"07:56","saida":"22:00","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"07:55","saida":"21:40","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"07:58","saida":"22:47","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"08:02","saida":"22:27","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"07:59","saida":"20:26","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:58","saida":"21:56","d7":0,"interj":1,"hex":1},{"data":"07/09/2026","entrada":"07:11","saida":"22:00","d7":0,"interj":1,"hex":0},{"data":"09/09/2026","entrada":"07:55","saida":"23:17","d7":0,"interj":0,"hex":1},{"data":"11/09/2026","entrada":"07:56","saida":"21:32","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"07:57","saida":"20:18","d7":0,"interj":0,"hex":1}],"ANDERSON MARQUES BRAZ":[{"data":"15/08/2026","entrada":"07:34","saida":"22:31","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"08:00","saida":"17:00","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"08:02","saida":"21:00","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"18:49","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:00","saida":"20:59","d7":0,"interj":0,"hex":1},{"data":"06/09/2026","entrada":"09:40","saida":"05:55","d7":1,"interj":1,"hex":0},{"data":"07/09/2026","entrada":"16:38","saida":"22:54","d7":0,"interj":1,"hex":0}],"GUTEMBERG LUIZ AMORIM DE LYRA":[{"data":"15/08/2026","entrada":"07:35","saida":"22:40","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"08:00","saida":"21:00","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:04","saida":"18:49","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:00","saida":"20:49","d7":0,"interj":0,"hex":1},{"data":"06/09/2026","entrada":"09:40","saida":"05:45","d7":1,"interj":1,"hex":0},{"data":"07/09/2026","entrada":"16:38","saida":"22:53","d7":0,"interj":1,"hex":0}],"SALOMAO FREITAS SILVA":[{"data":"15/08/2026","entrada":"08:00","saida":"22:06","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"06:38","saida":"","d7":1,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"07:58","saida":"22:23","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"08:00","saida":"21:10","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:01","saida":"21:06","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"20:17","d7":0,"interj":0,"hex":1},{"data":"01/09/2026","entrada":"08:00","saida":"21:26","d7":1,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"08:01","saida":"21:39","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"08:02","saida":"20:08","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:10","saida":"17:01","d7":0,"interj":0,"hex":1}],"WILSON RODRIGUES OLIVEIRA":[{"data":"15/08/2026","entrada":"08:00","saida":"22:13","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"07:08","saida":"22:24","d7":1,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"07:55","saida":"21:09","d7":0,"interj":0,"hex":1},{"data":"26/08/2026","entrada":"07:56","saida":"22:23","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"07:48","saida":"21:20","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"21:21","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:02","saida":"20:25","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:58","saida":"20:05","d7":0,"interj":0,"hex":1},{"data":"01/09/2026","entrada":"08:06","saida":"20:35","d7":1,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"08:04","saida":"21:32","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"07:53","saida":"20:08","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:58","saida":"17:02","d7":0,"interj":0,"hex":1}],"KLERISON LUCAS NASCIMENTO SAMPAIO":[{"data":"15/08/2026","entrada":"08:00","saida":"23:56","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"08:03","saida":"23:41","d7":1,"interj":1,"hex":0},{"data":"20/08/2026","entrada":"07:59","saida":"21:00","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"08:00","saida":"17:00","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"08:00","saida":"22:09","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"08:01","saida":"21:58","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"07:48","saida":"22:40","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"22:06","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:08","saida":"20:10","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:03","saida":"22:02","d7":0,"interj":1,"hex":1},{"data":"07/09/2026","entrada":"07:11","saida":"21:15","d7":0,"interj":1,"hex":0},{"data":"09/09/2026","entrada":"07:59","saida":"23:06","d7":0,"interj":0,"hex":1},{"data":"11/09/2026","entrada":"08:00","saida":"21:32","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"08:00","saida":"20:00","d7":0,"interj":0,"hex":1}],"JOSE ROBERTO RIBEIRO DA SILVA":[{"data":"15/08/2026","entrada":"08:00","saida":"23:22","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"07:50","saida":"20:43","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"09:00","saida":"23:47","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:01","saida":"21:42","d7":0,"interj":1,"hex":1},{"data":"30/08/2026","entrada":"07:10","saida":"23:45","d7":0,"interj":1,"hex":0},{"data":"03/09/2026","entrada":"08:00","saida":"23:27","d7":0,"interj":1,"hex":1},{"data":"07/09/2026","entrada":"13:03","saida":"22:17","d7":0,"interj":1,"hex":0}],"RONIEL DINIZ FREIRE":[{"data":"15/08/2026","entrada":"08:00","saida":"23:22","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"07:59","saida":"20:44","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"09:03","saida":"23:46","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"21:44","d7":0,"interj":1,"hex":1},{"data":"30/08/2026","entrada":"07:14","saida":"23:47","d7":0,"interj":1,"hex":0},{"data":"03/09/2026","entrada":"08:00","saida":"23:29","d7":0,"interj":1,"hex":1},{"data":"07/09/2026","entrada":"13:06","saida":"22:18","d7":0,"interj":1,"hex":0}],"JUCIGLEYSON DE CARVALHO SOUZA":[{"data":"15/08/2026","entrada":"05:48","saida":"17:57","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"07:57","saida":"22:31","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"08:00","saida":"20:51","d7":0,"interj":1,"hex":1},{"data":"31/08/2026","entrada":"08:09","saida":"20:53","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"07:40","saida":"20:25","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:58","saida":"21:52","d7":0,"interj":1,"hex":1},{"data":"06/09/2026","entrada":"05:47","saida":"17:15","d7":1,"interj":0,"hex":0},{"data":"12/09/2026","entrada":"08:01","saida":"20:53","d7":0,"interj":0,"hex":1}],"RUAN LUCAS DOS SANTOS FRANCO":[{"data":"15/08/2026","entrada":"11:00","saida":"00:50","d7":0,"interj":1,"hex":0},{"data":"16/08/2026","entrada":"10:32","saida":"22:26","d7":1,"interj":1,"hex":0},{"data":"19/08/2026","entrada":"08:01","saida":"23:10","d7":0,"interj":1,"hex":1},{"data":"24/08/2026","entrada":"08:00","saida":"20:12","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"21:14","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"08:00","saida":"17:14","d7":1,"interj":0,"hex":0},{"data":"05/09/2026","entrada":"08:06","saida":"17:16","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"06:56","saida":"23:53","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"10:02","saida":"23:30","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"08:00","saida":"21:49","d7":0,"interj":1,"hex":1}],"JOAO VICTOR SOUSA CARVALHO":[{"data":"15/08/2026","entrada":"08:00","saida":"17:55","d7":0,"interj":0,"hex":1},{"data":"16/08/2026","entrada":"07:37","saida":"17:41","d7":1,"interj":0,"hex":0},{"data":"19/08/2026","entrada":"08:00","saida":"21:25","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"08:00","saida":"21:24","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"23:55","d7":0,"interj":0,"hex":1},{"data":"10/09/2026","entrada":"08:00","saida":"23:40","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"08:00","saida":"20:35","d7":0,"interj":0,"hex":1}],"GENIELSON MOREIRA OLIVEIRA":[{"data":"15/08/2026","entrada":"08:00","saida":"17:55","d7":0,"interj":0,"hex":1},{"data":"16/08/2026","entrada":"07:36","saida":"17:41","d7":1,"interj":0,"hex":0},{"data":"19/08/2026","entrada":"08:00","saida":"21:15","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"07:59","saida":"21:22","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"07:58","saida":"23:54","d7":0,"interj":0,"hex":1},{"data":"10/09/2026","entrada":"08:00","saida":"23:31","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"07:59","saida":"20:22","d7":0,"interj":0,"hex":1}],"RICARDO WILATO SILVA COSTA":[{"data":"15/08/2026","entrada":"07:54","saida":"21:57","d7":0,"interj":1,"hex":0},{"data":"16/08/2026","entrada":"08:06","saida":"22:46","d7":1,"interj":1,"hex":0},{"data":"17/08/2026","entrada":"07:59","saida":"22:04","d7":0,"interj":1,"hex":1},{"data":"18/08/2026","entrada":"07:45","saida":"21:23","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"07:51","saida":"22:04","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"07:54","saida":"22:15","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"06:32","saida":"21:47","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"07:55","saida":"23:55","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"07:59","saida":"22:52","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"07:46","saida":"23:16","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:41","saida":"20:14","d7":0,"interj":0,"hex":1},{"data":"07/09/2026","entrada":"09:30","saida":"21:14","d7":0,"interj":1,"hex":0},{"data":"08/09/2026","entrada":"07:58","saida":"21:38","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"07:45","saida":"23:50","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"08:00","saida":"21:12","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:15","saida":"22:08","d7":0,"interj":0,"hex":1}],"TARCILIO MENDES LEMOS":[{"data":"15/08/2026","entrada":"07:47","saida":"21:55","d7":0,"interj":1,"hex":0},{"data":"16/08/2026","entrada":"08:01","saida":"21:32","d7":1,"interj":1,"hex":0},{"data":"17/08/2026","entrada":"07:23","saida":"21:48","d7":0,"interj":1,"hex":1},{"data":"18/08/2026","entrada":"08:01","saida":"21:13","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"07:39","saida":"21:36","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"07:53","saida":"22:11","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"06:49","saida":"21:38","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"23:28","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"22:26","d7":0,"interj":1,"hex":1},{"data":"30/08/2026","entrada":"08:16","saida":"16:04","d7":1,"interj":0,"hex":0},{"data":"01/09/2026","entrada":"08:00","saida":"23:14","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:16","saida":"20:36","d7":0,"interj":0,"hex":1},{"data":"07/09/2026","entrada":"09:29","saida":"21:12","d7":0,"interj":1,"hex":0},{"data":"08/09/2026","entrada":"07:45","saida":"21:36","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"07:47","saida":"23:43","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"08:00","saida":"21:10","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:16","saida":"22:07","d7":0,"interj":0,"hex":1}],"HUMBERTO DA SILVA RAMOS":[{"data":"15/08/2026","entrada":"07:54","saida":"18:21","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:52","saida":"18:17","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"07:48","saida":"18:05","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:50","saida":"18:44","d7":0,"interj":0,"hex":1}],"EDUARDO TAVARES DE SOUSA":[{"data":"15/08/2026","entrada":"08:00","saida":"17:33","d7":0,"interj":0,"hex":1},{"data":"16/08/2026","entrada":"09:40","saida":"17:02","d7":1,"interj":0,"hex":0},{"data":"24/08/2026","entrada":"08:00","saida":"23:15","d7":0,"interj":0,"hex":1},{"data":"26/08/2026","entrada":"08:00","saida":"22:57","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"08:00","saida":"22:20","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"20:28","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:00","saida":"22:34","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"07:48","saida":"20:22","d7":1,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:45","saida":"22:40","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"08:06","saida":"20:50","d7":0,"interj":0,"hex":1}],"GEARDSON PEREIRA OLIVEIRA":[{"data":"15/08/2026","entrada":"08:00","saida":"23:59","d7":0,"interj":0,"hex":1},{"data":"17/08/2026","entrada":"07:57","saida":"20:18","d7":0,"interj":0,"hex":1},{"data":"19/08/2026","entrada":"07:56","saida":"23:43","d7":0,"interj":0,"hex":1},{"data":"21/08/2026","entrada":"08:00","saida":"20:01","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"06:56","saida":"17:49","d7":0,"interj":0,"hex":1},{"data":"23/08/2026","entrada":"08:05","saida":"22:07","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"07:59","saida":"22:01","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"12:17","saida":"00:24","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"10:25","saida":"03:55","d7":1,"interj":0,"hex":0},{"data":"29/08/2026","entrada":"08:08","saida":"17:26","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:01","saida":"23:41","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"08:00","saida":"22:24","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:58","saida":"19:33","d7":0,"interj":0,"hex":1},{"data":"06/09/2026","entrada":"13:11","saida":"18:00","d7":1,"interj":0,"hex":0}],"JAMILTON DE SOUSA CASTRO":[{"data":"15/08/2026","entrada":"08:00","saida":"13:57","d7":0,"interj":1,"hex":0},{"data":"16/08/2026","entrada":"00:05","saida":"23:58","d7":1,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"08:02","saida":"21:53","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:01","saida":"17:21","d7":0,"interj":1,"hex":0},{"data":"29/08/2026","entrada":"00:03","saida":"23:58","d7":0,"interj":1,"hex":0},{"data":"09/09/2026","entrada":"08:00","saida":"22:46","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"08:01","saida":"02:30","d7":0,"interj":1,"hex":0},{"data":"11/09/2026","entrada":"08:01","saida":"21:56","d7":0,"interj":1,"hex":1}],"CICERO SANTOS ALVES":[{"data":"15/08/2026","entrada":"09:45","saida":"21:58","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"05:02","saida":"18:56","d7":1,"interj":0,"hex":0},{"data":"19/08/2026","entrada":"08:12","saida":"22:57","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"08:01","saida":"22:12","d7":0,"interj":1,"hex":1},{"data":"21/08/2026","entrada":"08:01","saida":"22:30","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:10","saida":"19:47","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"08:00","saida":"23:32","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"17:08","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:57","saida":"22:08","d7":0,"interj":1,"hex":1},{"data":"02/09/2026","entrada":"08:08","saida":"21:29","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"08:07","saida":"17:19","d7":1,"interj":0,"hex":0},{"data":"04/09/2026","entrada":"08:00","saida":"22:19","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"08:03","saida":"20:40","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:07","saida":"23:47","d7":0,"interj":0,"hex":1}],"MARIO SARAIVA BANDEIRA":[{"data":"15/08/2026","entrada":"08:00","saida":"23:20","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"05:00","saida":"20:20","d7":1,"interj":0,"hex":0},{"data":"19/08/2026","entrada":"08:00","saida":"22:53","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"08:01","saida":"22:53","d7":0,"interj":1,"hex":1},{"data":"21/08/2026","entrada":"08:01","saida":"21:30","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:00","saida":"20:00","d7":0,"interj":1,"hex":1},{"data":"24/08/2026","entrada":"08:00","saida":"23:40","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"20:06","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"30/08/2026","entrada":"08:44","saida":"21:30","d7":0,"interj":1,"hex":0},{"data":"31/08/2026","entrada":"07:45","saida":"22:01","d7":0,"interj":1,"hex":1},{"data":"02/09/2026","entrada":"07:59","saida":"22:35","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"08:00","saida":"17:28","d7":1,"interj":0,"hex":0},{"data":"09/09/2026","entrada":"07:00","saida":"20:30","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:01","saida":"23:51","d7":0,"interj":0,"hex":1}],"ANTONIO JOSE ALVES PEREIRA":[{"data":"15/08/2026","entrada":"07:56","saida":"21:30","d7":0,"interj":1,"hex":1},{"data":"16/08/2026","entrada":"06:29","saida":"17:09","d7":1,"interj":0,"hex":0},{"data":"17/08/2026","entrada":"07:53","saida":"23:31","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"07:17","saida":"23:05","d7":0,"interj":1,"hex":1},{"data":"21/08/2026","entrada":"07:58","saida":"23:21","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"04:52","saida":"23:45","d7":0,"interj":1,"hex":0},{"data":"31/08/2026","entrada":"07:37","saida":"21:09","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"08:01","saida":"23:59","d7":0,"interj":1,"hex":1},{"data":"02/09/2026","entrada":"07:49","saida":"23:59","d7":0,"interj":1,"hex":0},{"data":"05/09/2026","entrada":"07:54","saida":"16:24","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"07:49","saida":"21:51","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"08:02","saida":"21:16","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:52","saida":"23:25","d7":0,"interj":0,"hex":1}],"FRANCISCO ARTUR DA SILVA LIMA":[{"data":"15/08/2026","entrada":"07:37","saida":"17:50","d7":0,"interj":0,"hex":1},{"data":"16/08/2026","entrada":"09:39","saida":"17:12","d7":1,"interj":0,"hex":0},{"data":"24/08/2026","entrada":"07:55","saida":"22:50","d7":0,"interj":0,"hex":1},{"data":"26/08/2026","entrada":"07:58","saida":"22:42","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"07:53","saida":"22:43","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"07:22","saida":"20:12","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:42","saida":"21:13","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"07:43","saida":"19:12","d7":1,"interj":0,"hex":0},{"data":"02/09/2026","entrada":"08:01","saida":"23:21","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"07:57","saida":"21:41","d7":0,"interj":0,"hex":1}],"PEDRO LUCAS SOUZA MARTINS":[{"data":"15/08/2026","entrada":"11:00","saida":"00:46","d7":0,"interj":1,"hex":0},{"data":"16/08/2026","entrada":"10:36","saida":"22:24","d7":1,"interj":1,"hex":0},{"data":"19/08/2026","entrada":"07:55","saida":"23:12","d7":0,"interj":1,"hex":1},{"data":"24/08/2026","entrada":"07:59","saida":"20:16","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"21:18","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:47","saida":"17:15","d7":1,"interj":0,"hex":0},{"data":"05/09/2026","entrada":"07:50","saida":"16:59","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"06:51","saida":"23:52","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"09:59","saida":"23:27","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"07:51","saida":"21:01","d7":0,"interj":0,"hex":1}],"BRUNO DE ASSIS DA SILVA SOBRAL":[{"data":"15/08/2026","entrada":"07:53","saida":"17:00","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:51","saida":"17:00","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"08:02","saida":"20:20","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"07:57","saida":"22:01","d7":0,"interj":1,"hex":1},{"data":"02/09/2026","entrada":"07:59","saida":"22:02","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:51","saida":"22:33","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"07:27","saida":"21:12","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:58","saida":"18:01","d7":0,"interj":0,"hex":1}],"NELSON BARBOSA DE SOUZA JUNIOR":[{"data":"15/08/2026","entrada":"08:00","saida":"20:17","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"07:49","saida":"20:16","d7":0,"interj":0,"hex":1}],"RAVEL DA SILVA FERREIRA":[{"data":"15/08/2026","entrada":"07:54","saida":"18:17","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:52","saida":"17:31","d7":0,"interj":0,"hex":1}],"ANTONIO PEDRO DE OLIVEIRA":[{"data":"15/08/2026","entrada":"07:57","saida":"17:27","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:57","saida":"17:42","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"07:57","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:56","saida":"18:14","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:57","saida":"17:41","d7":0,"interj":0,"hex":1}],"HELTON RAFAEL REIS DE SOUSA":[{"data":"15/08/2026","entrada":"08:01","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:01","saida":"18:01","d7":0,"interj":0,"hex":1}],"MANOEL VIVALDO DA COSTA FILHO":[{"data":"15/08/2026","entrada":"07:40","saida":"18:08","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:31","saida":"18:07","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"07:24","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:51","saida":"18:03","d7":0,"interj":0,"hex":1}],"EMANUEL BEZERRA LIMA":[{"data":"15/08/2026","entrada":"08:01","saida":"17:47","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"08:01","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:59","saida":"18:44","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:02","saida":"18:59","d7":0,"interj":0,"hex":1}],"SILVINO DOS SANTOS BARROS":[{"data":"15/08/2026","entrada":"08:00","saida":"18:08","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"18:00","d7":1,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:00","saida":"18:36","d7":0,"interj":0,"hex":1}],"FRANCISCO DAS CHAGAS SANTANA DE SOUSA":[{"data":"15/08/2026","entrada":"08:06","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:01","saida":"18:00","d7":0,"interj":0,"hex":1}],"FRANCINILDO JANSEN MARINHO":[{"data":"15/08/2026","entrada":"07:53","saida":"18:02","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:01","saida":"18:10","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:54","saida":"18:11","d7":0,"interj":0,"hex":1}],"LUIS HENRIQUE MENDES COSTA":[{"data":"15/08/2026","entrada":"08:00","saida":"18:07","d7":0,"interj":0,"hex":1}],"SUELTO DA COSTA GALVAO":[{"data":"15/08/2026","entrada":"07:59","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"18:03","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:59","saida":"18:01","d7":0,"interj":0,"hex":1}],"IGOR HENRIQUE DO NASCIMENTO DE LIMA":[{"data":"15/08/2026","entrada":"08:11","saida":"18:29","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"08:00","saida":"17:30","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:01","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:05","saida":"17:59","d7":0,"interj":0,"hex":1}],"LEANDRO RODRIGUES DA SILVA":[{"data":"15/08/2026","entrada":"08:00","saida":"17:51","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"17:18","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"17:29","d7":0,"interj":0,"hex":1},{"data":"11/09/2026","entrada":"","saida":"","d7":0,"interj":1,"hex":0}],"ANDRE FELIPE SOUSA SILVA":[{"data":"15/08/2026","entrada":"07:55","saida":"17:50","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"18:03","d7":0,"interj":0,"hex":1}],"LEONARDO PEREIRA SANTOS":[{"data":"16/08/2026","entrada":"07:51","saida":"01:22","d7":1,"interj":0,"hex":0},{"data":"17/08/2026","entrada":"12:22","saida":"23:01","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"08:00","saida":"21:15","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"02:17","d7":0,"interj":1,"hex":0},{"data":"09/09/2026","entrada":"08:02","saida":"21:14","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"08:00","saida":"02:00","d7":0,"interj":1,"hex":0}],"JOSE NILTON DA SILVA SOUSA":[{"data":"16/08/2026","entrada":"11:57","saida":"21:18","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"08:09","saida":"22:58","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:05","saida":"20:02","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"07:59","saida":"21:25","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"08:01","saida":"21:33","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"07:59","saida":"23:48","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"08:00","saida":"21:57","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"20:21","d7":0,"interj":0,"hex":1},{"data":"01/09/2026","entrada":"05:32","saida":"20:55","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"08:01","saida":"22:15","d7":0,"interj":0,"hex":1},{"data":"04/09/2026","entrada":"07:58","saida":"21:02","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"07:58","saida":"21:33","d7":0,"interj":0,"hex":1}],"LEONARDO ALCANTARA LEMOS":[{"data":"16/08/2026","entrada":"16:50","saida":"21:20","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"07:52","saida":"22:58","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:47","saida":"20:02","d7":0,"interj":0,"hex":1},{"data":"23/08/2026","entrada":"08:00","saida":"21:16","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"07:58","saida":"21:34","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"21:48","d7":1,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"07:58","saida":"23:47","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"08:05","saida":"22:02","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"08:00","saida":"20:27","d7":0,"interj":0,"hex":1},{"data":"01/09/2026","entrada":"07:58","saida":"20:56","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:59","saida":"22:01","d7":0,"interj":0,"hex":1},{"data":"04/09/2026","entrada":"07:59","saida":"21:22","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"08:00","saida":"21:33","d7":0,"interj":0,"hex":1}],"MATEUS NUNES PEREIRA":[{"data":"16/08/2026","entrada":"06:59","saida":"17:01","d7":1,"interj":0,"hex":0},{"data":"19/08/2026","entrada":"06:52","saida":"22:05","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"07:08","saida":"21:32","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"05:00","saida":"23:03","d7":0,"interj":1,"hex":0},{"data":"29/08/2026","entrada":"07:47","saida":"01:33","d7":0,"interj":1,"hex":0},{"data":"01/09/2026","entrada":"07:56","saida":"23:50","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"07:40","saida":"21:26","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:53","saida":"22:18","d7":0,"interj":0,"hex":1}],"ISRAEL COSTA DA SILVA":[{"data":"16/08/2026","entrada":"08:01","saida":"17:10","d7":1,"interj":0,"hex":0},{"data":"17/08/2026","entrada":"07:58","saida":"21:10","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:02","saida":"18:05","d7":0,"interj":0,"hex":1},{"data":"06/09/2026","entrada":"08:10","saida":"12:10","d7":1,"interj":0,"hex":0}],"MATHEUS SANTOS DE SOUSA":[{"data":"16/08/2026","entrada":"08:02","saida":"18:04","d7":1,"interj":0,"hex":0},{"data":"29/08/2026","entrada":"07:54","saida":"16:55","d7":0,"interj":0,"hex":1}],"JOSIMAR BEZERRA CRUZ":[{"data":"17/08/2026","entrada":"07:55","saida":"19:09","d7":0,"interj":1,"hex":0},{"data":"18/08/2026","entrada":"05:05","saida":"19:12","d7":0,"interj":0,"hex":1},{"data":"20/08/2026","entrada":"07:58","saida":"22:20","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:57","saida":"17:03","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"07:55","saida":"20:15","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"07:57","saida":"22:12","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:57","saida":"22:04","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"08:01","saida":"21:19","d7":0,"interj":0,"hex":1}],"SILVIO CESAR DA SILVA GUEDES":[{"data":"17/08/2026","entrada":"08:00","saida":"22:23","d7":0,"interj":1,"hex":1},{"data":"24/08/2026","entrada":"08:00","saida":"23:17","d7":0,"interj":0,"hex":1},{"data":"26/08/2026","entrada":"08:02","saida":"21:50","d7":0,"interj":1,"hex":1},{"data":"31/08/2026","entrada":"08:01","saida":"23:34","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"08:00","saida":"22:37","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"08:04","saida":"01:21","d7":0,"interj":1,"hex":0}],"TIAGO DA CONCEICAO DA SILVA":[{"data":"17/08/2026","entrada":"07:58","saida":"20:17","d7":0,"interj":0,"hex":1},{"data":"19/08/2026","entrada":"08:01","saida":"21:59","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"06:05","saida":"23:21","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"05:57","saida":"22:12","d7":0,"interj":1,"hex":0},{"data":"22/08/2026","entrada":"06:22","saida":"21:03","d7":0,"interj":1,"hex":1},{"data":"23/08/2026","entrada":"06:09","saida":"22:46","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"07:58","saida":"21:06","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"08:01","saida":"19:00","d7":1,"interj":0,"hex":0},{"data":"31/08/2026","entrada":"07:58","saida":"21:53","d7":0,"interj":0,"hex":1}],"ANDRE LIMA DE MELO":[{"data":"17/08/2026","entrada":"07:52","saida":"23:07","d7":0,"interj":1,"hex":1},{"data":"18/08/2026","entrada":"08:00","saida":"20:35","d7":0,"interj":1,"hex":1},{"data":"19/08/2026","entrada":"07:30","saida":"20:48","d7":0,"interj":0,"hex":1},{"data":"21/08/2026","entrada":"08:01","saida":"21:47","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:38","saida":"20:54","d7":0,"interj":0,"hex":1},{"data":"23/08/2026","entrada":"14:48","saida":"23:30","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"08:04","saida":"23:59","d7":0,"interj":1,"hex":1},{"data":"31/08/2026","entrada":"06:54","saida":"23:08","d7":0,"interj":1,"hex":0},{"data":"01/09/2026","entrada":"06:22","saida":"23:52","d7":0,"interj":1,"hex":0},{"data":"02/09/2026","entrada":"07:08","saida":"23:43","d7":0,"interj":1,"hex":0},{"data":"05/09/2026","entrada":"07:58","saida":"16:30","d7":0,"interj":0,"hex":1}],"MACKLOUVE DA SILVA BARBOSA":[{"data":"17/08/2026","entrada":"07:59","saida":"20:00","d7":0,"interj":0,"hex":1},{"data":"19/08/2026","entrada":"08:12","saida":"23:43","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:26","saida":"21:00","d7":0,"interj":1,"hex":1},{"data":"23/08/2026","entrada":"07:59","saida":"22:18","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"08:00","saida":"20:34","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:05","saida":"01:05","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"12:04","saida":"00:15","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"11:04","saida":"20:46","d7":1,"interj":0,"hex":0},{"data":"31/08/2026","entrada":"08:00","saida":"23:14","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"17:59","d7":0,"interj":0,"hex":1}],"WELLINGTON PEREIRA DA SILVA":[{"data":"17/08/2026","entrada":"06:01","saida":"20:00","d7":0,"interj":0,"hex":1},{"data":"18/08/2026","entrada":"08:00","saida":"21:11","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"08:01","saida":"22:42","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:00","saida":"20:34","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:00","saida":"22:52","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"08:00","saida":"20:53","d7":0,"interj":0,"hex":1}],"DINALDO RODRIGUES DA SILVA":[{"data":"17/08/2026","entrada":"05:49","saida":"19:33","d7":0,"interj":0,"hex":1},{"data":"18/08/2026","entrada":"07:57","saida":"21:45","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"07:59","saida":"22:38","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"07:58","saida":"05:10","d7":0,"interj":1,"hex":0},{"data":"31/08/2026","entrada":"08:02","saida":"20:12","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:58","saida":"20:02","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"07:58","saida":"22:21","d7":0,"interj":1,"hex":1},{"data":"08/09/2026","entrada":"06:13","saida":"19:34","d7":0,"interj":0,"hex":1},{"data":"10/09/2026","entrada":"07:58","saida":"22:24","d7":0,"interj":1,"hex":1}],"EDVALDO VIEIRA DO NASCIMENTO":[{"data":"17/08/2026","entrada":"07:59","saida":"22:33","d7":0,"interj":1,"hex":1},{"data":"24/08/2026","entrada":"07:54","saida":"23:32","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"10:50","saida":"21:14","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"07:57","saida":"22:01","d7":0,"interj":1,"hex":1},{"data":"31/08/2026","entrada":"08:11","saida":"23:30","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"08:02","saida":"22:36","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"08:13","saida":"01:25","d7":0,"interj":1,"hex":0}],"ALEX BARROS CARNEIRO":[{"data":"17/08/2026","entrada":"07:59","saida":"20:17","d7":0,"interj":0,"hex":1},{"data":"19/08/2026","entrada":"08:01","saida":"21:47","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"06:06","saida":"23:12","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"05:59","saida":"22:00","d7":0,"interj":1,"hex":0},{"data":"22/08/2026","entrada":"06:44","saida":"21:02","d7":0,"interj":1,"hex":1},{"data":"23/08/2026","entrada":"06:11","saida":"22:45","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"08:00","saida":"21:00","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"18:00","d7":1,"interj":0,"hex":0},{"data":"31/08/2026","entrada":"07:58","saida":"21:40","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:59","saida":"22:00","d7":0,"interj":1,"hex":1}],"MAMEDE BARROS MONTEIRO FILHO":[{"data":"17/08/2026","entrada":"08:00","saida":"17:36","d7":0,"interj":1,"hex":0},{"data":"18/08/2026","entrada":"03:05","saida":"00:23","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"08:00","saida":"21:51","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"08:00","saida":"20:32","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"07:48","saida":"17:01","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"07:59","saida":"22:17","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"07:59","saida":"20:23","d7":0,"interj":0,"hex":1}],"JOSE PEDRO DOS SANTOS FRANCO":[{"data":"18/08/2026","entrada":"08:01","saida":"22:01","d7":0,"interj":0,"hex":1},{"data":"20/08/2026","entrada":"08:00","saida":"22:11","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:54","saida":"23:31","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:00","saida":"22:03","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"05:01","saida":"19:14","d7":1,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:00","saida":"21:54","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"06:37","saida":"21:10","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:34","saida":"19:06","d7":0,"interj":0,"hex":1},{"data":"08/09/2026","entrada":"08:00","saida":"22:58","d7":0,"interj":1,"hex":1},{"data":"09/09/2026","entrada":"07:03","saida":"19:15","d7":0,"interj":0,"hex":1}],"GABRIEL OLIVEIRA DE ARAUJO":[{"data":"18/08/2026","entrada":"04:50","saida":"19:31","d7":0,"interj":0,"hex":1},{"data":"19/08/2026","entrada":"08:00","saida":"23:55","d7":0,"interj":0,"hex":1},{"data":"22/08/2026","entrada":"07:58","saida":"17:23","d7":0,"interj":0,"hex":1},{"data":"23/08/2026","entrada":"07:03","saida":"22:00","d7":0,"interj":1,"hex":0},{"data":"31/08/2026","entrada":"07:59","saida":"22:04","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"07:58","saida":"21:02","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"08:00","saida":"22:14","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:58","saida":"21:59","d7":0,"interj":0,"hex":1}],"JERCILIO CLAUDINO ALVES":[{"data":"19/08/2026","entrada":"07:56","saida":"23:51","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"08:00","saida":"22:06","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:58","saida":"23:54","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"07:52","saida":"20:18","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"07:59","saida":"20:28","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:55","saida":"22:01","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:01","saida":"22:12","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"08:05","saida":"22:10","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:57","saida":"22:02","d7":0,"interj":1,"hex":1}],"CESARIO RUBERVAL FREITAS":[{"data":"19/08/2026","entrada":"08:57","saida":"22:48","d7":0,"interj":1,"hex":1},{"data":"29/08/2026","entrada":"07:54","saida":"17:16","d7":0,"interj":0,"hex":1}],"DANIEL DOS SANTOS FREITAS":[{"data":"19/08/2026","entrada":"09:00","saida":"22:50","d7":0,"interj":1,"hex":1}],"FRANCISCO CARLOS SOUSA SANTOS":[{"data":"19/08/2026","entrada":"07:56","saida":"23:51","d7":0,"interj":1,"hex":1},{"data":"20/08/2026","entrada":"08:00","saida":"22:05","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"08:00","saida":"23:54","d7":0,"interj":1,"hex":1},{"data":"25/08/2026","entrada":"07:59","saida":"20:18","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"08:00","saida":"20:29","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:00","saida":"22:01","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"08:08","saida":"22:12","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"08:00","saida":"22:09","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"08:01","saida":"22:01","d7":0,"interj":1,"hex":1}],"CLEMILTON MENDES DA SILVA":[{"data":"19/08/2026","entrada":"08:00","saida":"17:03","d7":1,"interj":0,"hex":0},{"data":"28/08/2026","entrada":"08:00","saida":"20:24","d7":0,"interj":0,"hex":1}],"VAGNER NERIS GOMES DA SILVA":[{"data":"20/08/2026","entrada":"07:56","saida":"22:17","d7":0,"interj":1,"hex":1}],"WALDECY RODRIGUES DA SILVA ALVES FILHO":[{"data":"20/08/2026","entrada":"07:58","saida":"23:25","d7":0,"interj":1,"hex":1},{"data":"28/08/2026","entrada":"09:34","saida":"21:28","d7":0,"interj":1,"hex":0},{"data":"29/08/2026","entrada":"08:00","saida":"17:51","d7":0,"interj":0,"hex":1}],"VITOR HUGO RODRIGUES DE SOUSA":[{"data":"20/08/2026","entrada":"06:34","saida":"20:59","d7":0,"interj":1,"hex":1},{"data":"21/08/2026","entrada":"06:38","saida":"22:40","d7":0,"interj":1,"hex":0},{"data":"22/08/2026","entrada":"07:24","saida":"21:07","d7":0,"interj":1,"hex":1},{"data":"23/08/2026","entrada":"07:27","saida":"22:08","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"08:03","saida":"22:21","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"08:03","saida":"21:24","d7":1,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"08:01","saida":"22:12","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:02","saida":"21:51","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"08:05","saida":"23:38","d7":0,"interj":0,"hex":1},{"data":"03/09/2026","entrada":"06:00","saida":"04:03","d7":0,"interj":1,"hex":0},{"data":"04/09/2026","entrada":"15:01","saida":"23:58","d7":0,"interj":1,"hex":0},{"data":"05/09/2026","entrada":"08:00","saida":"22:13","d7":0,"interj":0,"hex":1}],"JEFFERSON MACEDO ALVES":[{"data":"20/08/2026","entrada":"08:01","saida":"22:56","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:55","saida":"23:42","d7":0,"interj":0,"hex":1},{"data":"25/08/2026","entrada":"08:01","saida":"21:55","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"04:53","saida":"19:21","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"08:06","saida":"21:50","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:59","saida":"19:13","d7":0,"interj":0,"hex":1},{"data":"08/09/2026","entrada":"08:03","saida":"23:53","d7":0,"interj":0,"hex":1}],"JOSE LUIS DO NASCIMENTO":[{"data":"20/08/2026","entrada":"08:01","saida":"00:38","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"07:57","saida":"22:02","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"05:01","saida":"15:48","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"06:22","saida":"22:58","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"08:00","saida":"17:10","d7":1,"interj":0,"hex":0},{"data":"01/09/2026","entrada":"08:01","saida":"23:57","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:02","saida":"20:34","d7":0,"interj":0,"hex":1}],"KASSIANO SANTANA DOS SANTOS":[{"data":"20/08/2026","entrada":"08:01","saida":"00:08","d7":0,"interj":1,"hex":0},{"data":"21/08/2026","entrada":"07:43","saida":"21:46","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"05:01","saida":"15:47","d7":0,"interj":0,"hex":1},{"data":"24/08/2026","entrada":"06:02","saida":"22:17","d7":0,"interj":1,"hex":0},{"data":"26/08/2026","entrada":"07:48","saida":"17:00","d7":1,"interj":0,"hex":0},{"data":"01/09/2026","entrada":"08:08","saida":"23:56","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:49","saida":"20:29","d7":0,"interj":0,"hex":1}],"TIAGO ALVES BARBOSA":[{"data":"20/08/2026","entrada":"06:59","saida":"20:40","d7":0,"interj":1,"hex":1},{"data":"21/08/2026","entrada":"07:07","saida":"22:53","d7":0,"interj":1,"hex":1},{"data":"22/08/2026","entrada":"07:48","saida":"20:40","d7":0,"interj":1,"hex":1},{"data":"23/08/2026","entrada":"07:36","saida":"21:31","d7":0,"interj":1,"hex":0},{"data":"24/08/2026","entrada":"07:56","saida":"22:29","d7":0,"interj":1,"hex":1},{"data":"26/08/2026","entrada":"07:58","saida":"21:10","d7":1,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"07:57","saida":"21:57","d7":0,"interj":0,"hex":1},{"data":"31/08/2026","entrada":"07:28","saida":"20:51","d7":0,"interj":1,"hex":1},{"data":"01/09/2026","entrada":"07:49","saida":"23:29","d7":0,"interj":0,"hex":1},{"data":"04/09/2026","entrada":"15:17","saida":"23:52","d7":0,"interj":1,"hex":0},{"data":"05/09/2026","entrada":"07:54","saida":"21:44","d7":0,"interj":0,"hex":1}],"NATAN PADILHA PINHEIRO":[{"data":"21/08/2026","entrada":"08:04","saida":"18:23","d7":0,"interj":1,"hex":0}],"PEDRO HENRIQUE SILVA OLIVEIRA":[{"data":"22/08/2026","entrada":"08:01","saida":"17:01","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"07:58","saida":"17:11","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:59","saida":"18:02","d7":0,"interj":0,"hex":1}],"IGOR RAFAEL DE SOUSA GUEDES":[{"data":"22/08/2026","entrada":"16:39","saida":"23:37","d7":0,"interj":1,"hex":0},{"data":"25/08/2026","entrada":"08:01","saida":"21:10","d7":0,"interj":1,"hex":1},{"data":"27/08/2026","entrada":"08:00","saida":"21:10","d7":0,"interj":1,"hex":1},{"data":"31/08/2026","entrada":"08:01","saida":"20:25","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:45","saida":"21:12","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:33","saida":"20:39","d7":0,"interj":1,"hex":1}],"WERBERT PEREIRA DOS SANTOS":[{"data":"22/08/2026","entrada":"07:57","saida":"19:05","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:22","saida":"17:33","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"18:05","d7":0,"interj":0,"hex":1}],"SOSTENES DOS SANTOS PINHEIRO":[{"data":"22/08/2026","entrada":"08:09","saida":"19:47","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:06","saida":"19:13","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:02","saida":"18:35","d7":0,"interj":0,"hex":1}],"DEMI RODRIGUES SOUSA":[{"data":"22/08/2026","entrada":"08:01","saida":"20:06","d7":0,"interj":0,"hex":1},{"data":"27/08/2026","entrada":"07:13","saida":"22:28","d7":0,"interj":1,"hex":1}],"LUIS VANOEL AMARAL QUIRINO":[{"data":"22/08/2026","entrada":"08:00","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"18:01","d7":0,"interj":0,"hex":1}],"EMISSON BARBOSA PAIVA":[{"data":"22/08/2026","entrada":"08:01","saida":"18:04","d7":1,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:59","saida":"18:04","d7":0,"interj":0,"hex":1}],"SILVERIO SOARES BARROS":[{"data":"22/08/2026","entrada":"08:00","saida":"16:38","d7":0,"interj":0,"hex":1},{"data":"29/08/2026","entrada":"08:06","saida":"18:30","d7":0,"interj":0,"hex":1}],"MARCIO ANDRE CUTRIM COSTA":[{"data":"22/08/2026","entrada":"07:55","saida":"17:56","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:51","saida":"22:15","d7":0,"interj":0,"hex":1}],"DIEGO DA CONCEICAO DE CARVALHO":[{"data":"22/08/2026","entrada":"07:57","saida":"17:27","d7":0,"interj":0,"hex":1},{"data":"26/08/2026","entrada":"07:56","saida":"20:56","d7":0,"interj":0,"hex":1},{"data":"06/09/2026","entrada":"07:57","saida":"12:04","d7":1,"interj":0,"hex":0}],"FLAVIO ANTONIO ESTEVAM AROUCHE":[{"data":"22/08/2026","entrada":"07:55","saida":"17:20","d7":1,"interj":0,"hex":1},{"data":"11/09/2026","entrada":"07:55","saida":"07:55","d7":0,"interj":1,"hex":0}],"PAULO VICTOR TRINDADE MUNIZ":[{"data":"22/08/2026","entrada":"08:04","saida":"18:00","d7":0,"interj":0,"hex":1}],"FELIPE SOUSA QUIRINO":[{"data":"22/08/2026","entrada":"08:00","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"23/08/2026","entrada":"08:00","saida":"18:00","d7":1,"interj":0,"hex":0},{"data":"29/08/2026","entrada":"08:00","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"18:00","d7":0,"interj":0,"hex":1}],"SIRLAN DOS SANTOS BARROS":[{"data":"22/08/2026","entrada":"08:01","saida":"18:00","d7":0,"interj":0,"hex":1}],"MARCELLO LUIZ SOUZA":[{"data":"22/08/2026","entrada":"08:03","saida":"17:08","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:02","saida":"17:03","d7":0,"interj":0,"hex":1}],"LUIS CARLOS DE SOUSA RIBEIRO JUNIOR":[{"data":"22/08/2026","entrada":"07:53","saida":"18:00","d7":0,"interj":0,"hex":1}],"DZAJIC BORGES DE SOUZA":[{"data":"23/08/2026","entrada":"07:29","saida":"22:19","d7":0,"interj":1,"hex":0},{"data":"25/08/2026","entrada":"08:00","saida":"21:40","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"19:13","saida":"07:20","d7":0,"interj":0,"hex":1}],"FRANCISCO DE ASSIS DA CONCEICAO DOS SANTOS":[{"data":"23/08/2026","entrada":"07:57","saida":"18:01","d7":1,"interj":0,"hex":0},{"data":"05/09/2026","entrada":"07:58","saida":"18:04","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"06:53","saida":"20:43","d7":0,"interj":0,"hex":1}],"JONAS FELIPE FEITOSA CUNHA":[{"data":"24/08/2026","entrada":"07:29","saida":"20:23","d7":0,"interj":0,"hex":1},{"data":"28/08/2026","entrada":"07:52","saida":"22:07","d7":0,"interj":1,"hex":1},{"data":"02/09/2026","entrada":"07:46","saida":"21:57","d7":0,"interj":1,"hex":1},{"data":"03/09/2026","entrada":"07:44","saida":"22:25","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"08:01","saida":"21:01","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"07:37","saida":"17:54","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:36","saida":"16:09","d7":0,"interj":0,"hex":1}],"ADRIANO CAZUZA ALVES":[{"data":"26/08/2026","entrada":"08:05","saida":"00:20","d7":0,"interj":1,"hex":0}],"LUCAS JUNIEL ANDRADE DE SOUSA":[{"data":"27/08/2026","entrada":"08:00","saida":"22:16","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"18:00","saida":"08:01","d7":0,"interj":1,"hex":1}],"PAULO HENRIQUE REIS DE SOUSA":[{"data":"29/08/2026","entrada":"07:53","saida":"17:51","d7":1,"interj":0,"hex":1}],"FELIX MACHADO OLIVEIRA":[{"data":"29/08/2026","entrada":"07:58","saida":"18:16","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"07:58","saida":"17:39","d7":0,"interj":0,"hex":1}],"DAVID WESLLEM DE SOUSA BALDEZ":[{"data":"29/08/2026","entrada":"07:51","saida":"16:11","d7":0,"interj":0,"hex":1}],"FRANCISCO EDNELTON PAULINO DA SILVA":[{"data":"29/08/2026","entrada":"07:53","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:50","saida":"18:29","d7":0,"interj":0,"hex":1}],"FRANCISCO CARLOS ALVES DA SILVA":[{"data":"29/08/2026","entrada":"07:51","saida":"16:24","d7":0,"interj":0,"hex":1},{"data":"11/09/2026","entrada":"05:34","saida":"18:09","d7":0,"interj":0,"hex":1}],"LUCAS WESLEY DOS SANTOS TRINDADE":[{"data":"29/08/2026","entrada":"07:29","saida":"17:03","d7":0,"interj":0,"hex":1},{"data":"04/09/2026","entrada":"07:29","saida":"18:01","d7":1,"interj":0,"hex":0},{"data":"10/09/2026","entrada":"18:02","saida":"07:56","d7":0,"interj":1,"hex":1},{"data":"11/09/2026","entrada":"18:02","saida":"07:43","d7":0,"interj":0,"hex":1}],"ISAIAS DE JESUS MACIEL SAMPAIO":[{"data":"29/08/2026","entrada":"08:03","saida":"18:01","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"07:56","saida":"17:31","d7":0,"interj":0,"hex":1}],"GABRIEL LEITE BARBOSA":[{"data":"29/08/2026","entrada":"08:04","saida":"17:10","d7":0,"interj":0,"hex":1}],"ANDERSON BARBOSA MARINHO":[{"data":"31/08/2026","entrada":"08:02","saida":"20:27","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"07:56","saida":"21:16","d7":0,"interj":1,"hex":1},{"data":"10/09/2026","entrada":"06:01","saida":"21:23","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"07:58","saida":"16:58","d7":0,"interj":0,"hex":1}],"DENILSON RODRIGUES SOUSA":[{"data":"31/08/2026","entrada":"07:41","saida":"20:25","d7":0,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"08:08","saida":"21:07","d7":0,"interj":1,"hex":1},{"data":"04/09/2026","entrada":"07:40","saida":"23:57","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"06:10","saida":"21:26","d7":0,"interj":1,"hex":1},{"data":"12/09/2026","entrada":"07:48","saida":"16:39","d7":0,"interj":0,"hex":1}],"VITOR KELVIN CASTRO DA ROCHA":[{"data":"01/09/2026","entrada":"08:00","saida":"20:27","d7":1,"interj":0,"hex":1},{"data":"02/09/2026","entrada":"08:01","saida":"20:15","d7":0,"interj":0,"hex":1}],"JOSE NETO DA SILVA":[{"data":"01/09/2026","entrada":"07:57","saida":"19:56","d7":1,"interj":0,"hex":0},{"data":"02/09/2026","entrada":"08:01","saida":"20:12","d7":0,"interj":0,"hex":1}],"ANTONIO FERREIRA DE CARVALHO CUNHA":[{"data":"01/09/2026","entrada":"07:56","saida":"20:14","d7":0,"interj":0,"hex":1}],"ALBERO DE SOUZA LEITE":[{"data":"03/09/2026","entrada":"08:03","saida":"20:36","d7":0,"interj":0,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"16:18","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"08:00","saida":"00:53","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"08:00","saida":"22:54","d7":0,"interj":0,"hex":1}],"BRUNO DE SOUSA DO NASCIMENTO":[{"data":"03/09/2026","entrada":"08:00","saida":"20:31","d7":0,"interj":1,"hex":1},{"data":"05/09/2026","entrada":"08:00","saida":"16:49","d7":0,"interj":0,"hex":1},{"data":"09/09/2026","entrada":"08:00","saida":"00:52","d7":0,"interj":1,"hex":0},{"data":"10/09/2026","entrada":"08:00","saida":"22:50","d7":0,"interj":0,"hex":1}],"JOSIVAL DA PAZ TORRES":[{"data":"05/09/2026","entrada":"08:01","saida":"17:09","d7":0,"interj":0,"hex":1}],"CARLOS HENRIQUE FREITAS GOMES":[{"data":"05/09/2026","entrada":"08:01","saida":"18:00","d7":0,"interj":0,"hex":1},{"data":"12/09/2026","entrada":"08:37","saida":"18:11","d7":0,"interj":0,"hex":1}],"EMANOEL DE SOUSA MACIEL":[{"data":"05/09/2026","entrada":"07:58","saida":"17:33","d7":0,"interj":0,"hex":1}],"FRANCISCO ALVES FILHO":[{"data":"05/09/2026","entrada":"07:56","saida":"15:59","d7":0,"interj":0,"hex":1}],"GUILHERME FRANCISCO CAVALCANTE LACERDA":[{"data":"05/09/2026","entrada":"07:51","saida":"18:01","d7":0,"interj":0,"hex":1}],"RAFAEL COSTA BARROS":[{"data":"05/09/2026","entrada":"07:59","saida":"18:01","d7":0,"interj":0,"hex":1}],"ANDRE SANTOS PEREIRA":[{"data":"06/09/2026","entrada":"07:54","saida":"12:01","d7":1,"interj":0,"hex":0}],"ELISVALDO DE ARAUJO":[{"data":"12/09/2026","entrada":"07:58","saida":"18:58","d7":0,"interj":0,"hex":1}],"ROMULO JOSE DO VALE ARAUJO":[{"data":"12/09/2026","entrada":"08:00","saida":"16:12","d7":0,"interj":0,"hex":1}]}},
+    porGaHierarquia: [{"ga":"RAFAEL NUNES DO NASCIMENTO","go":"IVANDRO PESSOA DA NOBREGA ALENCAR","total":232,"equipe":19,"afetados":19,"reincidentes":18,"colaboradores":[{"nome":"MARIO SARAIVA BANDEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":9,"hex":12,"total":23,"reinc":true},{"nome":"CICERO SANTOS ALVES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":8,"hex":12,"total":22,"reinc":true},{"nome":"ANTONIO JOSE ALVES PEREIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":9,"hex":10,"total":20,"reinc":true},{"nome":"TIAGO ALVES BARBOSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":8,"hex":9,"total":18,"reinc":true},{"nome":"VITOR HUGO RODRIGUES DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":9,"hex":8,"total":18,"reinc":true},{"nome":"ANDRE LIMA DE MELO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":8,"hex":7,"total":15,"reinc":true},{"nome":"EDUARDO TAVARES DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":4,"hex":9,"total":15,"reinc":true},{"nome":"FRANCISCO ARTUR DA SILVA LIMA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":4,"hex":8,"total":14,"reinc":true},{"nome":"ALEX BARROS CARNEIRO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":6,"hex":6,"total":13,"reinc":true},{"nome":"TIAGO DA CONCEICAO DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":6,"hex":5,"total":12,"reinc":true},{"nome":"MATEUS NUNES PEREIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":4,"hex":5,"total":10,"reinc":true},{"nome":"GENIELSON MOREIRA OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":2,"hex":6,"total":9,"reinc":true},{"nome":"JOAO VICTOR SOUSA CARVALHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":2,"hex":6,"total":9,"reinc":true},{"nome":"JOSE LUIS DO NASCIMENTO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":3,"hex":4,"total":8,"reinc":true},{"nome":"KASSIANO SANTANA DOS SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":3,"hex":4,"total":8,"reinc":true},{"nome":"DENILSON RODRIGUES SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":3,"hex":4,"total":7,"reinc":false},{"nome":"ANDERSON BARBOSA MARINHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":4,"total":6,"reinc":true},{"nome":"DEMI RODRIGUES SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":2,"total":3,"reinc":true},{"nome":"NELSON BARBOSA DE SOUZA JUNIOR","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true}]},{"ga":"MIGUEL BARROS DE CARVALHO JUNIOR","go":"IVANDRO PESSOA DA NOBREGA ALENCAR","total":222,"equipe":18,"afetados":17,"reincidentes":17,"colaboradores":[{"nome":"JOSE DA ROCHA DIAS RODRIGUES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":10,"hex":12,"total":23,"reinc":true},{"nome":"KLERISON LUCAS NASCIMENTO SAMPAIO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":8,"hex":12,"total":21,"reinc":true},{"nome":"LEONARDO ALCANTARA LEMOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":7,"hex":11,"total":19,"reinc":true},{"nome":"WILSON RODRIGUES OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":6,"hex":11,"total":19,"reinc":true},{"nome":"SALOMAO FREITAS SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":7,"hex":9,"total":18,"reinc":true},{"nome":"JOSE NILTON DA SILVA SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":6,"hex":11,"total":17,"reinc":true},{"nome":"FRANCISCO CARLOS SOUSA SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":6,"hex":9,"total":15,"reinc":true},{"nome":"JERCILIO CLAUDINO ALVES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":6,"hex":9,"total":15,"reinc":true},{"nome":"BRUNO DE ASSIS DA SILVA SOBRAL","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":8,"total":12,"reinc":true},{"nome":"DINALDO RODRIGUES DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":8,"total":12,"reinc":true},{"nome":"GABRIEL OLIVEIRA DE ARAUJO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":7,"total":11,"reinc":true},{"nome":"JONAS FELIPE FEITOSA CUNHA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":7,"total":11,"reinc":true},{"nome":"JOSIMAR BEZERRA CRUZ","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":7,"total":11,"reinc":true},{"nome":"WELLINGTON PEREIRA DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":6,"total":8,"reinc":true},{"nome":"LUCAS JUNIEL ANDRADE DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":2,"total":4,"reinc":true},{"nome":"WALDECY RODRIGUES DA SILVA ALVES FILHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":2,"total":4,"reinc":true},{"nome":"VAGNER NERIS GOMES DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":1,"total":2,"reinc":true},{"nome":"GLEISON RODRIGUES DE SOUSA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"MARCOS RODRIGUES CARVALHO","go":"IVANDRO PESSOA DA NOBREGA ALENCAR","total":165,"equipe":15,"afetados":13,"reincidentes":12,"colaboradores":[{"nome":"TARCILIO MENDES LEMOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":12,"hex":13,"total":27,"reinc":true},{"nome":"RICARDO WILATO SILVA COSTA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":11,"hex":12,"total":24,"reinc":true},{"nome":"GEARDSON PEREIRA OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":6,"hex":11,"total":19,"reinc":true},{"nome":"JOSE PEDRO DOS SANTOS FRANCO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":4,"hex":10,"total":15,"reinc":true},{"nome":"RUAN LUCAS DOS SANTOS FRANCO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":6,"hex":6,"total":14,"reinc":true},{"nome":"MACKLOUVE DA SILVA BARBOSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":5,"hex":7,"total":13,"reinc":true},{"nome":"PEDRO LUCAS SOUZA MARTINS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":5,"hex":6,"total":13,"reinc":true},{"nome":"JAMILTON DE SOUSA CASTRO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":8,"hex":3,"total":12,"reinc":true},{"nome":"JEFFERSON MACEDO ALVES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":3,"hex":7,"total":10,"reinc":true},{"nome":"LEONARDO PEREIRA SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":5,"hex":2,"total":8,"reinc":true},{"nome":"BRUNO DE SOUSA DO NASCIMENTO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":3,"total":5,"reinc":true},{"nome":"ALBERO DE SOUZA LEITE","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":3,"total":4,"reinc":true},{"nome":"ADRIANO CAZUZA ALVES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":0,"total":1,"reinc":false},{"nome":"JHON LENON SOUSA NETO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"THALES FERREIRA LIMA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"CLAUDIO DE SOUSA VISGUEIRA","go":"IVANDRO PESSOA DA NOBREGA ALENCAR","total":92,"equipe":14,"afetados":13,"reincidentes":12,"colaboradores":[{"nome":"JUCIGLEYSON DE CARVALHO SOUZA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":4,"hex":7,"total":12,"reinc":false},{"nome":"EDVALDO VIEIRA DO NASCIMENTO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":6,"hex":5,"total":11,"reinc":true},{"nome":"IGOR RAFAEL DE SOUSA GUEDES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":5,"hex":5,"total":10,"reinc":true},{"nome":"JOSE ROBERTO RIBEIRO DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":5,"hex":5,"total":10,"reinc":true},{"nome":"RONIEL DINIZ FREIRE","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":5,"hex":5,"total":10,"reinc":true},{"nome":"SILVIO CESAR DA SILVA GUEDES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":5,"hex":5,"total":10,"reinc":true},{"nome":"ANDERSON MARQUES BRAZ","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":2,"hex":5,"total":8,"reinc":true},{"nome":"GUTEMBERG LUIZ AMORIM DE LYRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":2,"hex":4,"total":7,"reinc":true},{"nome":"DZAJIC BORGES DE SOUZA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":2,"hex":2,"total":4,"reinc":true},{"nome":"CESARIO RUBERVAL FREITAS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":2,"total":3,"reinc":true},{"nome":"VITOR KELVIN CASTRO DA ROCHA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":2,"total":3,"reinc":true},{"nome":"DANIEL DOS SANTOS FREITAS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":1,"total":2,"reinc":true},{"nome":"JOSE NETO DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":1,"total":2,"reinc":true},{"nome":"BRUNO DE SOUSA SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"RUAN LABRE GABRIEL DA SILVA","go":"WALMIR FERNANDES DA SILVA","total":23,"equipe":10,"afetados":8,"reincidentes":6,"colaboradores":[{"nome":"ANTONIO PEDRO DE OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":5,"total":5,"reinc":true},{"nome":"EMANUEL BEZERRA LIMA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":4,"total":4,"reinc":true},{"nome":"EMISSON BARBOSA PAIVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":3,"total":4,"reinc":true},{"nome":"SILVINO DOS SANTOS BARROS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":3,"total":4,"reinc":true},{"nome":"FRANCISCO CARLOS ALVES DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":false},{"nome":"SILVERIO SOARES BARROS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"EMANOEL DE SOUSA MACIEL","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"SIRLAN DOS SANTOS BARROS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":false},{"nome":"LUCAS SOUSA SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RAIMUNDO NONATO BEZERRA LIMA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"FRANCISCO SALES FURTADO JUNIOR","go":"WALMIR FERNANDES DA SILVA","total":21,"equipe":10,"afetados":10,"reincidentes":8,"colaboradores":[{"nome":"FELIPE SOUSA QUIRINO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":3,"total":4,"reinc":true},{"nome":"FRANCINILDO JANSEN MARINHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":false},{"nome":"FRANCISCO DAS CHAGAS SANTANA DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":true},{"nome":"SUELTO DA COSTA GALVAO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":true},{"nome":"ISAIAS DE JESUS MACIEL SAMPAIO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"LUIS VANOEL AMARAL QUIRINO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"LUIS HENRIQUE MENDES COSTA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":false},{"nome":"NATAN PADILHA PINHEIRO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":0,"total":1,"reinc":true},{"nome":"PAULO VICTOR TRINDADE MUNIZ","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"RAFAEL COSTA BARROS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true}]},{"ga":"NAAN CARLOS CABRAL OLIVEIRA","go":"WALMIR FERNANDES DA SILVA","total":20,"equipe":12,"afetados":10,"reincidentes":9,"colaboradores":[{"nome":"ISRAEL COSTA DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":2,"interj":0,"hex":2,"total":4,"reinc":true},{"nome":"DIEGO DA CONCEICAO DE CARVALHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":2,"total":3,"reinc":true},{"nome":"FRANCISCO DE ASSIS DA CONCEICAO DOS SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":2,"total":3,"reinc":false},{"nome":"ANDRE FELIPE SOUSA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"MATHEUS SANTOS DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":1,"total":2,"reinc":true},{"nome":"RAVEL DA SILVA FERREIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"ANDRE SANTOS PEREIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":0,"total":1,"reinc":true},{"nome":"DAVID WESLLEM DE SOUSA BALDEZ","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"GABRIEL LEITE BARBOSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"LUIS CARLOS DE SOUSA RIBEIRO JUNIOR","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"ANTONIO JOSE BISPO DA CUNHA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"VALMIR MORAIS SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"ROBERVAL SILVA RODRIGUES","go":"WALMIR FERNANDES DA SILVA","total":18,"equipe":9,"afetados":8,"reincidentes":7,"colaboradores":[{"nome":"LUCAS WESLEY DOS SANTOS TRINDADE","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":1,"hex":3,"total":5,"reinc":true},{"nome":"FLAVIO ANTONIO ESTEVAM AROUCHE","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":1,"hex":1,"total":3,"reinc":false},{"nome":"SOSTENES DOS SANTOS PINHEIRO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":true},{"nome":"FELIX MACHADO OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"PAULO HENRIQUE REIS DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":1,"total":2,"reinc":true},{"nome":"ELISVALDO DE ARAUJO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"FRANCISCO ALVES FILHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"GUILHERME FRANCISCO CAVALCANTE LACERDA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"LUCAS DOS SANTOS CUTRIM","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"LEONARDO CARDOSO SILVA","go":"WALMIR FERNANDES DA SILVA","total":17,"equipe":11,"afetados":7,"reincidentes":7,"colaboradores":[{"nome":"HUMBERTO DA SILVA RAMOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":4,"total":4,"reinc":true},{"nome":"MANOEL VIVALDO DA COSTA FILHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":4,"total":4,"reinc":true},{"nome":"CARLOS HENRIQUE FREITAS GOMES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"FRANCISCO EDNELTON PAULINO DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"HELTON RAFAEL REIS DE SOUSA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"MARCIO ANDRE CUTRIM COSTA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"ANTONIO FERREIRA DE CARVALHO CUNHA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"ERIK RAYKAR SANTOS SOUSA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"GILSON RODRIGUES MARQUES","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"HERBERT LUCAS BARROS SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MARCIO MOURA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"ALEKSEI THOMAS OLIVEIRA DE ABREU","go":"WANDERSON MARCELLUS PENHA COSTA","total":14,"equipe":14,"afetados":6,"reincidentes":5,"colaboradores":[{"nome":"IGOR HENRIQUE DO NASCIMENTO DE LIMA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":4,"total":4,"reinc":true},{"nome":"LEANDRO RODRIGUES DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":1,"hex":3,"total":4,"reinc":true},{"nome":"CLEMILTON MENDES DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":1,"interj":0,"hex":1,"total":2,"reinc":true},{"nome":"MARCELLO LUIZ SOUZA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":2,"total":2,"reinc":true},{"nome":"JOSIVAL DA PAZ TORRES","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":false},{"nome":"ROMULO JOSE DO VALE ARAUJO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":1,"total":1,"reinc":true},{"nome":"AFONSO HENRIQUE PINHEIRO LAUNE","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"ELTON JONES SOUSA DINIZ","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"EMIDIO BRUNO COSTA NETO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"LELIO OLIVEIRA DE ARAUJO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MAURICIO ALVES PIRES","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MOISES AMORIM VIANA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"ROGERIO BALDUINO DA CONCEICAO SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RONILDO VASCONCELOS SOUZA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"WAGNER LUZ FIGUEIREDO","go":"WANDERSON MARCELLUS PENHA COSTA","total":9,"equipe":3,"afetados":1,"reincidentes":0,"colaboradores":[{"nome":"MAMEDE BARROS MONTEIRO FILHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":4,"hex":5,"total":9,"reinc":false},{"nome":"ADRIANO SANTOS DA SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RENATO RODRIGUES SILVA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"DASHIEL DOSTOIEVSKI SALES SOARES","go":"WALMIR FERNANDES DA SILVA","total":6,"equipe":14,"afetados":2,"reincidentes":0,"colaboradores":[{"nome":"PEDRO HENRIQUE SILVA OLIVEIRA","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":false},{"nome":"WERBERT PEREIRA DOS SANTOS","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":3,"total":3,"reinc":false},{"nome":"CLAUDIOMIR DE SOUSA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"DANIEL LIMA E SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"DIEGO CANIGGIA DA SILVA CARVALHO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"EUFRASIO LUSTOSA DE SOUSA SOARES","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"HENRIQUE PAULO DE ARAUJO GOMES FILHO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"JAILTON ALVES DE LIMA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"LUAN WAGNER SIQUEIRA ROMEU","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"LUCAS LIMA ALVES BARROS","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"LUIS FRANCISCO DA SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MOISES RAMOS DE LIMA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RAFAEL COSTA LIMA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RAIMUNDO NONATO ARAUJO DA SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"IVANDRO PESSOA DA NOBREGA ALENCAR","go":"IVANDRO PESSOA DA NOBREGA ALENCAR","total":0,"equipe":5,"afetados":0,"reincidentes":0,"colaboradores":[{"nome":"CLAUDIO DE SOUSA VISGUEIRA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MARCOS RODRIGUES CARVALHO","subbu":"R7.2- NORTE: AP / MA / PA E PI","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MIGUEL BARROS DE CARVALHO JUNIOR","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RAFAEL NUNES DO NASCIMENTO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"WAGNER LUZ FIGUEIREDO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"WALMIR FERNANDES DA SILVA","go":"WALMIR FERNANDES DA SILVA","total":0,"equipe":6,"afetados":0,"reincidentes":0,"colaboradores":[{"nome":"DASHIEL DOSTOIEVSKI SALES SOARES","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"FRANCISCO SALES FURTADO JUNIOR","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"LEONARDO CARDOSO SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"NAAN CARLOS CABRAL OLIVEIRA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"ROBERVAL SILVA RODRIGUES","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"RUAN LABRE GABRIEL DA SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"WANDERSON MARCELLUS PENHA COSTA","go":"WANDERSON MARCELLUS PENHA COSTA","total":0,"equipe":1,"afetados":0,"reincidentes":0,"colaboradores":[{"nome":"ALEKSEI THOMAS OLIVEIRA DE ABREU","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]},{"ga":"WELLINGTON MARCIO FIGUEIRA","go":"WELLINGTON MARCIO FIGUEIRA","total":0,"equipe":4,"afetados":0,"reincidentes":0,"colaboradores":[{"nome":"IVANDRO PESSOA DA NOBREGA ALENCAR","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"MARIA VIVIANE DOS SANTOS CASTRO","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"WALMIR FERNANDES DA SILVA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false},{"nome":"WANDERSON MARCELLUS PENHA COSTA","subbu":"-","d7":0,"interj":0,"hex":0,"total":0,"reinc":false}]}]
+  };
+
+  const fmt = n => n.toLocaleString('pt-BR');
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  document.getElementById('cycle-label').textContent = DATA.ciclo;
+  document.getElementById('footer-cycle').textContent = 'ciclo ' + DATA.ciclo;
+  document.getElementById('afetados-hint').textContent =
+    DATA.afetados + ' de ' + DATA.colaboradores + ' colaboradores afetados · ' + DATA.totalReincidentes + ' reincidentes no total';
+
+  // ---------------- log de importação ----------------
+  (function(){
+    document.getElementById('import-timestamp').textContent = DATA.importacao.timestamp;
+    const el = document.getElementById('import-log');
+    DATA.importacao.itens.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'import-row';
+      row.innerHTML =
+        '<span class="src" title="' + esc(item.origem) + '">' + esc(item.fonte) + '</span>' +
+        '<span class="detail">' + item.detalhe + '</span>';
+      el.appendChild(row);
+    });
+    const note = document.createElement('p');
+    note.className = 'import-note';
+    note.textContent = DATA.importacao.nota;
+    el.appendChild(note);
+  })();
+
+  // ---------------- KPI tiles ----------------
+  const kpis = [
+    { label: 'Total de infrações', value: fmt(DATA.total) },
+    { label: 'Ciclo anterior', value: fmt(DATA.totalAnterior), sub: DATA.cicloAnterior },
+    { label: 'Variação vs. ciclo anterior', value: (DATA.variacaoAbs>=0?'+':'') + fmt(DATA.variacaoAbs),
+      delta: (DATA.variacaoAbs>=0 ? 'up-bad' : 'down-good'),
+      deltaText: (DATA.variacaoAbs>=0?'▲ ':'▼ ') + Math.abs(DATA.variacaoPct) + '% ' + (DATA.variacaoAbs>=0?'piora':'melhora') },
+    { label: 'Tipo mais recorrente', value: DATA.tipoRecorrente, small: true },
+    { label: '% do efetivo com infração', value: DATA.pctEfetivo + '%', sub: DATA.afetados + ' de ' + DATA.colaboradores + ' colaboradores' },
+    { label: 'Média por colaborador afetado', value: DATA.mediaAfetado.toString().replace('.', ',') },
+    { label: 'Top reincidente do ciclo', value: DATA.topReincidente.nome, small: true, sub: DATA.topReincidente.total + ' infrações no ciclo' },
+    { label: 'Reincidentes (ciclo anterior + atual)', value: fmt(DATA.totalReincidentes), sub: 'de ' + fmt(DATA.afetados) + ' colaboradores afetados' }
+  ];
+  const kpiGrid = document.getElementById('kpi-grid');
+  kpis.forEach(k => {
+    const el = document.createElement('div');
+    el.className = 'kpi';
+    el.innerHTML =
+      '<span class="label">' + esc(k.label) + '</span>' +
+      '<span class="value num' + (k.small?' small':'') + '">' + esc(k.value) + '</span>' +
+      (k.delta ? '<span class="delta ' + k.delta + '">' + esc(k.deltaText) + '</span>' : '') +
+      (k.sub ? '<span class="sub">' + esc(k.sub) + '</span>' : '');
+    kpiGrid.appendChild(el);
+  });
+
+  // ---------------- tooltip helper ----------------
+  const tip = document.getElementById('tooltip');
+  function showTip(evt, html){
+    tip.innerHTML = html;
+    tip.classList.add('show');
+    moveTip(evt);
+  }
+  function moveTip(evt){
+    const pad = 14;
+    let x = evt.clientX + pad, y = evt.clientY + pad;
+    const r = tip.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 8) x = evt.clientX - r.width - pad;
+    if (y + r.height > window.innerHeight - 8) y = evt.clientY - r.height - pad;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+  function hideTip(){ tip.classList.remove('show'); }
+
+  // ---------------- infraction detail modal ----------------
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalName = document.getElementById('modal-name');
+  const modalSub = document.getElementById('modal-sub');
+  const modalRows = document.getElementById('modal-rows');
+  let lastFocused = null;
+
+  const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
+  const TYPE_COLOR = { d7: 'var(--s1)', interj: 'var(--s2)', hex: 'var(--s3)' };
+
+  function openDetail(nome, total){
+    const registros = (DATA.detalhes.detalhes[nome] || []);
+    modalName.textContent = nome;
+    modalSub.textContent = fmt(total) + ' infrações no ciclo ' + DATA.detalhes.ciclo +
+      ' · ' + registros.length + ' dia(s) com registro de ponto';
+    modalRows.innerHTML = '';
+    if (registros.length === 0) {
+      modalRows.innerHTML = '<tr><td colspan="4" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
+    } else {
+      registros.forEach(rec => {
+        const chips = [];
+        if (rec.d7)     chips.push('<span class="type-chip" style="background:' + TYPE_COLOR.d7 + '">' + TYPE_LABEL.d7 + '</span>');
+        if (rec.interj) chips.push('<span class="type-chip" style="background:' + TYPE_COLOR.interj + '">' + TYPE_LABEL.interj + '</span>');
+        if (rec.hex)     chips.push('<span class="type-chip" style="background:' + TYPE_COLOR.hex + '">' + TYPE_LABEL.hex + '</span>');
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td class="date">' + esc(rec.data) + '</td>' +
+          '<td class="time">' + (rec.entrada ? esc(rec.entrada) : '—') + '</td>' +
+          '<td class="time">' + (rec.saida ? esc(rec.saida) : '—') + '</td>' +
+          '<td><div class="type-chips">' + (chips.join('') || '—') + '</div></td>';
+        modalRows.appendChild(tr);
+      });
+    }
+    lastFocused = document.activeElement;
+    modalOverlay.classList.add('show');
+    document.getElementById('modal-close').focus();
+    document.addEventListener('keydown', onModalKeydown);
+  }
+  function closeDetail(){
+    modalOverlay.classList.remove('show');
+    document.removeEventListener('keydown', onModalKeydown);
+    if (lastFocused && lastFocused.focus) lastFocused.focus();
+  }
+  function onModalKeydown(evt){
+    if (evt.key === 'Escape') closeDetail();
+  }
+  document.getElementById('modal-close').addEventListener('click', closeDetail);
+  modalOverlay.addEventListener('click', evt => { if (evt.target === modalOverlay) closeDetail(); });
+
+  function totalLinkHTML(nome, total){
+    if (total <= 0) {
+      return '<span class="num">0</span>';
+    }
+    return '<button type="button" class="total-link" data-nome="' + esc(nome).replace(/"/g, '&quot;') + '" data-total="' + total + '">' +
+      fmt(total) +
+      '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 8h8M8 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+    '</button>';
+  }
+  document.body.addEventListener('click', evt => {
+    const btn = evt.target.closest('.total-link');
+    if (btn) openDetail(btn.dataset.nome, Number(btn.dataset.total));
+  });
+
+  // ---------------- stacked bar rows (GO / GA) ----------------
+  function renderBars(containerId, rows, maxOverride){
+    const max = maxOverride || Math.max(...rows.map(r => r.total), 1);
+    const el = document.getElementById(containerId);
+    rows.forEach(r => {
+      const item = document.createElement('div');
+      item.className = 'bar-item';
+      const w7 = max ? (r.d7 / max * 100) : 0;
+      const wi = max ? (r.interj / max * 100) : 0;
+      const wh = max ? (r.hex / max * 100) : 0;
+      item.innerHTML =
+        '<span class="bname" title="' + esc(r.nome) + '">' + esc(r.nome) + '</span>' +
+        '<div class="stack-track" data-tip>' +
+          '<div class="seg" style="width:' + w7 + '%; background:var(--s1)"></div>' +
+          '<div class="seg" style="width:' + wi + '%; background:var(--s2)"></div>' +
+          '<div class="seg" style="width:' + wh + '%; background:var(--s3)"></div>' +
+        '</div>' +
+        '<span class="btotal num">' + fmt(r.total) + '</span>';
+      const track = item.querySelector('[data-tip]');
+      track.addEventListener('mousemove', evt => showTip(evt,
+        '<div class="t-title">' + esc(r.nome) + '</div>' +
+        '<div class="t-row"><span class="k">&gt;7 dias trab.</span><span class="num">' + fmt(r.d7) + '</span></div>' +
+        '<div class="t-row"><span class="k">Interjornada</span><span class="num">' + fmt(r.interj) + '</span></div>' +
+        '<div class="t-row"><span class="k">&gt;2h extras</span><span class="num">' + fmt(r.hex) + '</span></div>' +
+        '<div class="t-row"><span class="k">Total</span><span class="num">' + fmt(r.total) + '</span></div>'
+      ));
+      track.addEventListener('mouseleave', hideTip);
+      el.appendChild(item);
+    });
+  }
+  renderBars('go-bars', DATA.porGo);
+  renderBars('ga-bars', [...DATA.porGa].sort((a,b)=>b.total-a.total));
+
+  // ---------------- evolution mini bars ----------------
+  (function(){
+    const el = document.getElementById('evo-bars');
+    const max = Math.max(...DATA.evolucao.map(e=>e.total), 1);
+    const H = 96;
+    DATA.evolucao.forEach((e, i) => {
+      const h = Math.max(6, e.total / max * H);
+      const b = document.createElement('div');
+      b.className = 'evo-bar';
+      b.innerHTML =
+        '<span class="v num">' + fmt(e.total) + '</span>' +
+        '<div class="col' + (i < DATA.evolucao.length-1 ? ' prev' : '') + '" style="height:' + h + 'px"></div>' +
+        '<span class="l">' + esc(e.label) + '</span>';
+      el.appendChild(b);
+    });
+  })();
+
+  // ---------------- top colaboradores table ----------------
+  (function(){
+    const tbody = document.getElementById('top-rows');
+    const maxTotal = Math.max(...DATA.top.map(t=>t.total), 1);
+    DATA.top.forEach((t, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="rank">' + (i+1) + '</td>' +
+        '<td class="name">' + esc(t.nome) + '</td>' +
+        '<td class="muted">' + esc(t.ga) + '</td>' +
+        '<td class="num-col">' + totalLinkHTML(t.nome, t.total) +
+          '<span class="mini-track"><span class="mini-fill" style="width:' + (t.total/maxTotal*100) + '%"></span></span></td>' +
+        '<td>' + (t.reinc
+            ? '<span class="badge reinc">⚠ reincidente</span>'
+            : '<span class="badge ok">novo caso</span>') + '</td>';
+      tbody.appendChild(tr);
+    });
+  })();
+
+  // ---------------- hierarquia por GA (todos os colaboradores) ----------------
+  (function(){
+    const GO_COLOR = {
+      'WANDERSON MARCELLUS PENHA COSTA': 'var(--s1)',
+      'IVANDRO PESSOA DA NOBREGA ALENCAR': 'var(--s2)',
+      'WALMIR FERNANDES DA SILVA': 'var(--s3)',
+      'WELLINGTON MARCIO FIGUEIRA': 'var(--text-muted)'
+    };
+    const wrap = document.getElementById('hier-blocks');
+    const totalColabs = DATA.porGaHierarquia.reduce((a,b) => a + b.equipe, 0);
+    document.getElementById('hier-total-hint').textContent = totalColabs + ' colaboradores no total';
+
+    DATA.porGaHierarquia.forEach((block, idx) => {
+      const details = document.createElement('details');
+      details.className = 'ga-block';
+      details.open = true;
+
+      const dotColor = GO_COLOR[block.go] || 'var(--text-muted)';
+      const comInfracao = block.colaboradores.filter(c => c.total > 0);
+      const maxTotal = Math.max(...comInfracao.map(c => c.total), 1);
+
+      const summary = document.createElement('summary');
+      summary.innerHTML =
+        '<div class="ga-head-main">' +
+          '<svg class="chevron" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '<span class="go-dot" style="background:' + dotColor + '"></span>' +
+          '<div class="ga-head-text">' +
+            '<div class="ga-name">' + esc(block.ga) + '</div>' +
+            '<div class="go-line">GO: ' + esc(block.go || '—') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ga-head-stats">' +
+          '<div class="ga-stat"><span class="n num">' + block.equipe + '</span><span class="l">Equipe</span></div>' +
+          '<div class="ga-stat"><span class="n num">' + block.afetados + '</span><span class="l">Afetados</span></div>' +
+          '<div class="ga-stat"><span class="n num">' + block.reincidentes + '</span><span class="l">Reincid.</span></div>' +
+          '<div class="ga-stat total"><span class="n num">' + fmt(block.total) + '</span><span class="l">Total</span></div>' +
+        '</div>';
+      details.appendChild(summary);
+
+      const body = document.createElement('div');
+      body.className = 'ga-body';
+
+      if (comInfracao.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'ga-empty';
+        empty.textContent = 'Nenhum colaborador com infração neste ciclo.';
+        body.appendChild(empty);
+      } else {
+        const table = document.createElement('table');
+        table.className = 'ga-table';
+        table.innerHTML =
+          '<thead><tr>' +
+            '<th>Colaborador</th><th>Sub BU</th>' +
+            '<th class="num-col">&gt;7 dias</th><th class="num-col">Interj.</th><th class="num-col">&gt;2h extras</th>' +
+            '<th class="num-col">Total</th><th>Reincidência</th>' +
+          '</tr></thead><tbody></tbody>';
+        const tbody = table.querySelector('tbody');
+        comInfracao.forEach(c => {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td class="name">' + esc(c.nome) + '</td>' +
+            '<td class="muted">' + esc(c.subbu) + '</td>' +
+            '<td class="num-col num">' + fmt(c.d7) + '</td>' +
+            '<td class="num-col num">' + fmt(c.interj) + '</td>' +
+            '<td class="num-col num">' + fmt(c.hex) + '</td>' +
+            '<td class="num-col">' + totalLinkHTML(c.nome, c.total) +
+              '<span class="mini-track"><span class="mini-fill" style="width:' + (c.total/maxTotal*100) + '%"></span></span>' +
+            '</td>' +
+            '<td>' + (c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '') + '</td>';
+          tbody.appendChild(tr);
+        });
+        body.appendChild(table);
+      }
+      details.appendChild(body);
+      wrap.appendChild(details);
+    });
+
+    document.getElementById('hier-expand').addEventListener('click', () => {
+      wrap.querySelectorAll('details').forEach(d => d.open = true);
+    });
+    document.getElementById('hier-collapse').addEventListener('click', () => {
+      wrap.querySelectorAll('details').forEach(d => d.open = false);
+    });
+  })();
+
+})();
+</script>
