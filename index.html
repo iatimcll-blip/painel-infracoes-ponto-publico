@@ -1003,12 +1003,21 @@ function goColorFor(go){
 }
 
 function currentPeriod(enriched, ciclos, semanas){
-  if (STATE.filterMode === 'semana' && STATE.semanaSel && semanas.some(s => s.key === STATE.semanaSel)) {
-    const atual = semanas.find(s => s.key === STATE.semanaSel);
-    const rows = enriched.filter(r => r.weekKey === atual.key);
-    const antKey = prevWeekKey(atual.key);
-    const antRows = enriched.filter(r => r.weekKey === antKey);
-    return { type: 'semana', key: atual.key, label: atual.label, rows, antRows, temAnterior: antRows.length > 0 };
+  if (STATE.filterMode === 'semana' && STATE.semanaSel) {
+    if (!semanas.some(s => s.key === STATE.semanaSel)) {
+      // a semana selecionada não existe mais nos dados atuais (ex.: nova Base anexada com um
+      // período diferente) — volta pro filtro por ciclo em vez de deixar o estado interno
+      // ("semana X" escolhida) fora de sincronia com o que a tela mostra (que cairia num
+      // fallback silencioso pro ciclo mesmo com o combo de semana ainda marcado por dentro).
+      STATE.filterMode = 'ciclo';
+      STATE.semanaSel = null;
+    } else {
+      const atual = semanas.find(s => s.key === STATE.semanaSel);
+      const rows = enriched.filter(r => r.weekKey === atual.key);
+      const antKey = prevWeekKey(atual.key);
+      const antRows = enriched.filter(r => r.weekKey === antKey);
+      return { type: 'semana', key: atual.key, label: atual.label, rows, antRows, temAnterior: antRows.length > 0 };
+    }
   }
   if (!STATE.cicloSel || !ciclos.some(c => c.key === STATE.cicloSel)) {
     STATE.cicloSel = ciclos[0].key;
@@ -2124,6 +2133,33 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   const next = isDark ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
+  // os gráficos em SVG (Infrações no ano / Infrações por semana) gravam as cores como valores
+  // hexadecimais fixos no momento do desenho (necessário pro botão "Copiar" funcionar com
+  // html2canvas), então não acompanham a troca de tema sozinhos via CSS — sem isto, ficavam
+  // com as cores do tema antigo até a próxima ação que atualizasse os dados.
+  recomputeAndRender();
+});
+
+// mantém abas/janelas do MESMO navegador sincronizadas: o evento "storage" só dispara nas
+// OUTRAS abas quando uma delas grava no localStorage (a que gravou não recebe o próprio
+// evento), então isto não entra em loop. Sem isto, anexar uma Base numa aba deixava as
+// outras abas já abertas mostrando os dados antigos até serem recarregadas manualmente —
+// e resetar os dados numa aba (removendo as chaves) não era refletido nas outras.
+window.addEventListener('storage', evt => {
+  if (evt.key === STORAGE_RAW || evt.key === STORAGE_HIER) {
+    if (localStorage.getItem(STORAGE_RAW) || localStorage.getItem(STORAGE_HIER)) {
+      tryLoadFromStorage();
+    } else {
+      STATE.raw = RAW_DEFAULT; STATE.hierMap = buildHierMap(HIER_DEFAULT); STATE.usingDefault = true;
+    }
+    recomputeAndRender();
+    showToast('Dados atualizados em outra aba/janela deste navegador.');
+  } else if (evt.key === AUTH_USERS_KEY || evt.key === AUTH_SESSION_KEY) {
+    loadAuth().then(() => { updateRoleBadge(); recomputeAndRender(); });
+  } else if (evt.key === THEME_KEY) {
+    document.documentElement.setAttribute('data-theme', evt.newValue || (systemPrefersDark() ? 'dark' : 'light'));
+    recomputeAndRender();
+  }
 });
 
 (async function boot(){
