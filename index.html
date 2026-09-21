@@ -69,12 +69,26 @@
   .wrap{ max-width:1180px; margin-inline:auto; display:flex; flex-direction:column; gap:28px; }
 
   /* ---------- header ---------- */
-  header{ display:flex; flex-direction:column; gap:14px; }
+  header{ display:flex; flex-direction:column; gap:10px; }
+  .eyebrow-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   .eyebrow{ font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--s1); font-weight:600; }
+  .role-badge{
+    font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.02em; padding:3px 10px;
+    border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);
+  }
+  .role-badge.is-admin{ background:var(--good-tint); color:var(--good); border-color:transparent; }
   .title-row{ display:flex; flex-wrap:wrap; align-items:baseline; gap:12px 20px; justify-content:space-between; }
   h1{ font-size:26px; font-weight:700; letter-spacing:-.01em; }
   .subtitle{ color:var(--text-secondary); font-size:13.5px; margin-top:4px; }
 
+  .header-actions{ display:flex; align-items:center; gap:8px; flex:none; }
+  .settings-btn{
+    display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface-raised); border:1px solid var(--border); border-radius:999px; padding:8px 14px 8px 12px;
+    cursor:pointer; white-space:nowrap;
+  }
+  .settings-btn:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+  .filter-row{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
   .toolbar{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
   .cycle-select{
     font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--text-primary);
@@ -290,6 +304,41 @@
   .detail-table td.date{ font-family:var(--mono); white-space:nowrap; }
   .detail-table td.time{ font-family:var(--mono); color:var(--text-secondary); white-space:nowrap; }
 
+  /* ---------- settings / login / user management ---------- */
+  .settings-panel{ max-width:460px; }
+  .settings-section{ margin-bottom:20px; }
+  .settings-section:last-child{ margin-bottom:0; }
+  .settings-section h3{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); margin:0 0 10px; }
+  .settings-note{ font-size:12px; color:var(--text-muted); line-height:1.6; margin:0 0 14px; }
+  .login-form{ display:flex; flex-direction:column; gap:10px; }
+  .login-form label{ display:flex; flex-direction:column; gap:5px; font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.02em; }
+  .login-form input{
+    font-family:var(--sans); font-size:13px; font-weight:400; text-transform:none; letter-spacing:normal; color:var(--text-primary);
+    background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:9px 11px;
+  }
+  .login-form input:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .login-error{ font-size:12px; color:var(--critical); min-height:16px; }
+  .admin-welcome{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:var(--good-tint); border-radius:9px; margin-bottom:16px; }
+  .admin-welcome span{ font-size:12.5px; font-weight:600; color:var(--good); }
+  .user-list{ display:flex; flex-direction:column; gap:0; margin-bottom:12px; }
+  .user-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--grid); }
+  .user-row:last-child{ border-bottom:none; }
+  .user-row .un{ font-size:12.5px; font-weight:600; }
+  .user-row .un .you-tag{ font-size:10px; font-weight:600; color:var(--s1); margin-left:6px; }
+  .user-row button{
+    font-size:11px; font-weight:600; color:var(--critical); background:none; border:1px solid transparent; border-radius:6px;
+    padding:4px 8px; cursor:pointer;
+  }
+  .user-row button:hover{ border-color:var(--critical); }
+  .user-row button:disabled{ color:var(--text-muted); cursor:not-allowed; }
+  .add-user-form{ display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end; }
+  .add-user-form label{ display:flex; flex-direction:column; gap:4px; font-size:10.5px; font-weight:600; color:var(--text-muted); text-transform:uppercase; }
+  .add-user-form input{
+    font-family:var(--sans); font-size:12.5px; text-transform:none; letter-spacing:normal; color:var(--text-primary);
+    background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 10px; width:100%;
+  }
+  .settings-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+
   /* ---------- image preview fallback (copy button) ---------- */
   .img-preview-panel{ max-width:720px; }
   .img-preview-hint{ font-size:12.5px; color:var(--text-secondary); line-height:1.6; margin:0 0 14px; }
@@ -350,34 +399,35 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">Jarvis MCLL · alloha FIBRA</div>
+    <div class="eyebrow-row">
+      <div class="eyebrow">Jarvis MCLL · alloha FIBRA</div>
+      <span class="role-badge" id="role-badge"></span>
+    </div>
     <div class="title-row">
       <div>
         <h1>Painel Infrações de Ponto</h1>
         <div class="subtitle">Consolidado por GO, GA e evolução semanal/mensal — recalcula a partir dos arquivos importados</div>
       </div>
-      <div class="toolbar">
+      <div class="header-actions">
         <button type="button" class="theme-toggle" id="theme-toggle" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
           <svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1M12.7 12.7l-1.1-1.1M4.4 4.4L3.3 3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           <svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.5A5.8 5.8 0 116.5 2.5a4.6 4.6 0 007 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </button>
-        <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo (mês)"></select>
-        <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
-        <label class="upload-btn" for="file-base">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Base
-        </label>
-        <input type="file" id="file-base" accept=".xlsx" hidden>
-        <label class="upload-btn secondary" for="file-hier">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Hierarquia
-        </label>
-        <input type="file" id="file-hier" accept=".xlsx" hidden>
-        <button type="button" class="reset-link" id="reset-data">restaurar dados originais</button>
+        <button type="button" class="settings-btn" id="settings-btn" title="Configurações" aria-label="Configurações">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 10.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z" stroke="currentColor" stroke-width="1.4"/><path d="M13 8.6v-1.2l-1.5-.3a4.6 4.6 0 00-.5-1.2l.9-1.3-.9-.9-1.3.9a4.6 4.6 0 00-1.2-.5L8.2 3h-1.2l-.3 1.5a4.6 4.6 0 00-1.2.5l-1.3-.9-.9.9.9 1.3a4.6 4.6 0 00-.5 1.2L2.2 7.4v1.2l1.5.3c.1.4.3.8.5 1.2l-.9 1.3.9.9 1.3-.9c.4.2.8.4 1.2.5l.3 1.5h1.2l.3-1.5c.4-.1.8-.3 1.2-.5l1.3.9.9-.9-.9-1.3c.2-.4.4-.8.5-1.2l1.5-.3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          Configurações
+        </button>
       </div>
+    </div>
+    <div class="filter-row">
+      <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo (mês)"></select>
+      <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
     </div>
     <div class="source-note" id="source-note"></div>
   </header>
+
+  <input type="file" id="file-base" accept=".xlsx" hidden>
+  <input type="file" id="file-hier" accept=".xlsx" hidden>
 
   <section>
     <div class="section-head"><h2 id="kpi-section-title">Indicadores do ciclo selecionado</h2></div>
@@ -510,6 +560,18 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="settings-overlay">
+  <div class="modal-panel settings-panel">
+    <div class="modal-head">
+      <div><div class="m-name">Configurações</div></div>
+      <button type="button" class="modal-close" id="settings-close" aria-label="Fechar">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="settings-body"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="img-preview-overlay">
   <div class="modal-panel img-preview-panel">
     <div class="modal-head">
@@ -564,6 +626,78 @@ const THEME_KEY = 'painelInfracoes.theme.v1';
     if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
   } catch(e) { /* localStorage indisponível — segue com o tema do sistema */ }
 })();
+
+/* ---------------- perfis: Administrador (com senha) x Usuário Padrão ----------------
+   AVISO: isto roda inteiramente no navegador de quem visita a página. É uma barreira de
+   fluxo de trabalho (evita cliques acidentais em ações de administrador), NÃO uma
+   segurança de verdade — qualquer pessoa com DevTools consegue contornar. A senha nunca
+   fica em texto puro (é hasheada com SHA-256 + salt antes de salvar), mas isso não muda
+   essa limitação fundamental de uma página 100% estática, sem servidor. */
+const AUTH_USERS_KEY = 'painelInfracoes.auth.users.v1';
+const AUTH_SESSION_KEY = 'painelInfracoes.auth.session.v1';
+const AUTH = { users: [], currentUser: null };
+
+async function sha256Hex(text){
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function randomHex(bytes){
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return [...arr].map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function saveAuthUsers(){
+  try { localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(AUTH.users)); } catch(e) {}
+}
+async function loadAuth(){
+  try {
+    const raw = localStorage.getItem(AUTH_USERS_KEY);
+    if (raw) AUTH.users = JSON.parse(raw);
+  } catch(e) {}
+  if (!AUTH.users.length) {
+    const salt = randomHex(16);
+    const hash = await sha256Hex(salt + 'Alloha@2026');
+    AUTH.users = [{ username: 'admin', salt, hash }];
+    saveAuthUsers();
+  }
+  try {
+    const session = localStorage.getItem(AUTH_SESSION_KEY);
+    if (session && AUTH.users.some(u => u.username === session)) AUTH.currentUser = session;
+  } catch(e) {}
+}
+function isAdmin(){ return !!AUTH.currentUser; }
+async function authLogin(username, password){
+  const u = (username||'').trim();
+  const user = AUTH.users.find(x => x.username.toLowerCase() === u.toLowerCase());
+  if (!user) return false;
+  const hash = await sha256Hex(user.salt + password);
+  if (hash !== user.hash) return false;
+  AUTH.currentUser = user.username;
+  try { localStorage.setItem(AUTH_SESSION_KEY, user.username); } catch(e) {}
+  return true;
+}
+function authLogout(){
+  AUTH.currentUser = null;
+  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
+}
+async function authAddUser(username, password){
+  const u = (username||'').trim();
+  if (!u || !password) return { ok:false, msg:'Preencha usuário e senha.' };
+  if (AUTH.users.some(x => x.username.toLowerCase() === u.toLowerCase())) return { ok:false, msg:'Já existe um usuário com esse nome.' };
+  const salt = randomHex(16);
+  const hash = await sha256Hex(salt + password);
+  AUTH.users.push({ username: u, salt, hash });
+  saveAuthUsers();
+  return { ok:true };
+}
+function authRemoveUser(username){
+  if (AUTH.users.length <= 1) return { ok:false, msg:'Precisa sobrar pelo menos um administrador.' };
+  AUTH.users = AUTH.users.filter(x => x.username !== username);
+  saveAuthUsers();
+  if (AUTH.currentUser === username) authLogout();
+  return { ok:true };
+}
 
 /* =========================================================================
    Dados padrão embutidos (snapshot real mais recente do workbook).
@@ -753,6 +887,7 @@ document.getElementById('file-base').addEventListener('change', async evt => {
   const file = evt.target.files[0];
   evt.target.value = '';
   if (!file) return;
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
   try {
     STATE.raw = await parseBaseFile(file);
     STATE.usingDefault = false;
@@ -766,6 +901,7 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
   const file = evt.target.files[0];
   evt.target.value = '';
   if (!file) return;
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
   try {
     const entries = await parseHierFile(file);
     let updated = 0, added = 0;
@@ -781,12 +917,12 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
 });
 
-document.getElementById('reset-data').addEventListener('click', () => {
+function resetData(){
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
   STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
   recomputeAndRender();
   showToast('Dados originais restaurados.');
-});
+}
 
 /* ---------------- pipeline de cálculo ---------------- */
 function enrichRows(raw, hierMap){
@@ -1445,6 +1581,8 @@ document.body.addEventListener('click', evt => {
 
 function gaCellHTML(nome, ga){
   if (ga === 'SEM HIERARQUIA') {
+    // editar a hierarquia é uma ação de administrador — usuário padrão só vê o aviso
+    if (!isAdmin()) return '<span class="muted">SEM HIERARQUIA</span>';
     return '<button type="button" class="edit-hier-btn" data-nome="'+esc(nome)+'">SEM HIERARQUIA <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2l3 3-8 8-3.5 1 1-3.5 7.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>';
   }
   return esc(ga);
@@ -1624,6 +1762,7 @@ function closeHierEditor(){
 }
 document.getElementById('he-cancel').addEventListener('click', closeHierEditor);
 document.getElementById('he-save').addEventListener('click', () => {
+  if (!isAdmin()) { showToast('Só administradores podem editar a hierarquia.'); closeHierEditor(); return; }
   const ga = document.getElementById('he-ga').value.trim();
   const go = document.getElementById('he-go').value.trim();
   if (!ga) { showToast('Informe ao menos o GA para salvar.'); return; }
@@ -1712,6 +1851,141 @@ function renderHierarchy(d){
 }
 
 /* ---------------- recolher/expandir + copiar em todas as seções ---------------- */
+/* ---------------- painel de configurações (login / usuários / importação) ---------------- */
+function updateRoleBadge(){
+  const badge = document.getElementById('role-badge');
+  if (isAdmin()) {
+    badge.textContent = 'Administrador: ' + AUTH.currentUser;
+    badge.classList.add('is-admin');
+  } else {
+    badge.textContent = 'Usuário Padrão';
+    badge.classList.remove('is-admin');
+  }
+}
+
+function renderSettingsPanel(){
+  const body = document.getElementById('settings-body');
+  clear(body);
+
+  if (!isAdmin()) {
+    const sec = document.createElement('div');
+    sec.className = 'settings-section';
+    sec.innerHTML =
+      '<h3>Entrar como administrador</h3>' +
+      '<p class="settings-note">Você está navegando como <b>Usuário Padrão</b>: pode ver todos os blocos, filtros e indicadores, mas não anexar bases nem editar a hierarquia. Entre como administrador para liberar essas ações.</p>' +
+      '<div class="login-form">' +
+        '<label>Usuário<input type="text" id="login-user" autocomplete="username"></label>' +
+        '<label>Senha<input type="password" id="login-pass" autocomplete="current-password"></label>' +
+        '<div class="login-error" id="login-error"></div>' +
+        '<div class="settings-btn-row"><button type="button" class="he-btn primary" id="login-submit">Entrar</button></div>' +
+      '</div>' +
+      '<p class="settings-note" style="margin-top:14px;">Lembrete: isto roda só no seu navegador (sem servidor) — é uma trava de fluxo de trabalho, não uma segurança de verdade.</p>';
+    body.appendChild(sec);
+
+    const submit = sec.querySelector('#login-submit');
+    const doLogin = async () => {
+      const u = sec.querySelector('#login-user').value;
+      const p = sec.querySelector('#login-pass').value;
+      const errEl = sec.querySelector('#login-error');
+      errEl.textContent = '';
+      submit.disabled = true;
+      const ok = await authLogin(u, p);
+      submit.disabled = false;
+      if (ok) {
+        updateRoleBadge();
+        renderSettingsPanel();
+        recomputeAndRender();
+        showToast('Entrou como administrador: ' + AUTH.currentUser + '.');
+      } else {
+        errEl.textContent = 'Usuário ou senha incorretos.';
+      }
+    };
+    submit.addEventListener('click', doLogin);
+    sec.querySelector('#login-pass').addEventListener('keydown', evt => { if (evt.key === 'Enter') doLogin(); });
+    sec.querySelector('#login-user').focus();
+    return;
+  }
+
+  const welcome = document.createElement('div');
+  welcome.className = 'admin-welcome';
+  welcome.innerHTML = '<span>Conectado como ' + esc(AUTH.currentUser) + '</span><button type="button" class="he-btn" id="logout-btn">Sair</button>';
+  body.appendChild(welcome);
+  welcome.querySelector('#logout-btn').addEventListener('click', () => {
+    authLogout();
+    updateRoleBadge();
+    renderSettingsPanel();
+    recomputeAndRender();
+    showToast('Sessão encerrada — voltou para Usuário Padrão.');
+  });
+
+  const importSec = document.createElement('div');
+  importSec.className = 'settings-section';
+  importSec.innerHTML =
+    '<h3>Importar dados</h3>' +
+    '<p class="settings-note">Anexe uma nova Base (substitui os dados de ponto) ou Hierarquia (compatibiliza GO/GA/colaboradores).</p>' +
+    '<div class="toolbar">' +
+      '<label class="upload-btn" for="file-base"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Base</label>' +
+      '<label class="upload-btn secondary" for="file-hier"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Hierarquia</label>' +
+      '<button type="button" class="reset-link" id="reset-data-inline">restaurar dados originais</button>' +
+    '</div>';
+  body.appendChild(importSec);
+  importSec.querySelector('#reset-data-inline').addEventListener('click', resetData);
+
+  const usersSec = document.createElement('div');
+  usersSec.className = 'settings-section';
+  usersSec.innerHTML = '<h3>Usuários administradores</h3>';
+  const list = document.createElement('div');
+  list.className = 'user-list';
+  AUTH.users.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    const isYou = u.username === AUTH.currentUser;
+    row.innerHTML =
+      '<span class="un">' + esc(u.username) + (isYou ? '<span class="you-tag">você</span>' : '') + '</span>' +
+      '<button type="button"' + (AUTH.users.length <= 1 ? ' disabled title="precisa sobrar pelo menos um administrador"' : '') + '>Remover</button>';
+    row.querySelector('button').addEventListener('click', () => {
+      const res = authRemoveUser(u.username);
+      if (!res.ok) { showToast(res.msg); return; }
+      updateRoleBadge();
+      renderSettingsPanel();
+      showToast('Usuário ' + u.username + ' removido.');
+    });
+    list.appendChild(row);
+  });
+  usersSec.appendChild(list);
+
+  const addForm = document.createElement('div');
+  addForm.className = 'add-user-form';
+  addForm.innerHTML =
+    '<label>Novo usuário<input type="text" id="new-user-name" autocomplete="off"></label>' +
+    '<label>Senha<input type="password" id="new-user-pass" autocomplete="new-password"></label>' +
+    '<button type="button" class="he-btn primary" id="new-user-add">Adicionar</button>';
+  usersSec.appendChild(addForm);
+  addForm.querySelector('#new-user-add').addEventListener('click', async () => {
+    const name = addForm.querySelector('#new-user-name').value;
+    const pass = addForm.querySelector('#new-user-pass').value;
+    const btn = addForm.querySelector('#new-user-add');
+    btn.disabled = true;
+    const res = await authAddUser(name, pass);
+    btn.disabled = false;
+    if (!res.ok) { showToast(res.msg); return; }
+    renderSettingsPanel();
+    showToast('Usuário ' + name + ' adicionado.');
+  });
+  body.appendChild(usersSec);
+}
+
+document.getElementById('settings-btn').addEventListener('click', () => {
+  renderSettingsPanel();
+  document.getElementById('settings-overlay').classList.add('show');
+});
+document.getElementById('settings-close').addEventListener('click', () => {
+  document.getElementById('settings-overlay').classList.remove('show');
+});
+document.getElementById('settings-overlay').addEventListener('click', evt => {
+  if (evt.target.id === 'settings-overlay') document.getElementById('settings-overlay').classList.remove('show');
+});
+
 function enhanceSections(){
   document.querySelectorAll('.wrap > section').forEach(section => {
     const head = section.querySelector(':scope > .section-head');
@@ -1788,7 +2062,11 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
   try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
 });
 
-enhanceSections();
-tryLoadFromStorage();
-recomputeAndRender();
+(async function boot(){
+  enhanceSections();
+  tryLoadFromStorage();
+  await loadAuth();
+  updateRoleBadge();
+  recomputeAndRender();
+})();
 </script>
