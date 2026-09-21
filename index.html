@@ -754,13 +754,24 @@ function isAdmin(){ return !!AUTH.currentUser; }
 // — o login local continua funcionando normalmente.
 const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
 // nenhuma chamada ao Supabase pode ficar pendurada pra sempre — sem isto, uma rede lenta/instável
-// deixava botões (ex.: "Salvar e sincronizar agora") travados em "carregando" indefinidamente,
-// sem nenhum toast de erro, parecendo que o clique "não fez nada".
+// deixava botões travados em "carregando" indefinidamente, sem nenhum toast de erro, parecendo
+// que o clique "não fez nada".
 function withTimeout(promise, ms, label){
   return Promise.race([
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo esgotado' + (label ? (' (' + label + ')') : ''))), ms)),
   ]);
+}
+// sem botão de "tentar de novo" na tela, a sincronização precisa se resolver sozinha sempre
+// que der — tenta algumas vezes com um intervalo curto antes de desistir e cair pro aviso de
+// "salvo só localmente".
+async function withRetry(fn, attempts, delayMs){
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch(e) { lastErr = e; if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs)); }
+  }
+  throw lastErr;
 }
 async function authLogin(username, password){
   const u = (username||'').trim();
@@ -1125,23 +1136,25 @@ document.getElementById('file-base').addEventListener('change', async evt => {
     recomputeAndRender();
     if (await hasSupabaseWriteSession()) {
       try {
-        await upsertBaseToSupabase(STATE.raw, STATE.hierMap);
+        await withRetry(() => upsertBaseToSupabase(STATE.raw, STATE.hierMap), 3, 2000);
         await recordSyncTimestamp('base', file.name);
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
         recomputeAndRender();
         showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
       } catch(syncErr) {
-        console.error('Base salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+        console.error('Base salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'base', arquivo: file.name };
         recomputeAndRender();
-        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas a sincronização falhou — salva só neste navegador. Use "Salvar e sincronizar agora" pra tentar de novo.');
+        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.');
       }
     } else {
       STATE.pendingSync = { tipo: 'base', arquivo: file.name };
       recomputeAndRender();
-      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
+      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).');
     }
+    // atualiza a data/hora exibida dentro da caixa "Importar dados", se ela estiver aberta agora
+    if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Base — ' + err.message); }
 });
 
@@ -1163,23 +1176,24 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     recomputeAndRender();
     if (await hasSupabaseWriteSession()) {
       try {
-        await upsertHierToSupabase(STATE.hierMap);
+        await withRetry(() => upsertHierToSupabase(STATE.hierMap), 3, 2000);
         await recordSyncTimestamp('hierarquia', file.name);
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
         recomputeAndRender();
         showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
       } catch(syncErr) {
-        console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+        console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
         recomputeAndRender();
-        showToast('Hierarquia compatibilizada, mas a sincronização falhou — salva só neste navegador. Use "Salvar e sincronizar agora" pra tentar de novo.');
+        showToast('Hierarquia compatibilizada, mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.');
       }
     } else {
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
       recomputeAndRender();
-      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
+      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).');
     }
+    if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
 });
 
@@ -2145,19 +2159,18 @@ document.getElementById('he-save').addEventListener('click', async () => {
   recomputeAndRender();
   if (await hasSupabaseWriteSession()) {
     try {
-      await upsertSingleHierEntryToSupabase(nome, ga, go || ga);
+      await withRetry(() => upsertSingleHierEntryToSupabase(nome, ga, go || ga), 3, 2000);
       STATE.pendingSync = null;
       showToast('Hierarquia de ' + nome + ' definida e sincronizada.');
     } catch(syncErr) {
-      console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+      console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: null };
       renderSyncTimestamp();
-      showToast('Hierarquia de ' + nome + ' salva só neste navegador — a sincronização falhou. Use "Salvar e sincronizar agora" pra tentar de novo.');
+      showToast('Hierarquia de ' + nome + ' salva só neste navegador — não deu pra sincronizar agora. Tente editar de novo daqui a pouco.');
     }
   } else {
     // Usuário Padrão pode editar hierarquia sem estar logado — nesse caso é esperado que fique
-    // só local, não é uma falha de sincronização; só mostra o botão de retry pra quem já é
-    // Admin localmente (sessão do Supabase que expirou ou algo assim).
+    // só local, não é uma falha de sincronização.
     if (isAdmin()) { STATE.pendingSync = { tipo: 'hierarquia', arquivo: null }; renderSyncTimestamp(); }
     showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
   }
@@ -2309,6 +2322,10 @@ function renderSettingsPanel(){
 
   const importSec = document.createElement('div');
   importSec.className = 'settings-section';
+  const lastSyncWhen = (STATE.usingSupabase && STATE.lastSync) ? fmtSyncTimestamp(STATE.lastSync.quando) : null;
+  const lastSyncLine = lastSyncWhen
+    ? ('<p class="settings-note" style="margin-top:-6px;">📎 Último arquivo anexado (' + esc(STATE.lastSync.tipo === 'hierarquia' ? 'hierarquia' : 'base') + '): <b>' + lastSyncWhen + '</b>, por ' + esc(STATE.lastSync.por || '—') + (STATE.lastSync.arquivo ? (' — "' + esc(STATE.lastSync.arquivo) + '"') : '') + '</p>')
+    : '';
   importSec.innerHTML =
     '<h3>Importar dados</h3>' +
     '<p class="settings-note">Anexe uma nova Base (substitui os dados de ponto) ou Hierarquia (compatibiliza GO/GA/colaboradores).</p>' +
@@ -2316,7 +2333,8 @@ function renderSettingsPanel(){
       '<label class="upload-btn" for="file-base"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Base</label>' +
       '<label class="upload-btn secondary" for="file-hier"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Hierarquia</label>' +
       '<button type="button" class="reset-link" id="reset-data-inline">limpar dados locais</button>' +
-    '</div>';
+    '</div>' +
+    lastSyncLine;
   body.appendChild(importSec);
   importSec.querySelector('#reset-data-inline').addEventListener('click', resetData);
 
