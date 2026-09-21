@@ -695,6 +695,14 @@ async function loadAuth(){
   } catch(e) {}
 }
 function isAdmin(){ return !!AUTH.currentUser; }
+// identidade única no Supabase por trás de qualquer Admin local — as regras de escrita das
+// tabelas exigem um usuário autenticado de verdade, e sem um backend próprio não dá pra validar
+// cada usuário local individualmente contra o Supabase. Por isso NENHUMA senha fica gravada
+// aqui no código: a senha que o Admin já digita no login local é reaproveitada, na hora, pra
+// também autenticar nessa conta compartilhada (cuja senha foi configurada por fora do código,
+// igual à senha do Admin principal). Se não bater, a escrita sincronizada só fica indisponível
+// — o login local continua funcionando normalmente.
+const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
 async function authLogin(username, password){
   const u = (username||'').trim();
   const user = AUTH.users.find(x => x.username.toLowerCase() === u.toLowerCase());
@@ -703,11 +711,16 @@ async function authLogin(username, password){
   if (hash !== user.hash) return false;
   AUTH.currentUser = user.username;
   try { localStorage.setItem(AUTH_SESSION_KEY, user.username); } catch(e) {}
+  if (sb) {
+    try { await sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }); }
+    catch(e) { console.error('Não foi possível autenticar no Supabase — escrita sincronizada fica indisponível.', e); }
+  }
   return true;
 }
 function authLogout(){
   AUTH.currentUser = null;
   try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
+  if (sb) sb.auth.signOut().catch(() => {});
 }
 async function authAddUser(username, password){
   const u = (username||'').trim();
@@ -775,6 +788,45 @@ async function loadFromSupabase(){
     console.error('Falha ao sincronizar com o Supabase — seguindo com dados locais.', e);
     return false;
   }
+}
+
+async function hasSupabaseWriteSession(){
+  if (!sb) return false;
+  try { const { data } = await sb.auth.getSession(); return !!(data && data.session); }
+  catch(e) { return false; }
+}
+// escrita sincronizada é sempre "upsert" (atualiza quem já existe, adiciona quem é novo) —
+// NUNCA apaga linhas em massa. Remover alguém da hierarquia compartilhada é uma ação separada
+// e explícita, não algo que acontece sozinho ao anexar um arquivo (ver authRemoveSupabaseRoster).
+async function upsertBaseToSupabase(raw, hierMap){
+  const rows = raw.map(r => {
+    const c = cicloOf(r.data);
+    let ciclo_inicio = '', ciclo_fim = '';
+    if (c) { ciclo_inicio = c.key; ciclo_fim = isoKey(new Date(c.start.getFullYear(), c.start.getMonth()+1, 14)); }
+    const h = hierMap[r.nome] || {};
+    return {
+      data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, codccusto: r.ccusto,
+      bu: r.bu, subbu: r.subbu, entrada: r.entrada || '', saida: r.saida || '',
+      dias7: r.d7 || 0, interj: r.interj || 0, he2: r.hex || 0,
+      ga: h.ga || null, go: h.go || h.ga || null,
+      ciclo: c ? c.label : null, ciclo_inicio, ciclo_fim,
+    };
+  });
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await sb.rpc('upsert_infracoes_registros', { novos: rows.slice(i, i + 500) });
+    if (error) throw error;
+  }
+}
+async function upsertHierToSupabase(hierMap){
+  const rows = Object.entries(hierMap).map(([nome, h]) => ({ nome, ga: h.ga, go: h.go || h.ga || null }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await sb.rpc('upsert_infracoes_roster', { novos: rows.slice(i, i + 500) });
+    if (error) throw error;
+  }
+}
+async function upsertSingleHierEntryToSupabase(nome, ga, go){
+  const { error } = await sb.rpc('upsert_infracoes_roster', { novos: [{ nome, ga, go: go || ga }] });
+  if (error) throw error;
 }
 
 const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
@@ -961,7 +1013,19 @@ document.getElementById('file-base').addEventListener('change', async evt => {
     STATE.usingDefault = false;
     saveToStorage();
     recomputeAndRender();
-    showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await upsertBaseToSupabase(STATE.raw, STATE.hierMap);
+        STATE.usingSupabase = true;
+        recomputeAndRender();
+        showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
+      } catch(syncErr) {
+        console.error('Base salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas a sincronização falhou — salva só neste navegador.');
+      }
+    } else {
+      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
+    }
   } catch(err) { showToast('Erro ao importar Base — ' + err.message); }
 });
 
@@ -981,15 +1045,29 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     STATE.usingDefault = false;
     saveToStorage();
     recomputeAndRender();
-    showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await upsertHierToSupabase(STATE.hierMap);
+        STATE.usingSupabase = true;
+        recomputeAndRender();
+        showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
+      } catch(syncErr) {
+        console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+        showToast('Hierarquia compatibilizada, mas a sincronização falhou — salva só neste navegador.');
+      }
+    } else {
+      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
+    }
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
 });
 
 function resetData(){
+  // restaura só neste navegador — de propósito NÃO mexe no Supabase, pra não apagar os dados
+  // compartilhados de todo mundo a partir de uma ação de um único dispositivo.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
+  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false };
   recomputeAndRender();
-  showToast('Dados originais restaurados.');
+  showToast('Dados originais restaurados neste navegador (dados sincronizados no Supabase não foram alterados).');
 }
 
 /* ---------------- pipeline de cálculo ---------------- */
@@ -1872,7 +1950,7 @@ function closeHierEditor(){
   hierEditorTarget = null;
 }
 document.getElementById('he-cancel').addEventListener('click', closeHierEditor);
-document.getElementById('he-save').addEventListener('click', () => {
+document.getElementById('he-save').addEventListener('click', async () => {
   const ga = document.getElementById('he-ga').value.trim();
   const go = document.getElementById('he-go').value.trim();
   if (!ga) { showToast('Informe ao menos o GA para salvar.'); return; }
@@ -1882,7 +1960,17 @@ document.getElementById('he-save').addEventListener('click', () => {
   saveToStorage();
   closeHierEditor();
   recomputeAndRender();
-  showToast('Hierarquia de ' + nome + ' definida e salva.');
+  if (await hasSupabaseWriteSession()) {
+    try {
+      await upsertSingleHierEntryToSupabase(nome, ga, go || ga);
+      showToast('Hierarquia de ' + nome + ' definida e sincronizada.');
+    } catch(syncErr) {
+      console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
+      showToast('Hierarquia de ' + nome + ' salva só neste navegador — a sincronização falhou.');
+    }
+  } else {
+    showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
+  }
 });
 document.body.addEventListener('click', evt => {
   const trigger = evt.target.closest('.edit-hier-btn');
