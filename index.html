@@ -83,6 +83,19 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23898781' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat:no-repeat; background-position:right 14px center;
   }
+  .theme-toggle{
+    display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex:none;
+    border-radius:999px; border:1px solid var(--border); background:var(--surface-raised); color:var(--text-secondary);
+    cursor:pointer; padding:0;
+  }
+  .theme-toggle:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+  .theme-toggle .icon-moon{ display:none; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .theme-toggle .icon-sun{ display:none; }
+    :root:not([data-theme="light"]) .theme-toggle .icon-moon{ display:block; }
+  }
+  :root[data-theme="dark"] .theme-toggle .icon-sun{ display:none; }
+  :root[data-theme="dark"] .theme-toggle .icon-moon{ display:block; }
   .upload-btn{
     display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:600;
     background:var(--s1); color:#fff; border:1px solid var(--s1); border-radius:999px;
@@ -344,6 +357,10 @@
         <div class="subtitle">Consolidado por GO, GA e evolução semanal/mensal — recalcula a partir dos arquivos importados</div>
       </div>
       <div class="toolbar">
+        <button type="button" class="theme-toggle" id="theme-toggle" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+          <svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1M12.7 12.7l-1.1-1.1M4.4 4.4L3.3 3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.5A5.8 5.8 0 116.5 2.5a4.6 4.6 0 007 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
         <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo (mês)"></select>
         <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
         <label class="upload-btn" for="file-base">
@@ -538,6 +555,15 @@
 
 <script>
 "use strict";
+
+/* ---------------- tema claro/escuro ---------------- */
+const THEME_KEY = 'painelInfracoes.theme.v1';
+(function initTheme(){
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+  } catch(e) { /* localStorage indisponível — segue com o tema do sistema */ }
+})();
 
 /* =========================================================================
    Dados padrão embutidos (snapshot real mais recente do workbook).
@@ -1721,18 +1747,47 @@ function enhanceSections(){
       body.appendChild(node);
       node = next;
     }
+
+    function setCollapsed(collapsed){
+      section.classList.toggle('collapsed', collapsed);
+      toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    }
+    toggleBtn.addEventListener('click', () => setCollapsed(!section.classList.contains('collapsed')));
+
+    // blocos sem uma barra de "expandir/recolher todos" própria (só "Colaboradores por
+    // hierarquia" tem, pra abrir/fechar os blocos de GA de uma vez) ganham uma barra genérica
+    // com os mesmos botões "Expandir"/"Recolher", com a mesma função do chevron do cabeçalho —
+    // deixa a ação explícita e visível em todos os blocos, não só no ícone.
+    if (!body.querySelector('.hier-toolbar')) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'hier-toolbar';
+      toolbar.innerHTML = '<button type=button>Expandir</button><button type=button>Recolher</button>';
+      const [expandBtn, collapseBtn] = toolbar.querySelectorAll('button');
+      expandBtn.addEventListener('click', () => setCollapsed(false));
+      collapseBtn.addEventListener('click', () => setCollapsed(true));
+      body.insertBefore(toolbar, body.firstChild);
+    }
+
     section.appendChild(body);
 
-    toggleBtn.addEventListener('click', () => {
-      const collapsed = section.classList.toggle('collapsed');
-      toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-    });
     const h2 = mainWrap.querySelector('h2');
     copyBtn.addEventListener('click', () => copyElementAsImage(section, copyBtn, h2 ? h2.textContent : 'bloco'));
   });
 }
 
 /* ---------------- boot ---------------- */
+function systemPrefersDark(){
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+  catch(e) { return false; }
+}
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  const isDark = current === 'dark' || (current !== 'light' && systemPrefersDark());
+  const next = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem(THEME_KEY, next); } catch(e) {}
+});
+
 enhanceSections();
 tryLoadFromStorage();
 recomputeAndRender();
