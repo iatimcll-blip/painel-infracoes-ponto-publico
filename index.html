@@ -2022,12 +2022,17 @@ function enhanceSections(){
     head.appendChild(copyBtn);
     head.classList.add('collapsible-head');
 
+    // uma barra "Expandir"/"Recolher" própria (dedicada, tipo "Colaboradores por hierarquia")
+    // fica de fora do section-body — assim continua visível mesmo com o bloco recolhido,
+    // em vez de sumir junto com o conteúdo e deixar só o chevron minúsculo pra reabrir.
+    const existingToolbar = section.querySelector(':scope > .hier-toolbar');
+
     const body = document.createElement('div');
     body.className = 'section-body';
     let node = head.nextSibling;
     while (node) {
       const next = node.nextSibling;
-      body.appendChild(node);
+      if (node !== existingToolbar) body.appendChild(node);
       node = next;
     }
 
@@ -2037,20 +2042,20 @@ function enhanceSections(){
     }
     toggleBtn.addEventListener('click', () => setCollapsed(!section.classList.contains('collapsed')));
 
-    // blocos sem uma barra de "expandir/recolher todos" própria (só "Colaboradores por
-    // hierarquia" tem, pra abrir/fechar os blocos de GA de uma vez) ganham uma barra genérica
+    // blocos sem uma barra de "expandir/recolher todos" própria ganham uma barra genérica
     // com os mesmos botões "Expandir"/"Recolher", com a mesma função do chevron do cabeçalho —
-    // deixa a ação explícita e visível em todos os blocos, não só no ícone.
-    if (!body.querySelector('.hier-toolbar')) {
-      const toolbar = document.createElement('div');
+    // deixa a ação explícita e visível em todos os blocos, não só no ícone, e sempre à mostra
+    // (fora do section-body), mesmo com o bloco recolhido.
+    let toolbar = existingToolbar;
+    if (!toolbar) {
+      toolbar = document.createElement('div');
       toolbar.className = 'hier-toolbar';
       toolbar.innerHTML = '<button type=button>Expandir</button><button type=button>Recolher</button>';
       const [expandBtn, collapseBtn] = toolbar.querySelectorAll('button');
       expandBtn.addEventListener('click', () => setCollapsed(false));
       collapseBtn.addEventListener('click', () => setCollapsed(true));
-      body.insertBefore(toolbar, body.firstChild);
     }
-
+    section.appendChild(toolbar);
     section.appendChild(body);
 
     const h2 = mainWrap.querySelector('h2');
