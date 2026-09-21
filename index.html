@@ -431,13 +431,21 @@ const TYPE_COLOR = { d7: 'var(--s1)', interj: 'var(--s2)', hex: 'var(--s3)' };
 
 /* ---------------- helpers de data ---------------- */
 function pad2(n){ return String(n).padStart(2,'0'); }
-function parseISODate(s){ const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function parseISODate(s){
+  if (typeof s !== 'string') return null;
+  const parts = s.split('-');
+  if (parts.length !== 3) return null;
+  const [y,m,d] = parts.map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  return new Date(y, m-1, d);
+}
 function fmtDMY(d){ return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear(); }
 function fmtDM(d){ return pad2(d.getDate())+'/'+pad2(d.getMonth()+1); }
 function isoKey(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
 
 function cicloOf(dateStr){
   const d = parseISODate(dateStr);
+  if (!d) return null;
   let start;
   if (d.getDate() >= 15) start = new Date(d.getFullYear(), d.getMonth(), 15);
   else start = new Date(d.getFullYear(), d.getMonth()-1, 15);
@@ -451,6 +459,7 @@ function prevCicloKey(key){
 }
 function weekOf(dateStr){
   const d = parseISODate(dateStr);
+  if (!d) return null;
   const dow = (d.getDay()+6) % 7; // 0=Seg
   const start = new Date(d); start.setDate(d.getDate()-dow);
   return { start, key: isoKey(start), label: fmtDM(start)+' a '+fmtDM(new Date(start.getFullYear(),start.getMonth(),start.getDate()+6)) };
@@ -494,11 +503,21 @@ function showToast(msg){
 
 /* ---------------- parsing de arquivos ---------------- */
 function readWorkbook(file){
+  if (typeof XLSX === 'undefined' || !XLSX || typeof XLSX.read !== 'function') {
+    return Promise.reject(new Error('A biblioteca de leitura de planilhas ainda não carregou (verifique sua conexão ou se algum bloqueador de anúncios/antivírus está bloqueando cdnjs.cloudflare.com) — aguarde alguns segundos e tente novamente.'));
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
-      try { resolve(XLSX.read(e.target.result, {type:'array', cellDates:true})); }
-      catch(err) { reject(new Error('Não foi possível ler o arquivo (.xlsx inválido).')); }
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+        if (!wb || !wb.SheetNames || !wb.SheetNames.length) {
+          reject(new Error('O arquivo não parece ser uma planilha válida (.xlsx).'));
+        } else {
+          resolve(wb);
+        }
+      }
+      catch(err) { reject(new Error('Não foi possível ler o arquivo (.xlsx inválido ou corrompido).')); }
     };
     reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
     reader.readAsArrayBuffer(file);
@@ -583,18 +602,21 @@ document.getElementById('reset-data').addEventListener('click', () => {
 
 /* ---------------- pipeline de cálculo ---------------- */
 function enrichRows(raw, hierMap){
-  return raw.map(r => {
-    const h = hierMap[r.nome] || {};
+  const out = [];
+  raw.forEach(r => {
     const c = cicloOf(r.data);
     const w = weekOf(r.data);
+    if (!c || !w) return; // data inválida/ausente - ignora a linha em vez de quebrar o cálculo
+    const h = hierMap[r.nome] || {};
     const total = (r.d7||0) + (r.interj||0) + (r.hex||0);
-    return Object.assign({}, r, {
+    out.push(Object.assign({}, r, {
       ga: h.ga || null, go: h.go || h.ga || null,
       cicloKey: c.key, cicloLabel: c.label,
       weekKey: w.key, weekLabel: w.label,
       total: total
-    });
+    }));
   });
+  return out;
 }
 
 function distinctCiclos(rows){
@@ -742,8 +764,16 @@ function deriveAll(){
 function clear(el){ while (el.firstChild) el.removeChild(el.firstChild); }
 
 function recomputeAndRender(){
-  const d = deriveAll();
   const sourceNote = document.getElementById('source-note');
+  let d;
+  try {
+    d = deriveAll();
+  } catch (e) {
+    console.error('Erro ao calcular o painel:', e);
+    showToast('Erro ao processar os dados carregados — os dados podem não seguir o modelo esperado. Detalhes no console (F12).');
+    sourceNote.textContent = 'Falha ao processar os dados importados. Tente "restaurar dados originais" e reimporte.';
+    return;
+  }
   if (!d) {
     sourceNote.textContent = 'Nenhum dado carregado — importe um arquivo Base para começar.';
     return;
@@ -752,16 +782,21 @@ function recomputeAndRender(){
     ? 'Exibindo o snapshot padrão do workbook. Use os botões acima para importar dados novos.'
     : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo, exceto por "restaurar").';
 
-  renderCycleSelect(d);
-  renderKpis(d);
-  renderGoGa(d);
-  renderRanking(d);
-  renderWeekly(d);
-  renderDashboards(d);
-  renderTop(d);
-  renderHierarchy(d);
-
-  document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
+  try {
+    renderCycleSelect(d);
+    renderKpis(d);
+    renderGoGa(d);
+    renderRanking(d);
+    renderWeekly(d);
+    renderDashboards(d);
+    renderTop(d);
+    renderHierarchy(d);
+    document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
+  } catch (e) {
+    console.error('Erro ao renderizar o painel:', e);
+    showToast('Erro ao desenhar o painel — detalhes no console (F12). Tente "restaurar dados originais".');
+  }
+  return;
 }
 
 function renderCycleSelect(d){
@@ -1004,6 +1039,14 @@ function renderTop(d){
 }
 
 async function copyBlockAsImage(details, btn){
+  if (typeof html2canvas === 'undefined' || typeof html2canvas !== 'function') {
+    showToast('A biblioteca de captura de imagem ainda não carregou (verifique sua conexão) — tente novamente em instantes.');
+    return;
+  }
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard || !navigator.clipboard.write) {
+    showToast('Este navegador não suporta copiar imagens para a área de transferência.');
+    return;
+  }
   const wasOpen = details.open;
   details.open = true;
   btn.classList.add('copying');
