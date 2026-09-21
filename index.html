@@ -236,6 +236,12 @@
   .detail-table td{ padding:7px 8px; border-bottom:1px solid var(--grid); vertical-align:middle; }
   .detail-table td.date{ font-family:var(--mono); white-space:nowrap; }
   .detail-table td.time{ font-family:var(--mono); color:var(--text-secondary); white-space:nowrap; }
+
+  /* ---------- image preview fallback (copy button) ---------- */
+  .img-preview-panel{ max-width:720px; }
+  .img-preview-hint{ font-size:12.5px; color:var(--text-secondary); line-height:1.6; margin:0 0 14px; }
+  .img-preview-hint b{ color:var(--text-primary); }
+  #img-preview-img{ display:block; width:100%; height:auto; border-radius:8px; border:1px solid var(--border); background:var(--surface); }
   .type-chips{ display:flex; gap:4px; flex-wrap:wrap; }
   .type-chip{ font-size:9.5px; font-weight:700; font-family:var(--mono); padding:2px 6px; border-radius:5px; color:#fff; white-space:nowrap; }
 
@@ -444,6 +450,24 @@
   <div class="he-actions">
     <button type="button" class="he-btn" id="he-cancel">Cancelar</button>
     <button type="button" class="he-btn primary" id="he-save">Salvar</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="img-preview-overlay">
+  <div class="modal-panel img-preview-panel">
+    <div class="modal-head">
+      <div>
+        <div class="m-name">Imagem do bloco</div>
+        <div class="m-sub" id="img-preview-title"></div>
+      </div>
+      <button type="button" class="modal-close" id="img-preview-close" aria-label="Fechar">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="img-preview-hint">A cópia automática não funcionou neste navegador (comum dentro de páginas incorporadas/iframes). Clique com o botão direito na imagem abaixo e escolha <b>"Copiar imagem"</b> ou <b>"Salvar imagem como..."</b>.</p>
+      <img id="img-preview-img" alt="Imagem gerada do bloco">
+    </div>
   </div>
 </div>
 
@@ -1266,46 +1290,46 @@ async function copyBlockAsImage(details, btn){
     showToast('A biblioteca de captura de imagem ainda não carregou (verifique sua conexão) — tente novamente em instantes.');
     return;
   }
-  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard || !navigator.clipboard.write) {
-    showToast('Este navegador não suporta copiar imagens para a área de transferência.');
-    return;
-  }
   const wasOpen = details.open;
   details.open = true;
   btn.classList.add('copying');
   const prevLabel = btn.innerHTML;
   btn.style.visibility = 'hidden';
   // espera o navegador terminar o reflow do bloco recém-aberto antes de capturar
-  // (evita capturar o layout antigo/colapsado) e trata o bloco inteiro, mesmo se
-  // estiver parcialmente fora da viewport (compensa o scroll da página).
+  // (evita capturar o layout antigo/colapsado).
   await new Promise(r => raf(() => raf(r)));
   try {
-    const rect = details.getBoundingClientRect();
     const canvas = await html2canvas(details, {
       backgroundColor: getComputedStyle(document.body).backgroundColor,
       scale: 2,
       useCORS: true,
       logging: false,
-      x: rect.left + window.scrollX,
-      y: rect.top + window.scrollY,
-      width: details.scrollWidth,
-      height: details.scrollHeight,
-      windowWidth: document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight
+      // compensa a posição de rolagem da página SEM definir x/y/width/height manualmente —
+      // esses eram recortes relativos ao clone interno do html2canvas, não à página, e
+      // cortavam a imagem errada. Passar só o elemento + scrollX/scrollY negativos é o
+      // jeito correto e documentado de capturar um elemento específico com a página rolada.
+      scrollX: -window.scrollX,
+      scrollY: -window.scrollY
     });
-    await new Promise((resolve, reject) => {
-      canvas.toBlob(async blob => {
-        try {
-          await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-          showToast('Bloco copiado como imagem — cole com Ctrl+V.');
-        } catch(e) {
-          showToast('Navegador não permitiu copiar direto. Clique com o botão direito na imagem gerada e copie manualmente.');
-        }
-        resolve();
-      }, 'image/png');
-    });
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('canvas.toBlob retornou vazio');
+
+    let copiedToClipboard = false;
+    if (typeof ClipboardItem !== 'undefined' && navigator.clipboard && navigator.clipboard.write) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        copiedToClipboard = true;
+      } catch(e) { /* segue para o fallback abaixo */ }
+    }
+    if (copiedToClipboard) {
+      showToast('Bloco copiado como imagem — cole com Ctrl+V.');
+    } else {
+      showImagePreview(blob, details.querySelector('.ga-name') ? details.querySelector('.ga-name').textContent : 'bloco');
+      showToast('Este navegador bloqueou a cópia automática — use a imagem que abriu para copiar/salvar manualmente.');
+    }
   } catch(e) {
-    showToast('Erro ao gerar a imagem do bloco.');
+    console.error('Erro ao gerar imagem do bloco:', e);
+    showToast('Erro ao gerar a imagem do bloco — detalhes no console (F12).');
   } finally {
     btn.style.visibility = '';
     btn.classList.remove('copying');
@@ -1313,6 +1337,26 @@ async function copyBlockAsImage(details, btn){
     details.open = wasOpen;
   }
 }
+
+/* ---------------- fallback: preview de imagem p/ copiar/salvar manualmente ---------------- */
+let imgPreviewUrl = null;
+function showImagePreview(blob, label){
+  const overlay = document.getElementById('img-preview-overlay');
+  const img = document.getElementById('img-preview-img');
+  if (imgPreviewUrl) URL.revokeObjectURL(imgPreviewUrl);
+  imgPreviewUrl = URL.createObjectURL(blob);
+  img.src = imgPreviewUrl;
+  document.getElementById('img-preview-title').textContent = label;
+  overlay.classList.add('show');
+}
+function closeImagePreview(){
+  document.getElementById('img-preview-overlay').classList.remove('show');
+  if (imgPreviewUrl) { URL.revokeObjectURL(imgPreviewUrl); imgPreviewUrl = null; }
+}
+document.getElementById('img-preview-close').addEventListener('click', closeImagePreview);
+document.getElementById('img-preview-overlay').addEventListener('click', evt => {
+  if (evt.target.id === 'img-preview-overlay') closeImagePreview();
+});
 
 /* ---------------- verificação base x hierarquia ---------------- */
 function computeVerification(){
