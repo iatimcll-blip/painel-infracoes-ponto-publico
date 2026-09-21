@@ -20,6 +20,9 @@
     --border:         rgba(11,11,11,0.10);
 
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    /* cores dos 3 tipos de infração (>7 dias / interjornada / >2h extras) — fixas por tipo,
+       separadas da paleta de marca (--s1/s2/s3) que também é usada em botões, links etc. */
+    --type-d7: #dc2626; --type-interj: #eab308; --type-hex: #c2410c;
     --good:     #0ca30c;
     --warning:  #fab219;
     --serious:  #ec835a;
@@ -39,6 +42,7 @@
       --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
       --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#ea580c;
       --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
       --critical-tint: rgba(230,103,103,0.14);
       --good-tint:     rgba(12,163,12,0.12);
@@ -52,6 +56,7 @@
     --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#ea580c;
     --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
     --critical-tint: rgba(230,103,103,0.14);
     --good-tint:     rgba(12,163,12,0.12);
@@ -472,9 +477,9 @@
     <div class="card">
       <div class="bars" id="go-bars"></div>
       <div class="legend" style="margin-top:12px;">
-        <span class="item"><span class="swatch" style="background:var(--s1)"></span>&gt;7 dias trab.</span>
-        <span class="item"><span class="swatch" style="background:var(--s2)"></span>Interjornada</span>
-        <span class="item"><span class="swatch" style="background:var(--s3)"></span>&gt;2h extras</span>
+        <span class="item"><span class="swatch" style="background:var(--type-d7)"></span>&gt;7 dias trab.</span>
+        <span class="item"><span class="swatch" style="background:var(--type-interj)"></span>Interjornada</span>
+        <span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>
       </div>
     </div>
   </section>
@@ -625,9 +630,9 @@
     </div>
     <div class="modal-body">
       <div class="modal-legend">
-        <span class="item"><span class="swatch" style="background:var(--s1)"></span>&gt;7 dias trab.</span>
-        <span class="item"><span class="swatch" style="background:var(--s2)"></span>Interjornada</span>
-        <span class="item"><span class="swatch" style="background:var(--s3)"></span>&gt;2h extras</span>
+        <span class="item"><span class="swatch" style="background:var(--type-d7)"></span>&gt;7 dias trab.</span>
+        <span class="item"><span class="swatch" style="background:var(--type-interj)"></span>Interjornada</span>
+        <span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>
       </div>
       <table class="detail-table">
         <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Infração(ões) do dia</th></tr></thead>
@@ -741,7 +746,7 @@ const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
 const EXCLUDED_GA = new Set(['WALMIR FERNANDES DA SILVA', 'IVANDRO PESSOA DA NOBREGA ALENCAR', 'WANDERSON MARCELLUS PENHA COSTA', 'WELLINGTON MARCIO FIGUEIRA']);
 // Wellington também some do gráfico por GO (sempre 0 nesta base - entrada puramente administrativa).
 const EXCLUDED_GO = new Set(['WELLINGTON MARCIO FIGUEIRA']);
-const TYPE_COLOR = { d7: 'var(--s1)', interj: 'var(--s2)', hex: 'var(--s3)' };
+const TYPE_COLOR = { d7: 'var(--type-d7)', interj: 'var(--type-interj)', hex: 'var(--type-hex)' };
 
 /* ---------------- helpers de data ---------------- */
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -1196,7 +1201,9 @@ function renderCycleSelect(d){
   const optNone = document.createElement('option');
   optNone.value = ''; optNone.textContent = 'Todas as semanas';
   weekSel.appendChild(optNone);
-  d.semanas.forEach(s => {
+  // no dropdown a semana mais recente do ano fica em primeiro (S38, S37, S36, ...) — só na
+  // lista de opções; o gráfico "Infrações por semana" continua em ordem cronológica normal.
+  [...d.semanas].reverse().forEach(s => {
     const o = document.createElement('option');
     o.value = s.key; o.textContent = s.label;
     if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
@@ -1304,9 +1311,9 @@ function renderBars(containerId, rows, linkToHierarchy){
       bnameHTML +
       '<div class="stack-wrap">' +
         '<div class="stack-track" data-tip>' +
-          '<div class="seg" style="width:'+w7+'%; background:var(--s1)"></div>' +
-          '<div class="seg" style="width:'+wi+'%; background:var(--s2)"></div>' +
-          '<div class="seg" style="width:'+wh+'%; background:var(--s3)"></div>' +
+          '<div class="seg" style="width:'+w7+'%; background:var(--type-d7)"></div>' +
+          '<div class="seg" style="width:'+wi+'%; background:var(--type-interj)"></div>' +
+          '<div class="seg" style="width:'+wh+'%; background:var(--type-hex)"></div>' +
         '</div>' +
         '<div class="seg-labels">'+labelSpans+'</div>' +
       '</div>' +
@@ -1489,7 +1496,7 @@ function renderAnoChart(){
   const xFor = i => padL + (i+0.5)/n*plotW;
   const yFor = v => padT + plotH - (v/maxY)*plotH;
 
-  const cS1 = cssVar('--s1'), cS2 = cssVar('--s2'), cS3 = cssVar('--s3'), cGrid = cssVar('--grid'),
+  const cS1 = cssVar('--type-d7'), cS2 = cssVar('--type-interj'), cS3 = cssVar('--type-hex'), cGrid = cssVar('--grid'),
         cMuted = cssVar('--text-muted'), cPrimary = cssVar('--text-primary'), cMono = cssVar('--mono');
 
   const gridLines = [0,0.5,1].map(f => {
@@ -1536,9 +1543,9 @@ function renderAnoChart(){
   legend.className = 'legend';
   legend.style.marginTop = '12px';
   legend.innerHTML =
-    '<span class="item"><span class="swatch" style="background:var(--s1)"></span>&gt;7 dias trab.</span>' +
-    '<span class="item"><span class="swatch" style="background:var(--s2)"></span>Interjornada</span>' +
-    '<span class="item"><span class="swatch" style="background:var(--s3)"></span>&gt;2h extras</span>' +
+    '<span class="item"><span class="swatch" style="background:var(--type-d7)"></span>&gt;7 dias trab.</span>' +
+    '<span class="item"><span class="swatch" style="background:var(--type-interj)"></span>Interjornada</span>' +
+    '<span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>' +
     '<span class="item"><span class="swatch" style="background:var(--text-muted)"></span>Linha de tendência (total mês a mês)</span>';
   host.appendChild(legend);
 }
