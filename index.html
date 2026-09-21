@@ -143,6 +143,21 @@
   }
   .sync-retry-btn:hover{ border-color:var(--warning); }
   .sync-retry-btn:disabled{ opacity:.6; cursor:not-allowed; }
+  .header-sync-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sync-refresh-link{
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--text-muted);
+    background:none; border:none; cursor:pointer; padding:0; font-family:var(--sans);
+  }
+  .sync-refresh-link:hover{ color:var(--s1); }
+  .sync-refresh-link:disabled{ opacity:.5; cursor:not-allowed; }
+  .sync-refresh-link .spin{ animation:sync-spin 0.8s linear infinite; }
+  @keyframes sync-spin{ to{ transform:rotate(360deg); } }
+  .sync-warning{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; color:var(--critical);
+    background:var(--critical-tint); border-radius:9px; padding:8px 12px; margin-top:2px;
+  }
+  .sync-warning .sync-retry-btn{ margin-top:0; color:var(--critical); background:var(--surface-raised); }
+  .sync-warning .sync-retry-btn:hover{ border-color:var(--critical); }
   .source-note{ font-size:11.5px; color:var(--text-muted); }
 
   /* ---------- section shell ---------- */
@@ -459,7 +474,17 @@
       <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
     </div>
     <div class="source-note" id="source-note"></div>
-    <div class="source-note" id="sync-timestamp"></div>
+    <div class="header-sync-row">
+      <div class="source-note" id="sync-timestamp"></div>
+      <button type="button" class="sync-refresh-link" id="sync-refresh-btn" title="Buscar dados mais recentes do Supabase agora">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 11-1.6-3.9M13.5 2v3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Atualizar dados agora
+      </button>
+    </div>
+    <div class="sync-warning" id="sync-warning" hidden>
+      <span>⚠ Não foi possível confirmar os dados mais recentes — pode estar vendo uma versão desatualizada.</span>
+      <button type="button" class="sync-retry-btn" id="read-retry-btn">Tentar de novo</button>
+    </div>
     <button type="button" class="sync-retry-btn" id="sync-retry-btn" hidden>
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 11-1.6-3.9M13.5 2v3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Salvar e sincronizar agora
@@ -780,7 +805,7 @@ function hhmm(v){
 // painel "Última atualização: ...", igual pra qualquer dispositivo que carregar os dados.
 const SYNC_META_KEY = 'ultima_sincronizacao_painel';
 async function loadFromSupabase(){
-  if (!sb) return false;
+  if (!sb) { STATE.readSyncFailed = true; return false; }
   try {
     const [{ data: regs, error: e1 }, { data: roster, error: e2 }, metaRes] = await Promise.all([
       sb.from('infracoes_registros').select('data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
@@ -788,6 +813,7 @@ async function loadFromSupabase(){
       sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(),
     ]);
     if (e1 || e2) throw (e1 || e2);
+    STATE.readSyncFailed = false;
     if (!regs || !regs.length) return false;
 
     STATE.raw = regs.map(r => ({
@@ -804,9 +830,26 @@ async function loadFromSupabase(){
     return true;
   } catch (e) {
     console.error('Falha ao sincronizar com o Supabase — seguindo com dados locais.', e);
+    // falha "silenciosa" de leitura era o pior caso: o painel ficava mostrando dados antigos
+    // sem avisar nada, então quem abrisse em outro dispositivo achava que não tinha sincronizado
+    // quando na verdade a LEITURA daquele aparelho específico que falhou. Agora fica visível.
+    STATE.readSyncFailed = true;
     return false;
   }
 }
+async function manualRefreshSync(){
+  const btns = [document.getElementById('sync-refresh-btn'), document.getElementById('read-retry-btn')].filter(Boolean);
+  btns.forEach(b => { b.disabled = true; });
+  const icon = document.querySelector('#sync-refresh-btn svg');
+  if (icon) icon.classList.add('spin');
+  const ok = await loadFromSupabase();
+  recomputeAndRender();
+  btns.forEach(b => { b.disabled = false; });
+  if (icon) icon.classList.remove('spin');
+  showToast(ok ? 'Dados atualizados.' : 'Não foi possível buscar os dados agora — tente de novo em instantes.');
+}
+document.getElementById('sync-refresh-btn').addEventListener('click', manualRefreshSync);
+document.getElementById('read-retry-btn').addEventListener('click', manualRefreshSync);
 async function recordSyncTimestamp(tipo, arquivo){
   const valor = { quando: new Date().toISOString(), por: (AUTH.currentUser || '—'), tipo, arquivo: arquivo || null };
   const { error } = await sb.from('infracoes_meta').upsert({ chave: SYNC_META_KEY, valor }, { onConflict: 'chave' });
@@ -829,6 +872,8 @@ function renderSyncTimestamp(){
     el.textContent = when ? ('Última atualização (' + tipoLabel + '): ' + when + ', por ' + esc(STATE.lastSync.por || '—')) : '';
   }
   if (retryBtn) retryBtn.hidden = !(STATE.pendingSync && isAdmin());
+  const warning = document.getElementById('sync-warning');
+  if (warning) warning.hidden = !STATE.readSyncFailed;
 }
 // tenta de novo, sem precisar reanexar o arquivo — usa os dados já parseados/salvos localmente
 // (STATE.raw/STATE.hierMap já foram atualizados mesmo quando a sincronização falhou).
@@ -979,7 +1024,7 @@ function cssVar(name){
 }
 
 /* ---------------- estado ---------------- */
-let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null };
+let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false };
 
 function buildHierMap(entries){
   const m = {};
@@ -1146,7 +1191,7 @@ function resetData(){
   // restaura só neste navegador — de propósito NÃO mexe no Supabase, pra não apagar os dados
   // compartilhados de todo mundo a partir de uma ação de um único dispositivo.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null };
+  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false };
   recomputeAndRender();
   showToast('Dados originais restaurados neste navegador (dados sincronizados no Supabase não foram alterados).');
 }
@@ -2390,7 +2435,10 @@ window.addEventListener('storage', evt => {
   recomputeAndRender();
   // Supabase é a fonte "oficial" quando disponível — se conectar, sobrepõe o que veio do
   // localStorage/padrão pra que todo mundo, em qualquer dispositivo, veja os mesmos dados;
-  // se falhar (offline, etc.), o painel já está de pé com o que carregou acima.
-  if (await loadFromSupabase()) recomputeAndRender();
+  // se falhar (offline, etc.), o painel já está de pé com o que carregou acima. Renderiza de
+  // novo IGUAL nos dois casos — sucesso ou falha —, porque é o recomputeAndRender() que exibe
+  // o aviso de "não deu pra confirmar os dados mais recentes" quando a leitura falha.
+  await loadFromSupabase();
+  recomputeAndRender();
 })();
 </script>
