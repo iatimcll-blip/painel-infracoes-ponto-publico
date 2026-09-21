@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Painel Infrações de Ponto</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -22,6 +23,12 @@
     --warning:  #fab219;
     --serious:  #ec835a;
     --critical: #d03b3b;
+    /* tons de fundo pré-calculados (sem color-mix — o html2canvas do botão Copiar não
+       entende essa função CSS e quebrava a captura de imagem quando encontrava um badge) */
+    --critical-tint: rgba(208,59,59,0.14);
+    --good-tint:     rgba(12,163,12,0.12);
+    --warning-tint:  rgba(250,178,25,0.14);
+    --s1-underline:  rgba(42,120,214,0.4);
 
     color-scheme: light;
   }
@@ -32,6 +39,10 @@
       --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
       --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
+      --critical-tint: rgba(230,103,103,0.14);
+      --good-tint:     rgba(12,163,12,0.12);
+      --warning-tint:  rgba(250,178,25,0.14);
+      --s1-underline:  rgba(57,135,229,0.4);
       color-scheme: dark;
     }
   }
@@ -41,6 +52,10 @@
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
     --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
+    --critical-tint: rgba(230,103,103,0.14);
+    --good-tint:     rgba(12,163,12,0.12);
+    --warning-tint:  rgba(250,178,25,0.14);
+    --s1-underline:  rgba(57,135,229,0.4);
     color-scheme: dark;
   }
 
@@ -182,8 +197,8 @@
   tbody td.muted{ color:var(--text-secondary); }
   .rank{ font-family:var(--mono); color:var(--text-muted); width:22px; display:inline-block; }
   .badge{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:999px; font-family:var(--mono); }
-  .badge.reinc{ background:color-mix(in srgb, var(--critical) 14%, transparent); color:var(--critical); }
-  .badge.ok{ background:color-mix(in srgb, var(--good) 12%, transparent); color:var(--good); }
+  .badge.reinc{ background:var(--critical-tint); color:var(--critical); }
+  .badge.ok{ background:var(--good-tint); color:var(--good); }
   .table-scroll{ overflow-x:auto; }
   .mini-track{ width:70px; height:6px; background:var(--grid); border-radius:3px; overflow:hidden; display:inline-block; vertical-align:middle; margin-left:8px; }
   .mini-fill{ height:100%; background:var(--s1); }
@@ -192,7 +207,7 @@
   .total-link{
     background:none; border:none; padding:0; margin:0; cursor:pointer;
     font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:inherit; font-weight:inherit;
-    color:var(--s1); text-decoration:underline; text-decoration-color:color-mix(in srgb, var(--s1) 40%, transparent);
+    color:var(--s1); text-decoration:underline; text-decoration-color:var(--s1-underline);
     text-underline-offset:2px; display:inline-flex; align-items:center; gap:2px;
   }
   .total-link:hover{ color:var(--text-primary); text-decoration-color:var(--text-primary); }
@@ -280,7 +295,7 @@
   .verif-extra-list{ margin-top:8px; font-size:12px; color:var(--text-secondary); line-height:1.6; }
   .edit-hier-btn{
     display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px; font-weight:700;
-    color:var(--warning); background:color-mix(in srgb, var(--warning) 14%, transparent); border:1px solid transparent;
+    color:var(--warning); background:var(--warning-tint); border:1px solid transparent;
     border-radius:999px; padding:4px 10px; cursor:pointer;
   }
   .edit-hier-btn:hover{ border-color:var(--warning); }
@@ -593,6 +608,15 @@ function prevWeekKey(key){
 }
 function fmt(n){ return (n||0).toLocaleString('pt-BR'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// resolve uma custom property CSS (var(--x)) pro valor final computado (ex: "#2a78d6").
+// necessário pros gráficos SVG: o html2canvas (usado no botão Copiar) não resolve var()
+// dentro de atributos de apresentação SVG (fill/stroke), só dentro de propriedades CSS
+// normais — se a gente deixasse "var(--s1)" literal no fill do SVG, a captura saía em
+// branco/quebrada. Resolvendo pra cor final aqui, o SVG funciona em qualquer renderizador.
+function cssVar(name){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || '#000000';
+}
 
 /* ---------------- estado ---------------- */
 let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
@@ -1139,6 +1163,9 @@ function renderWeeklyTrend(semanas){
   const xFor = i => padL + (n===1 ? plotW/2 : i/(n-1)*plotW);
   const yFor = v => padT + plotH - (v/maxY)*plotH;
 
+  const cS1 = cssVar('--s1'), cGrid = cssVar('--grid'), cMuted = cssVar('--text-muted'),
+        cPrimary = cssVar('--text-primary'), cSurface = cssVar('--surface'), cMono = cssVar('--mono');
+
   const pts = semanas.map((s,i) => ({ x:xFor(i), y:yFor(s.total), s }));
   const linePath = pts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
   const areaPath = linePath + ' L'+pts[pts.length-1].x.toFixed(1)+','+(padT+plotH)+' L'+pts[0].x.toFixed(1)+','+(padT+plotH)+' Z';
@@ -1149,20 +1176,20 @@ function renderWeeklyTrend(semanas){
 
   const gridLines = [0,0.5,1].map(f => {
     const y = padT + plotH*f;
-    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="var(--grid)" stroke-width="1"/>';
+    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="'+cGrid+'" stroke-width="1"/>';
   }).join('');
-  const xLabels = pts.map(p => '<text x="'+p.x+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" font-family="var(--mono)">'+esc(p.s.shortLabel)+'</text>').join('');
-  const valueLabels = pts.map(p => '<text x="'+p.x+'" y="'+(p.y-11)+'" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text-primary)" font-family="var(--mono)">'+fmt(p.s.total)+'</text>').join('');
-  const dots = pts.map((p,i) => '<circle class="wk-dot" data-idx="'+i+'" cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"></circle>').join('');
+  const xLabels = pts.map(p => '<text x="'+p.x+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="'+cMuted+'" font-family="'+esc(cMono)+'">'+esc(p.s.shortLabel)+'</text>').join('');
+  const valueLabels = pts.map(p => '<text x="'+p.x+'" y="'+(p.y-11)+'" text-anchor="middle" font-size="11" font-weight="600" fill="'+cPrimary+'" font-family="'+esc(cMono)+'">'+fmt(p.s.total)+'</text>').join('');
+  const dots = pts.map((p,i) => '<circle class="wk-dot" data-idx="'+i+'" cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="'+cS1+'" stroke="'+cSurface+'" stroke-width="2"></circle>').join('');
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox', '0 0 '+W+' '+H);
   svg.setAttribute('width', W); svg.setAttribute('height', H);
   svg.innerHTML =
     gridLines +
-    '<path d="'+areaPath+'" fill="var(--s1)" fill-opacity="0.10" stroke="none"/>' +
-    '<path d="'+linePath+'" fill="none" stroke="var(--s1)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
-    '<line x1="'+xFor(0)+'" y1="'+trendY0+'" x2="'+xFor(n-1)+'" y2="'+trendY1+'" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5,4"/>' +
+    '<path d="'+areaPath+'" fill="'+cS1+'" fill-opacity="0.10" stroke="none"/>' +
+    '<path d="'+linePath+'" fill="none" stroke="'+cS1+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<line x1="'+xFor(0)+'" y1="'+trendY0+'" x2="'+xFor(n-1)+'" y2="'+trendY1+'" stroke="'+cMuted+'" stroke-width="1.6" stroke-dasharray="5,4"/>' +
     dots + valueLabels + xLabels;
 
   const scroller = document.createElement('div');
@@ -1233,9 +1260,12 @@ function renderAnoChart(){
   const xFor = i => padL + (i+0.5)/n*plotW;
   const yFor = v => padT + plotH - (v/maxY)*plotH;
 
+  const cS1 = cssVar('--s1'), cS2 = cssVar('--s2'), cS3 = cssVar('--s3'), cGrid = cssVar('--grid'),
+        cMuted = cssVar('--text-muted'), cPrimary = cssVar('--text-primary'), cMono = cssVar('--mono');
+
   const gridLines = [0,0.5,1].map(f => {
     const y = padT + plotH*f;
-    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="var(--grid)" stroke-width="1"/>';
+    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="'+cGrid+'" stroke-width="1"/>';
   }).join('');
 
   let bars = '', segLabels = '', totalLabels = '', xLabels = '';
@@ -1243,30 +1273,30 @@ function renderAnoChart(){
     const cx = xFor(i);
     const x0 = cx - barW/2;
     let yCursor = padT + plotH;
-    [['d7',m.d7,'var(--s1)'], ['interj',m.interj,'var(--s2)'], ['hex',m.hex,'var(--s3)']].forEach(([key,val,color]) => {
+    [['d7',m.d7,cS1], ['interj',m.interj,cS2], ['hex',m.hex,cS3]].forEach(([key,val,color]) => {
       if (val <= 0) return;
       const segH = (val/maxY)*plotH;
       const yTop = yCursor - segH;
       bars += '<rect x="'+x0.toFixed(1)+'" y="'+yTop.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+segH.toFixed(1)+'" fill="'+color+'"/>';
       if (segH >= 13) {
-        segLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yTop+segH/2+3.5).toFixed(1)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff" font-family="var(--mono)">'+fmt(val)+'</text>';
+        segLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yTop+segH/2+3.5).toFixed(1)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff" font-family="'+esc(cMono)+'">'+fmt(val)+'</text>';
       }
       yCursor = yTop;
     });
-    totalLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yFor(m.total)-10).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="var(--text-primary)" font-family="var(--mono)">'+fmt(m.total)+'</text>';
-    xLabels += '<text x="'+cx.toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" font-family="var(--mono)">'+esc(m.label)+'</text>';
+    totalLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yFor(m.total)-10).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+cPrimary+'" font-family="'+esc(cMono)+'">'+fmt(m.total)+'</text>';
+    xLabels += '<text x="'+cx.toFixed(1)+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="'+cMuted+'" font-family="'+esc(cMono)+'">'+esc(m.label)+'</text>';
   });
 
   const reg = linearRegression(months.map(m=>m.total));
   const trendPts = months.map((m,i) => ({ x:xFor(i), y:yFor(Math.max(0, reg.intercept + reg.slope*i)) }));
   const trendPath = trendPts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
-  const trendDots = trendPts.map(p => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="var(--text-muted)"/>').join('');
+  const trendDots = trendPts.map(p => '<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="3" fill="'+cMuted+'"/>').join('');
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox', '0 0 '+W+' '+H);
   svg.setAttribute('width', W); svg.setAttribute('height', H);
   svg.innerHTML = gridLines + bars + segLabels + totalLabels +
-    '<path d="'+trendPath+'" fill="none" stroke="var(--text-muted)" stroke-width="1.8" stroke-dasharray="5,4"/>' +
+    '<path d="'+trendPath+'" fill="none" stroke="'+cMuted+'" stroke-width="1.8" stroke-dasharray="5,4"/>' +
     trendDots + xLabels;
 
   const scroller = document.createElement('div');
@@ -1570,7 +1600,7 @@ function renderHierarchy(d){
       '</div>' +
       '<div class="ga-head-stats">' +
         '<div class="ga-stat"><span class="n num">'+block.equipe+'</span><span class="l">Colaboradores</span></div>' +
-        '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Afetados</span></div>' +
+        '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Infrações</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.reincidentes+'</span><span class="l">Reincid.</span></div>' +
         '<div class="ga-stat total"><span class="n num">'+fmt(block.total)+'</span><span class="l">Total</span></div>' +
         '<button type="button" class="copy-img-btn" title="Copiar bloco como imagem">' +
