@@ -158,6 +158,13 @@
   }
   .sync-warning .sync-retry-btn{ margin-top:0; color:var(--critical); background:var(--surface-raised); }
   .sync-warning .sync-retry-btn:hover{ border-color:var(--critical); }
+  .version-banner{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:11.5px; font-weight:600; color:var(--s1);
+    background:var(--surface-raised); border:1px solid var(--s1);
+    border-radius:9px; padding:8px 12px; margin-top:2px;
+  }
+  .version-banner .sync-retry-btn{ margin-top:0; color:var(--s1); background:var(--surface); border-color:var(--s1); }
+  .version-banner .sync-retry-btn:hover{ filter:brightness(1.1); }
   .source-note{ font-size:11.5px; color:var(--text-muted); }
 
   /* ---------- section shell ---------- */
@@ -484,6 +491,10 @@
     <div class="sync-warning" id="sync-warning" hidden>
       <span>⚠ Não foi possível confirmar os dados mais recentes — pode estar vendo uma versão desatualizada.</span>
       <button type="button" class="sync-retry-btn" id="read-retry-btn">Tentar de novo</button>
+    </div>
+    <div class="version-banner" id="version-banner" hidden>
+      <span>ℹ️ Esta aba está com uma versão desatualizada do painel — recarregue pra ver as últimas mudanças.</span>
+      <button type="button" class="sync-retry-btn" id="version-reload-btn">Recarregar agora</button>
     </div>
     <button type="button" class="sync-retry-btn" id="sync-retry-btn" hidden>
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 11-1.6-3.9M13.5 2v3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -844,12 +855,40 @@ async function manualRefreshSync(){
   if (icon) icon.classList.add('spin');
   const ok = await loadFromSupabase();
   recomputeAndRender();
+  checkForNewVersion();
   btns.forEach(b => { b.disabled = false; });
   if (icon) icon.classList.remove('spin');
   showToast(ok ? 'Dados atualizados.' : 'Não foi possível buscar os dados agora — tente de novo em instantes.');
 }
 document.getElementById('sync-refresh-btn').addEventListener('click', manualRefreshSync);
 document.getElementById('read-retry-btn').addEventListener('click', manualRefreshSync);
+
+/* ---------------- detecta aba desatualizada ----------------
+   Uma aba aberta continua rodando o mesmo JS pra sempre, mesmo depois de publicarmos uma
+   correção nova — o Cache-Control da página só afeta a PRÓXIMA vez que ela é carregada, não
+   o que já está em execução. Isso já causou confusão real nesta sessão: "sincronizei num
+   aparelho mas o outro não vê" às vezes era, na prática, o outro aparelho estar com uma aba
+   velha aberta, de antes de alguma correção de sincronização entrar no ar. */
+let pageEtagAtLoad = null;
+async function checkForNewVersion(){
+  try {
+    const ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 5000) : null;
+    const res = await fetch(location.pathname + location.search, { method: 'HEAD', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+    if (timer) clearTimeout(timer);
+    const tag = res.headers.get('etag') || res.headers.get('last-modified');
+    if (!tag) return;
+    if (pageEtagAtLoad === null) { pageEtagAtLoad = tag; return; }
+    if (tag !== pageEtagAtLoad) {
+      const el = document.getElementById('version-banner');
+      if (el) el.hidden = false;
+    }
+  } catch(e) { /* checagem best-effort — se falhar (ex.: artifact sem suporte a HEAD), ignora */ }
+}
+document.getElementById('version-reload-btn').addEventListener('click', () => location.reload());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForNewVersion(); });
+const versionCheckTimer = setInterval(checkForNewVersion, 3 * 60 * 1000);
+if (versionCheckTimer && typeof versionCheckTimer.unref === 'function') versionCheckTimer.unref();
 async function recordSyncTimestamp(tipo, arquivo){
   const valor = { quando: new Date().toISOString(), por: (AUTH.currentUser || '—'), tipo, arquivo: arquivo || null };
   const { error } = await sb.from('infracoes_meta').upsert({ chave: SYNC_META_KEY, valor }, { onConflict: 'chave' });
@@ -2440,5 +2479,6 @@ window.addEventListener('storage', evt => {
   // o aviso de "não deu pra confirmar os dados mais recentes" quando a leitura falha.
   await loadFromSupabase();
   recomputeAndRender();
+  checkForNewVersion(); // só registra o ETag atual — a comparação de verdade acontece depois
 })();
 </script>
