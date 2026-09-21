@@ -132,6 +132,9 @@
   .rank-row{ display:grid; grid-template-columns:26px 1fr 90px 90px 110px; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--grid); }
   .rank-row:last-child{ border-bottom:none; }
   @media (max-width:680px){ .rank-row{ grid-template-columns:22px 1fr 100px; } .rank-row .col-prev, .rank-row .col-atual{ display:none; } }
+  .rank-row.rank-head{ border-bottom:1px solid var(--baseline); padding-bottom:8px; margin-bottom:2px; }
+  .rank-row.rank-head span{ font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); }
+  .rank-row.rank-head .col-prev, .rank-row.rank-head .col-atual{ text-align:right; }
   .rank-row .pos{ font-family:var(--mono); color:var(--text-muted); font-size:12px; }
   .rank-row .ga-name{ font-size:12.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .rank-row .col-prev, .rank-row .col-atual{ font-size:12px; color:var(--text-secondary); text-align:right; }
@@ -245,6 +248,42 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+  /* ---------- verificação base x hierarquia ---------- */
+  .verif-summary{ margin:0 0 10px; font-size:12.5px; color:var(--text-secondary); }
+  .verif-ok{ margin:0; font-size:12.5px; color:var(--good); font-weight:600; }
+  .verif-list{ display:flex; flex-direction:column; gap:0; }
+  .verif-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--grid); }
+  .verif-row:last-child{ border-bottom:none; }
+  .verif-row .vr-name{ font-size:12.5px; font-weight:500; }
+  .verif-extra{ margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); }
+  .verif-extra summary{ cursor:pointer; font-size:12px; color:var(--text-muted); }
+  .verif-extra-list{ margin-top:8px; font-size:12px; color:var(--text-secondary); line-height:1.6; }
+  .edit-hier-btn{
+    display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px; font-weight:700;
+    color:var(--warning); background:color-mix(in srgb, var(--warning) 14%, transparent); border:1px solid transparent;
+    border-radius:999px; padding:4px 10px; cursor:pointer;
+  }
+  .edit-hier-btn:hover{ border-color:var(--warning); }
+
+  /* ---------- hierarchy inline editor popover ---------- */
+  .hier-editor{
+    position:fixed; z-index:150; background:var(--surface-raised); border:1px solid var(--border); border-radius:12px;
+    box-shadow:0 16px 40px rgba(0,0,0,.22); padding:14px; width:260px; display:none; flex-direction:column; gap:9px;
+  }
+  .hier-editor.show{ display:flex; }
+  .he-title{ font-size:12px; font-weight:600; }
+  .he-name{ font-size:11.5px; color:var(--text-secondary); margin-top:-4px; }
+  .he-field{ display:flex; flex-direction:column; gap:4px; font-size:10.5px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.02em; }
+  .he-field input{
+    font-family:var(--sans); font-size:12.5px; font-weight:400; text-transform:none; letter-spacing:normal; color:var(--text-primary);
+    background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:7px 9px;
+  }
+  .he-field input:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .he-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:2px; }
+  .he-btn{ font-family:var(--sans); font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text-secondary); }
+  .he-btn.primary{ background:var(--s1); border-color:var(--s1); color:#fff; }
+  .he-btn:hover{ filter:brightness(1.05); }
+
   footer{ display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid var(--grid); padding-top:16px; }
   footer .num{ color:var(--text-secondary); }
 </style>
@@ -284,6 +323,14 @@
 
   <section>
     <div class="section-head">
+      <h2>Infrações no ano</h2>
+      <span class="hint">todos os meses presentes nos dados carregados</span>
+    </div>
+    <div class="card"><div class="mini-bars" id="dash-ano"></div></div>
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>Infrações por GO (Gestor Operacional)</h2>
       <span class="hint">soma dos GOs = total do ciclo</span>
     </div>
@@ -311,6 +358,13 @@
       <span class="hint" id="week-range-hint"></span>
     </div>
     <div class="card">
+      <div class="rank-row rank-head">
+        <span></span>
+        <span>GA</span>
+        <span class="col-prev">Semana anterior</span>
+        <span class="col-atual">Semana atual</span>
+        <span style="text-align:right;">Variação</span>
+      </div>
       <div class="rank-list" id="rank-list"></div>
     </div>
   </section>
@@ -352,6 +406,14 @@
 
   <section>
     <div class="section-head">
+      <h2>Verificação · Base de dados x Hierarquia</h2>
+      <span class="hint">confere se todo colaborador da base de ponto tem GA/GO definidos</span>
+    </div>
+    <div class="card" id="verif-body"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
       <h2>Colaboradores por hierarquia</h2>
       <span class="hint" id="hier-total-hint"></span>
     </div>
@@ -371,6 +433,19 @@
 
 <div class="tooltip" id="tooltip"></div>
 <div class="toast" id="toast"></div>
+
+<div class="hier-editor" id="hier-editor">
+  <div class="he-title">Definir hierarquia</div>
+  <div class="he-name" id="he-name"></div>
+  <label class="he-field">GA (Gestor de Área)<input type="text" id="he-ga" list="he-ga-list" autocomplete="off"></label>
+  <label class="he-field">GO (Gestor Operacional)<input type="text" id="he-go" list="he-go-list" autocomplete="off" placeholder="opcional — usa o GA se vazio"></label>
+  <datalist id="he-ga-list"></datalist>
+  <datalist id="he-go-list"></datalist>
+  <div class="he-actions">
+    <button type="button" class="he-btn" id="he-cancel">Cancelar</button>
+    <button type="button" class="he-btn primary" id="he-save">Salvar</button>
+  </div>
+</div>
 
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-name">
@@ -410,12 +485,16 @@ const HIER_DEFAULT = [{"nome":"CLEMILTON MENDES DA SILVA","ga":"ALEKSEI THOMAS O
 const STORAGE_RAW = 'painelInfracoes.raw.v1';
 const STORAGE_HIER = 'painelInfracoes.hier.v1';
 
+const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
 const WEEKDAY_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const GO_PALETTE = ['var(--s1)','var(--s2)','var(--s3)','var(--s4)','#9085e9','#e87ba4'];
 const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
 // GAs que são, na verdade, entradas administrativas dos próprios GOs (sem equipe operacional
 // própria abaixo deles nesta visão) - excluídas das análises "por GA" a pedido do usuário.
-const EXCLUDED_GA = new Set(['WALMIR FERNANDES DA SILVA', 'IVANDRO PESSOA DA NOBREGA ALENCAR', 'WANDERSON MARCELLUS PENHA COSTA']);
+const EXCLUDED_GA = new Set(['WALMIR FERNANDES DA SILVA', 'IVANDRO PESSOA DA NOBREGA ALENCAR', 'WANDERSON MARCELLUS PENHA COSTA', 'WELLINGTON MARCIO FIGUEIRA']);
+// Wellington também some do gráfico por GO (sempre 0 nesta base - entrada puramente administrativa).
+const EXCLUDED_GO = new Set(['WELLINGTON MARCIO FIGUEIRA']);
 const TYPE_COLOR = { d7: 'var(--s1)', interj: 'var(--s2)', hex: 'var(--s3)' };
 
 /* ---------------- helpers de data ---------------- */
@@ -726,8 +805,10 @@ function deriveAll(){
   const porGoMap = new Map();
   const porGaMap = new Map();
   colaboradores.forEach(c => {
-    if (!porGoMap.has(c.go)) porGoMap.set(c.go, {nome:c.go, d7:0, interj:0, hex:0, total:0});
-    const go = porGoMap.get(c.go); go.d7+=c.d7; go.interj+=c.interj; go.hex+=c.hex; go.total+=c.total;
+    if (!EXCLUDED_GO.has(c.go)) {
+      if (!porGoMap.has(c.go)) porGoMap.set(c.go, {nome:c.go, d7:0, interj:0, hex:0, total:0});
+      const go = porGoMap.get(c.go); go.d7+=c.d7; go.interj+=c.interj; go.hex+=c.hex; go.total+=c.total;
+    }
     if (EXCLUDED_GA.has(c.ga)) return;
     if (!porGaMap.has(c.ga)) porGaMap.set(c.ga, {nome:c.ga, go:c.go, d7:0, interj:0, hex:0, total:0, equipe:0, afetados:0, reincidentes:0});
     const ga = porGaMap.get(c.ga); ga.d7+=c.d7; ga.interj+=c.interj; ga.hex+=c.hex; ga.total+=c.total;
@@ -819,11 +900,13 @@ function recomputeAndRender(){
   try {
     renderCycleSelect(d);
     renderKpis(d);
+    renderAnoChart();
     renderGoGa(d);
     renderRanking(d);
     renderWeeklyTrend(d.semanas);
     renderDashboards(d);
     renderTop(d);
+    renderVerification();
     renderHierarchy(d);
     document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
   } catch (e) {
@@ -1006,10 +1089,10 @@ function renderWeeklyTrend(semanas){
   clear(host);
   if (!semanas.length) { host.innerHTML = '<p style="font-size:12px;color:var(--text-muted);font-style:italic;">Sem dados.</p>'; return; }
   const n = semanas.length;
-  const W = Math.max(380, n*64), H = 200;
-  const padL = 34, padR = 16, padT = 16, padB = 30;
+  const W = Math.max(420, n*78), H = 220;
+  const padL = 36, padR = 20, padT = 34, padB = 32;
   const plotW = W - padL - padR, plotH = H - padT - padB;
-  const maxY = Math.max(...semanas.map(s=>s.total), 1) * 1.15;
+  const maxY = Math.max(...semanas.map(s=>s.total), 1) * 1.28;
   const xFor = i => padL + (n===1 ? plotW/2 : i/(n-1)*plotW);
   const yFor = v => padT + plotH - (v/maxY)*plotH;
 
@@ -1025,8 +1108,9 @@ function renderWeeklyTrend(semanas){
     const y = padT + plotH*f;
     return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="var(--grid)" stroke-width="1"/>';
   }).join('');
-  const xLabels = pts.map(p => '<text x="'+p.x+'" y="'+(H-8)+'" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" font-family="var(--mono)">'+esc(p.s.shortLabel)+'</text>').join('');
-  const dots = pts.map((p,i) => '<circle class="wk-dot" data-idx="'+i+'" cx="'+p.x+'" cy="'+p.y+'" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"></circle>').join('');
+  const xLabels = pts.map(p => '<text x="'+p.x+'" y="'+(H-10)+'" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" font-family="var(--mono)">'+esc(p.s.shortLabel)+'</text>').join('');
+  const valueLabels = pts.map(p => '<text x="'+p.x+'" y="'+(p.y-11)+'" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text-primary)" font-family="var(--mono)">'+fmt(p.s.total)+'</text>').join('');
+  const dots = pts.map((p,i) => '<circle class="wk-dot" data-idx="'+i+'" cx="'+p.x+'" cy="'+p.y+'" r="4.5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"></circle>').join('');
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox', '0 0 '+W+' '+H);
@@ -1036,7 +1120,7 @@ function renderWeeklyTrend(semanas){
     '<path d="'+areaPath+'" fill="var(--s1)" fill-opacity="0.10" stroke="none"/>' +
     '<path d="'+linePath+'" fill="none" stroke="var(--s1)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
     '<line x1="'+xFor(0)+'" y1="'+trendY0+'" x2="'+xFor(n-1)+'" y2="'+trendY1+'" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5,4"/>' +
-    dots + xLabels;
+    dots + valueLabels + xLabels;
 
   const scroller = document.createElement('div');
   scroller.style.overflowX = 'auto';
@@ -1077,6 +1161,20 @@ function renderMiniBars(containerId, items, labelKey){
       '<div class="mbtrack"><div class="mbfill" style="width:'+(i.total/max*100)+'%"></div></div>';
     el.appendChild(div);
   });
+}
+function renderAnoChart(){
+  const enriched = enrichRows(STATE.raw, STATE.hierMap);
+  const map = new Map();
+  enriched.forEach(r => {
+    const d = parseISODate(r.data);
+    if (!d) return;
+    const key = d.getFullYear() + '-' + pad2(d.getMonth()+1);
+    const label = MONTH_LABELS[d.getMonth()] + '/' + d.getFullYear();
+    if (!map.has(key)) map.set(key, { key: label, total: 0 });
+    map.get(key).total += r.total;
+  });
+  const items = [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([,v])=>v);
+  renderMiniBars('dash-ano', items);
 }
 function renderDashboards(d){
   renderMiniBars('dash-weekday', d.weekdayOrdered.map(w=>({key:w.label, total:w.total})));
@@ -1140,6 +1238,12 @@ document.body.addEventListener('click', evt => {
   if (btn) openDetail(btn.dataset.nome, Number(btn.dataset.total));
 });
 
+function gaCellHTML(nome, ga){
+  if (ga === 'SEM HIERARQUIA') {
+    return '<button type="button" class="edit-hier-btn" data-nome="'+esc(nome)+'">SEM HIERARQUIA <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2l3 3-8 8-3.5 1 1-3.5 7.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>';
+  }
+  return esc(ga);
+}
 function renderTop(d){
   const tbody = document.getElementById('top-rows');
   clear(tbody);
@@ -1150,7 +1254,7 @@ function renderTop(d){
     tr.innerHTML =
       '<td class="rank">'+(i+1)+'</td>' +
       '<td class="name">'+esc(t.nome)+'</td>' +
-      '<td class="muted">'+esc(t.ga)+'</td>' +
+      '<td class="muted">'+gaCellHTML(t.nome, t.ga)+'</td>' +
       '<td class="num-col">'+totalLinkHTML(t.nome, t.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(t.total/maxTotal*100)+'%"></span></span></td>' +
       '<td>'+(t.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '<span class="badge ok">novo caso</span>')+'</td>';
     tbody.appendChild(tr);
@@ -1171,10 +1275,23 @@ async function copyBlockAsImage(details, btn){
   btn.classList.add('copying');
   const prevLabel = btn.innerHTML;
   btn.style.visibility = 'hidden';
+  // espera o navegador terminar o reflow do bloco recém-aberto antes de capturar
+  // (evita capturar o layout antigo/colapsado) e trata o bloco inteiro, mesmo se
+  // estiver parcialmente fora da viewport (compensa o scroll da página).
+  await new Promise(r => raf(() => raf(r)));
   try {
+    const rect = details.getBoundingClientRect();
     const canvas = await html2canvas(details, {
       backgroundColor: getComputedStyle(document.body).backgroundColor,
-      scale: 2
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      x: rect.left + window.scrollX,
+      y: rect.top + window.scrollY,
+      width: details.scrollWidth,
+      height: details.scrollHeight,
+      windowWidth: document.documentElement.scrollWidth,
+      windowHeight: document.documentElement.scrollHeight
     });
     await new Promise((resolve, reject) => {
       canvas.toBlob(async blob => {
@@ -1197,6 +1314,111 @@ async function copyBlockAsImage(details, btn){
   }
 }
 
+/* ---------------- verificação base x hierarquia ---------------- */
+function computeVerification(){
+  const enriched = enrichRows(STATE.raw, STATE.hierMap);
+  const nomesNaBase = new Set(enriched.map(r=>r.nome));
+  const semHierarquia = [...nomesNaBase].filter(n => !STATE.hierMap[n]).sort();
+  const naHierarquiaSemDados = Object.keys(STATE.hierMap).filter(n => !nomesNaBase.has(n)).sort();
+  return { semHierarquia, naHierarquiaSemDados, totalBase: nomesNaBase.size, totalHier: Object.keys(STATE.hierMap).length };
+}
+function renderVerification(){
+  const v = computeVerification();
+  const el = document.getElementById('verif-body');
+  clear(el);
+  const summary = document.createElement('p');
+  summary.className = 'verif-summary';
+  summary.textContent = fmt(v.totalBase) + ' colaborador(es) na base de dados · ' + fmt(v.totalHier) + ' na hierarquia · ' +
+    fmt(v.semHierarquia.length) + ' sem hierarquia definida · ' + fmt(v.naHierarquiaSemDados.length) + ' na hierarquia sem registros no período carregado';
+  el.appendChild(summary);
+
+  if (v.semHierarquia.length) {
+    const list = document.createElement('div');
+    list.className = 'verif-list';
+    v.semHierarquia.forEach(nome => {
+      const row = document.createElement('div');
+      row.className = 'verif-row';
+      row.innerHTML = '<span class="vr-name">'+esc(nome)+'</span>' +
+        '<button type="button" class="edit-hier-btn" data-nome="'+esc(nome)+'">Definir GA/GO ' +
+        '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2l3 3-8 8-3.5 1 1-3.5 7.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>';
+      list.appendChild(row);
+    });
+    el.appendChild(list);
+  } else {
+    const ok = document.createElement('p');
+    ok.className = 'verif-ok';
+    ok.textContent = '✓ Todos os colaboradores da base carregada têm GA/GO definidos.';
+    el.appendChild(ok);
+  }
+
+  if (v.naHierarquiaSemDados.length) {
+    const details = document.createElement('details');
+    details.className = 'verif-extra';
+    details.innerHTML = '<summary>'+v.naHierarquiaSemDados.length+' colaborador(es) cadastrados na hierarquia sem nenhum registro na base carregada</summary>';
+    const list = document.createElement('div');
+    list.className = 'verif-extra-list';
+    list.textContent = v.naHierarquiaSemDados.join(' · ');
+    details.appendChild(list);
+    el.appendChild(details);
+  }
+}
+
+/* ---------------- editor inline de hierarquia (SEM HIERARQUIA) ---------------- */
+const hierEditor = document.getElementById('hier-editor');
+let hierEditorTarget = null;
+function openHierEditor(nome, anchorRect){
+  hierEditorTarget = nome;
+  document.getElementById('he-name').textContent = nome;
+  document.getElementById('he-ga').value = '';
+  document.getElementById('he-go').value = '';
+
+  const gas = new Set(), gos = new Set();
+  Object.values(STATE.hierMap).forEach(h => { if (h.ga) gas.add(h.ga); if (h.go) gos.add(h.go); });
+  const gaList = document.getElementById('he-ga-list'); clear(gaList);
+  [...gas].sort().forEach(g => { const o = document.createElement('option'); o.value = g; gaList.appendChild(o); });
+  const goList = document.getElementById('he-go-list'); clear(goList);
+  [...gos].sort().forEach(g => { const o = document.createElement('option'); o.value = g; goList.appendChild(o); });
+
+  hierEditor.classList.add('show');
+  hierEditor.style.left = Math.max(8, anchorRect.left) + 'px';
+  hierEditor.style.top = (anchorRect.bottom + 6) + 'px';
+  raf(() => {
+    const er = hierEditor.getBoundingClientRect();
+    let x = anchorRect.left, y = anchorRect.bottom + 6;
+    if (x + er.width > window.innerWidth - 8) x = window.innerWidth - er.width - 8;
+    if (y + er.height > window.innerHeight - 8) y = anchorRect.top - er.height - 6;
+    hierEditor.style.left = x + 'px';
+    hierEditor.style.top = y + 'px';
+  });
+  document.getElementById('he-ga').focus();
+}
+function closeHierEditor(){
+  hierEditor.classList.remove('show');
+  hierEditorTarget = null;
+}
+document.getElementById('he-cancel').addEventListener('click', closeHierEditor);
+document.getElementById('he-save').addEventListener('click', () => {
+  const ga = document.getElementById('he-ga').value.trim();
+  const go = document.getElementById('he-go').value.trim();
+  if (!ga) { showToast('Informe ao menos o GA para salvar.'); return; }
+  const nome = hierEditorTarget;
+  STATE.hierMap[nome] = { ga, go: go || ga };
+  STATE.usingDefault = false;
+  saveToStorage();
+  closeHierEditor();
+  recomputeAndRender();
+  showToast('Hierarquia de ' + nome + ' definida e salva.');
+});
+document.body.addEventListener('click', evt => {
+  const trigger = evt.target.closest('.edit-hier-btn');
+  if (trigger) {
+    openHierEditor(trigger.dataset.nome, trigger.getBoundingClientRect());
+    return;
+  }
+  if (hierEditor.classList.contains('show') && !hierEditor.contains(evt.target)) closeHierEditor();
+});
+document.addEventListener('keydown', evt => { if (evt.key === 'Escape') closeHierEditor(); });
+
 function renderHierarchy(d){
   currentDerived = d;
   const wrap = document.getElementById('hier-blocks');
@@ -1218,7 +1440,7 @@ function renderHierarchy(d){
         '<div class="ga-head-text"><div class="ga-name">'+esc(block.ga)+'</div><div class="go-line">GO: '+esc(block.go||'—')+'</div></div>' +
       '</div>' +
       '<div class="ga-head-stats">' +
-        '<div class="ga-stat"><span class="n num">'+block.equipe+'</span><span class="l">Equipe</span></div>' +
+        '<div class="ga-stat"><span class="n num">'+block.equipe+'</span><span class="l">Colaboradores</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Afetados</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.reincidentes+'</span><span class="l">Reincid.</span></div>' +
         '<div class="ga-stat total"><span class="n num">'+fmt(block.total)+'</span><span class="l">Total</span></div>' +
