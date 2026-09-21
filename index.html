@@ -834,15 +834,31 @@ function hhmm(v){
 // processo) — registra quando/quem/o quê da última sincronização de escrita, pra mostrar no
 // painel "Última atualização: ...", igual pra qualquer dispositivo que carregar os dados.
 const SYNC_META_KEY = 'ultima_sincronizacao_painel';
+// a API do Supabase (PostgREST) devolve no MÁXIMO 1000 linhas por requisição. Sem paginar, o
+// painel lia só as primeiras 1000 de milhares de linhas e mostrava números incompletos — era a
+// causa das "falhas de sincronização" (o anexo subia certo, mas a leitura vinha pela metade).
+const SUPABASE_PAGE = 1000;
+async function fetchAllRows(tabela, colunas){
+  let todas = [];
+  for (let offset = 0; ; offset += SUPABASE_PAGE) {
+    const { data, error } = await withTimeout(
+      sb.from(tabela).select(colunas).order('id', { ascending: true })
+        .range(offset, offset + SUPABASE_PAGE - 1),
+      15000, 'ler ' + tabela
+    );
+    if (error) throw error;
+    todas = todas.concat(data || []);
+    if (!data || data.length < SUPABASE_PAGE) return todas;
+  }
+}
 async function loadFromSupabase(){
   if (!sb) { STATE.readSyncFailed = true; return false; }
   try {
-    const [{ data: regs, error: e1 }, { data: roster, error: e2 }, metaRes] = await withTimeout(Promise.all([
-      sb.from('infracoes_registros').select('data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
-      sb.from('infracoes_roster').select('nome,ga,go'),
-      sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(),
-    ]), 15000, 'ler dados');
-    if (e1 || e2) throw (e1 || e2);
+    const [regs, roster, metaRes] = await Promise.all([
+      fetchAllRows('infracoes_registros', 'data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
+      fetchAllRows('infracoes_roster', 'nome,ga,go'),
+      withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(), 15000, 'ler meta'),
+    ]);
     STATE.readSyncFailed = false;
     if (!regs || !regs.length) {
       // consulta funcionou mas veio vazia (ex.: dados zerados) — não pode deixar "usingSupabase"
@@ -865,11 +881,42 @@ async function loadFromSupabase(){
     STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
     return true;
   } catch (e) {
-    console.error('Falha ao sincronizar com o Supabase — seguindo com dados locais.', e);
-    // falha "silenciosa" de leitura era o pior caso: o painel ficava mostrando dados antigos
-    // sem avisar nada, então quem abrisse em outro dispositivo achava que não tinha sincronizado
-    // quando na verdade a LEITURA daquele aparelho específico que falhou. Agora fica visível.
+    console.error('Falha ao ler do Supabase — tentando a cópia publicada no GitHub.', e);
+    // fonte reserva: um workflow do GitHub Actions espelha a Base + Hierarquia do Supabase em
+    // dados.json dentro do próprio repositório, de hora em hora. Se a leitura do Supabase falhar
+    // no aparelho de alguém (rede da empresa bloqueando, instabilidade, etc.), o painel ainda
+    // consegue mostrar os dados a partir desse arquivo, servido do mesmo endereço da página.
+    if (await loadFromGithubMirror()) return true;
     STATE.readSyncFailed = true;
+    return false;
+  }
+}
+async function loadFromGithubMirror(){
+  try {
+    const ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
+    const res = await fetch('dados.json', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+    if (timer) clearTimeout(timer);
+    if (!res.ok) return false;
+    const d = await res.json();
+    if (!d || !Array.isArray(d.registros) || !d.registros.length) return false;
+
+    STATE.raw = d.registros.map(r => ({
+      data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
+      bu: r.bu, subbu: r.subbu, entrada: hhmm(r.entrada), saida: hhmm(r.saida),
+      d7: r.dias7 || 0, interj: r.interj || 0, hex: r.he2 || 0,
+    }));
+    const hierMap = {};
+    (d.roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
+    if (Object.keys(hierMap).length) STATE.hierMap = hierMap;
+    STATE.usingDefault = false;
+    STATE.usingSupabase = true;
+    STATE.readSyncFailed = false;
+    STATE.lastSync = d.gerado_em ? { quando: d.gerado_em, por: 'cópia do GitHub', tipo: 'base', arquivo: null } : null;
+    console.info('Dados carregados da cópia do GitHub (dados.json).');
+    return true;
+  } catch (e) {
+    console.error('A cópia do GitHub também não pôde ser lida.', e);
     return false;
   }
 }

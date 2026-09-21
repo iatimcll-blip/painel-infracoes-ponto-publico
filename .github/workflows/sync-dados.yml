@@ -1,0 +1,46 @@
+name: Espelhar dados do Supabase no repositorio
+
+# Copia a Base + Hierarquia do Supabase para dados.json dentro do proprio repositorio.
+# Serve como backup versionado (da pra ver o historico de cada alteracao nos commits) e como
+# fonte reserva: se a leitura do Supabase falhar no navegador de alguem, o painel cai pra este
+# arquivo automaticamente.
+#
+# Seguranca: nenhum segredo novo e usado aqui. A leitura do Supabase usa a chave publica (anon),
+# que ja esta no codigo do painel e so da acesso de LEITURA. O commit usa o GITHUB_TOKEN que o
+# proprio Actions fornece — ele nunca fica exposto no site.
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-dados
+  cancel-in-progress: true
+
+jobs:
+  espelhar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar dados do Supabase
+        env:
+          SUPABASE_URL: https://ymltjceiviyadckxzbxw.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbHRqY2Vpdml5YWRja3h6Ynh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NzQyNTMsImV4cCI6MjEwNTI1MDI1M30.dCtuE0oKMe29nH5rCV5hVl9A3AzL-PF-G_G5c-spiVg
+        run: python3 .github/scripts/exportar_dados.py
+
+      - name: Commitar se algo mudou
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add dados.json
+          if git diff --cached --quiet; then
+            echo 'Nada mudou desde a ultima execucao.'
+          else
+            git commit -m 'Atualiza dados.json a partir do Supabase'
+            git push
+          fi
