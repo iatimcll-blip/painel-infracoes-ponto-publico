@@ -170,6 +170,17 @@
   .bar-item{ display:grid; grid-template-columns:190px 1fr 46px; align-items:center; gap:10px; }
   @media (max-width:560px){ .bar-item{ grid-template-columns:104px 1fr 38px; gap:6px; } .bar-item .bname{ font-size:11px; } .bar-item .btotal{ font-size:11.5px; } }
   .bar-item .bname{ font-size:12px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  button.bname-link{
+    background:none; border:none; padding:0; margin:0; cursor:pointer; text-align:left; font-family:var(--sans);
+    text-decoration:underline; text-decoration-style:dotted; text-decoration-color:var(--text-muted); text-underline-offset:2px;
+  }
+  button.bname-link:hover{ color:var(--s1); text-decoration-style:solid; text-decoration-color:var(--s1); }
+  button.bname-link:focus-visible{ outline:2px solid var(--s1); outline-offset:2px; border-radius:3px; }
+  @keyframes go-jump-pulse{
+    0%{ box-shadow:0 0 0 0 var(--s1); }
+    100%{ box-shadow:0 0 0 8px rgba(0,0,0,0); }
+  }
+  .ga-block.go-jump-highlight{ animation:go-jump-pulse 1s ease-out 2; border-color:var(--s1); }
   .bar-item .btotal{ font-size:12.5px; text-align:right; font-weight:600; }
   .stack-wrap{ position:relative; }
   .stack-track{ position:relative; height:16px; background:var(--grid); border-radius:4px; overflow:hidden; display:flex; }
@@ -1263,7 +1274,7 @@ function segLabelHTML(val, widthPct){
   if (val <= 0) return '';
   return '<span class="seg-label">'+fmt(val)+'</span>';
 }
-function renderBars(containerId, rows){
+function renderBars(containerId, rows, linkToHierarchy){
   const max = Math.max(...rows.map(r=>r.total), 1);
   const el = document.getElementById(containerId);
   clear(el);
@@ -1286,8 +1297,11 @@ function renderBars(containerId, rows){
       if (w < 6) { cls += (smallIdx % 2 === 0) ? ' seg-label-above' : ' seg-label-below'; smallIdx++; }
       return '<span class="'+cls+'" style="left:'+centerPct+'%">'+fmt(val)+'</span>';
     }).join('');
+    const bnameHTML = linkToHierarchy
+      ? '<button type="button" class="bname bname-link" data-go="'+esc(r.nome)+'" title="Ver '+esc(r.nome)+' em Colaboradores por hierarquia">'+esc(r.nome)+'</button>'
+      : '<span class="bname" title="' + esc(r.nome) + '">' + esc(r.nome) + '</span>';
     item.innerHTML =
-      '<span class="bname" title="' + esc(r.nome) + '">' + esc(r.nome) + '</span>' +
+      bnameHTML +
       '<div class="stack-wrap">' +
         '<div class="stack-track" data-tip>' +
           '<div class="seg" style="width:'+w7+'%; background:var(--s1)"></div>' +
@@ -1310,7 +1324,7 @@ function renderBars(containerId, rows){
   });
 }
 function renderGoGa(d){
-  renderBars('go-bars', d.porGo);
+  renderBars('go-bars', d.porGo, true);
   renderBars('ga-bars', d.porGa);
   document.getElementById('ga-count-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
 }
@@ -1590,6 +1604,34 @@ document.body.addEventListener('click', evt => {
   if (btn) openDetail(btn.dataset.nome, Number(btn.dataset.total));
 });
 
+// clicar no nome de um GO (em "Infrações por GO") leva direto pros blocos dele em
+// "Colaboradores por hierarquia" — expande a seção se estiver recolhida, abre só os
+// GA(s) daquele GO e rola até o primeiro, com um destaque rápido pra guiar o olho.
+function jumpToGoInHierarchy(goName){
+  const hierBlocksEl = document.getElementById('hier-blocks');
+  if (!hierBlocksEl) return;
+  const section = hierBlocksEl.closest('section');
+  if (section) {
+    section.classList.remove('collapsed');
+    const toggle = section.querySelector(':scope > .section-head .section-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+  }
+  const blocks = [...hierBlocksEl.querySelectorAll(':scope > .ga-block')];
+  const matches = blocks.filter(b => b.dataset.go === goName);
+  if (!matches.length) { showToast('Nenhum GA encontrado para ' + goName + ' neste ciclo.'); return; }
+  blocks.forEach(b => { b.open = matches.includes(b); });
+  matches.forEach(b => {
+    b.classList.remove('go-jump-highlight');
+    void b.offsetWidth; // reinicia a animação se clicar de novo no mesmo GO
+    b.classList.add('go-jump-highlight');
+  });
+  matches[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.body.addEventListener('click', evt => {
+  const btn = evt.target.closest('.bname-link');
+  if (btn) jumpToGoInHierarchy(btn.dataset.go);
+});
+
 function gaCellHTML(nome, ga){
   if (ga === 'SEM HIERARQUIA') {
     // editar a hierarquia não é "anexar bases" — Usuário Padrão também pode ajustar
@@ -1803,6 +1845,7 @@ function renderHierarchy(d){
     const details = document.createElement('details');
     details.className = 'ga-block';
     details.open = true;
+    details.dataset.go = block.go || '';
     const dotColor = goColorFor(block.go);
     const maxTotal = Math.max(...block.colaboradores.map(c=>c.total), 1);
 
