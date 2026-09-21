@@ -452,6 +452,7 @@
       <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
     </div>
     <div class="source-note" id="source-note"></div>
+    <div class="source-note" id="sync-timestamp"></div>
   </header>
 
   <input type="file" id="file-base" accept=".xlsx" hidden>
@@ -763,12 +764,17 @@ function hhmm(v){
   // "08:35:00" (time do Postgres) -> "08:35"; já vem "HH:MM" também passa direto
   return (v || '').slice(0, 5) || null;
 }
+// chave própria no infracoes_meta (não mexe na chave "meta" que já existia, usada por outro
+// processo) — registra quando/quem/o quê da última sincronização de escrita, pra mostrar no
+// painel "Última atualização: ...", igual pra qualquer dispositivo que carregar os dados.
+const SYNC_META_KEY = 'ultima_sincronizacao_painel';
 async function loadFromSupabase(){
   if (!sb) return false;
   try {
-    const [{ data: regs, error: e1 }, { data: roster, error: e2 }] = await Promise.all([
+    const [{ data: regs, error: e1 }, { data: roster, error: e2 }, metaRes] = await Promise.all([
       sb.from('infracoes_registros').select('data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
       sb.from('infracoes_roster').select('nome,ga,go'),
+      sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(),
     ]);
     if (e1 || e2) throw (e1 || e2);
     if (!regs || !regs.length) return false;
@@ -783,11 +789,32 @@ async function loadFromSupabase(){
     if (Object.keys(hierMap).length) STATE.hierMap = hierMap;
     STATE.usingDefault = false;
     STATE.usingSupabase = true;
+    STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
     return true;
   } catch (e) {
     console.error('Falha ao sincronizar com o Supabase — seguindo com dados locais.', e);
     return false;
   }
+}
+async function recordSyncTimestamp(tipo, arquivo){
+  const valor = { quando: new Date().toISOString(), por: (AUTH.currentUser || '—'), tipo, arquivo: arquivo || null };
+  const { error } = await sb.from('infracoes_meta').upsert({ chave: SYNC_META_KEY, valor }, { onConflict: 'chave' });
+  if (error) throw error;
+  STATE.lastSync = valor;
+}
+function fmtSyncTimestamp(iso){
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' às '+pad2(d.getHours())+':'+pad2(d.getMinutes());
+}
+function renderSyncTimestamp(){
+  const el = document.getElementById('sync-timestamp');
+  if (!el) return;
+  if (!STATE.usingSupabase || !STATE.lastSync) { el.textContent = ''; return; }
+  const when = fmtSyncTimestamp(STATE.lastSync.quando);
+  if (!when) { el.textContent = ''; return; }
+  const tipoLabel = STATE.lastSync.tipo === 'hierarquia' ? 'hierarquia' : 'base';
+  el.textContent = 'Última atualização (' + tipoLabel + '): ' + when + ', por ' + esc(STATE.lastSync.por || '—');
 }
 
 async function hasSupabaseWriteSession(){
@@ -1016,6 +1043,7 @@ document.getElementById('file-base').addEventListener('change', async evt => {
     if (await hasSupabaseWriteSession()) {
       try {
         await upsertBaseToSupabase(STATE.raw, STATE.hierMap);
+        await recordSyncTimestamp('base', file.name);
         STATE.usingSupabase = true;
         recomputeAndRender();
         showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
@@ -1048,6 +1076,7 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     if (await hasSupabaseWriteSession()) {
       try {
         await upsertHierToSupabase(STATE.hierMap);
+        await recordSyncTimestamp('hierarquia', file.name);
         STATE.usingSupabase = true;
         recomputeAndRender();
         showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
@@ -1288,6 +1317,7 @@ function recomputeAndRender(){
     : (STATE.usingDefault
       ? 'Exibindo o snapshot padrão do workbook. Use o menu Configurações para importar dados novos.'
       : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo, exceto por "restaurar").');
+  renderSyncTimestamp();
 
   try {
     renderCycleSelect(d);
