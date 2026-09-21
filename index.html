@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
     --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -736,6 +737,46 @@ const HIER_DEFAULT = [{"nome":"CLEMILTON MENDES DA SILVA","ga":"ALEKSEI THOMAS O
 const STORAGE_RAW = 'painelInfracoes.raw.v1';
 const STORAGE_HIER = 'painelInfracoes.hier.v1';
 
+/* ---------------- Supabase: sincroniza os dados entre todos os dispositivos ----------------
+   Leitura é pública (qualquer um vê os mesmos dados); escrita exige um usuário autenticado
+   de verdade no Supabase (não é mais só a senha local do Admin) — ver authSupabaseLogin(). */
+const SUPABASE_URL = 'https://ymltjceiviyadckxzbxw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbHRqY2Vpdml5YWRja3h6Ynh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NzQyNTMsImV4cCI6MjEwNTI1MDI1M30.dCtuE0oKMe29nH5rCV5hVl9A3AzL-PF-G_G5c-spiVg';
+const sb = (typeof supabase !== 'undefined' && supabase.createClient)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+function hhmm(v){
+  // "08:35:00" (time do Postgres) -> "08:35"; já vem "HH:MM" também passa direto
+  return (v || '').slice(0, 5) || null;
+}
+async function loadFromSupabase(){
+  if (!sb) return false;
+  try {
+    const [{ data: regs, error: e1 }, { data: roster, error: e2 }] = await Promise.all([
+      sb.from('infracoes_registros').select('data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
+      sb.from('infracoes_roster').select('nome,ga,go'),
+    ]);
+    if (e1 || e2) throw (e1 || e2);
+    if (!regs || !regs.length) return false;
+
+    STATE.raw = regs.map(r => ({
+      data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
+      bu: r.bu, subbu: r.subbu, entrada: hhmm(r.entrada), saida: hhmm(r.saida),
+      d7: r.dias7 || 0, interj: r.interj || 0, hex: r.he2 || 0,
+    }));
+    const hierMap = {};
+    (roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
+    if (Object.keys(hierMap).length) STATE.hierMap = hierMap;
+    STATE.usingDefault = false;
+    STATE.usingSupabase = true;
+    return true;
+  } catch (e) {
+    console.error('Falha ao sincronizar com o Supabase — seguindo com dados locais.', e);
+    return false;
+  }
+}
+
 const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
 const WEEKDAY_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -817,7 +858,7 @@ function cssVar(name){
 }
 
 /* ---------------- estado ---------------- */
-let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
+let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false };
 
 function buildHierMap(entries){
   const m = {};
@@ -1164,9 +1205,11 @@ function recomputeAndRender(){
     sourceNote.textContent = 'Nenhum dado carregado — importe um arquivo Base para começar.';
     return;
   }
-  sourceNote.textContent = STATE.usingDefault
-    ? 'Exibindo o snapshot padrão do workbook. Use os botões acima para importar dados novos.'
-    : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo, exceto por "restaurar").';
+  sourceNote.textContent = STATE.usingSupabase
+    ? 'Dados sincronizados — mesma informação em qualquer dispositivo que abrir este painel.'
+    : (STATE.usingDefault
+      ? 'Exibindo o snapshot padrão do workbook. Use o menu Configurações para importar dados novos.'
+      : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo, exceto por "restaurar").');
 
   try {
     renderCycleSelect(d);
@@ -2168,5 +2211,9 @@ window.addEventListener('storage', evt => {
   await loadAuth();
   updateRoleBadge();
   recomputeAndRender();
+  // Supabase é a fonte "oficial" quando disponível — se conectar, sobrepõe o que veio do
+  // localStorage/padrão pra que todo mundo, em qualquer dispositivo, veja os mesmos dados;
+  // se falhar (offline, etc.), o painel já está de pé com o que carregou acima.
+  if (await loadFromSupabase()) recomputeAndRender();
 })();
 </script>
