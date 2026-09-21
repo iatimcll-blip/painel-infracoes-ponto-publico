@@ -679,6 +679,27 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="danger-confirm-overlay">
+  <div class="modal-panel" style="max-width:420px">
+    <div class="modal-head">
+      <div><div class="m-name" style="color:var(--critical)">Apagar dados do servidor</div></div>
+      <button type="button" class="modal-close" id="danger-confirm-close" aria-label="Fechar">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="settings-note">Isto apaga <b>permanentemente</b> todos os dados compartilhados no Supabase (Base + Hierarquia), em todos os dispositivos, incluindo o que qualquer outro processo tenha gravado lá. Não tem como desfazer.</p>
+      <div class="login-form">
+        <label>Digite APAGAR (em maiúsculas) para confirmar<input type="text" id="danger-confirm-input" autocomplete="off"></label>
+      </div>
+      <div class="settings-btn-row" style="margin-top:14px;">
+        <button type="button" class="he-btn" id="danger-confirm-cancel">Cancelar</button>
+        <button type="button" class="danger-btn" id="danger-confirm-submit" disabled>Apagar definitivamente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-name">
     <div class="modal-head">
@@ -2091,6 +2112,44 @@ document.getElementById('img-preview-overlay').addEventListener('click', evt => 
   if (evt.target.id === 'img-preview-overlay') closeImagePreview();
 });
 
+/* ---------------- confirmação de apagar dados do servidor ----------------
+   Modal próprio em vez de window.confirm()/window.prompt(): esses diálogos nativos são
+   pouco confiáveis em navegadores mobile/embutidos (alguns simplesmente não mostram nada
+   e retornam null na hora, fazendo a confirmação "falhar" silenciosamente sem o usuário
+   nem perceber) — foi provavelmente por isso que apagar não funcionou antes. */
+const dangerOverlay = document.getElementById('danger-confirm-overlay');
+const dangerInput = document.getElementById('danger-confirm-input');
+const dangerSubmit = document.getElementById('danger-confirm-submit');
+function openDangerConfirm(){
+  dangerInput.value = '';
+  dangerSubmit.disabled = true;
+  dangerOverlay.classList.add('show');
+  dangerInput.focus();
+}
+function closeDangerConfirm(){
+  dangerOverlay.classList.remove('show');
+}
+dangerInput.addEventListener('input', () => { dangerSubmit.disabled = dangerInput.value !== 'APAGAR'; });
+dangerInput.addEventListener('keydown', evt => { if (evt.key === 'Enter' && !dangerSubmit.disabled) dangerSubmit.click(); });
+document.getElementById('danger-confirm-cancel').addEventListener('click', closeDangerConfirm);
+document.getElementById('danger-confirm-close').addEventListener('click', closeDangerConfirm);
+dangerOverlay.addEventListener('click', evt => { if (evt.target.id === 'danger-confirm-overlay') closeDangerConfirm(); });
+dangerSubmit.addEventListener('click', async () => {
+  if (dangerInput.value !== 'APAGAR') return;
+  dangerSubmit.disabled = true;
+  try {
+    await clearSharedSupabaseData();
+    closeDangerConfirm();
+    showToast('Dados do servidor apagados.');
+    await loadFromSupabase();
+    recomputeAndRender();
+  } catch(err) {
+    console.error('Falha ao apagar dados do servidor.', err);
+    showToast('Não foi possível apagar os dados do servidor — tente de novo em instantes.');
+    dangerSubmit.disabled = false;
+  }
+});
+
 /* ---------------- verificação base x hierarquia ---------------- */
 function computeVerification(){
   const enriched = enrichRows(STATE.raw, STATE.hierMap);
@@ -2368,29 +2427,9 @@ function renderSettingsPanel(){
     '<p class="settings-note">Apaga de vez os dados compartilhados no Supabase (Base + Hierarquia). Afeta <b>todo dispositivo</b> que sincronizar com este painel, e qualquer outro processo que também escreva nessa base. Não tem como desfazer.</p>' +
     '<button type="button" class="danger-btn" id="danger-clear-server">Apagar dados do servidor</button>';
   body.appendChild(dangerSec);
-  dangerSec.querySelector('#danger-clear-server').addEventListener('click', async () => {
+  dangerSec.querySelector('#danger-clear-server').addEventListener('click', () => {
     if (!sb) { showToast('Supabase não está disponível agora.'); return; }
-    const step1 = window.confirm(
-      'Isto apaga PERMANENTEMENTE todos os dados compartilhados no Supabase (Base + Hierarquia), ' +
-      'em todos os dispositivos, incluindo o que qualquer outro processo tenha gravado lá. Não tem como desfazer.\n\n' +
-      'Quer continuar?'
-    );
-    if (!step1) return;
-    const step2 = window.prompt('Pra confirmar de verdade, digite APAGAR (em maiúsculas):');
-    if (step2 !== 'APAGAR') { showToast('Cancelado — texto de confirmação não bateu.'); return; }
-    const btn = dangerSec.querySelector('#danger-clear-server');
-    btn.disabled = true;
-    try {
-      await clearSharedSupabaseData();
-      showToast('Dados do servidor apagados.');
-      await loadFromSupabase();
-      recomputeAndRender();
-    } catch(err) {
-      console.error('Falha ao apagar dados do servidor.', err);
-      showToast('Não foi possível apagar os dados do servidor — tente de novo em instantes.');
-    } finally {
-      btn.disabled = false;
-    }
+    openDangerConfirm();
   });
 
   const usersSec = document.createElement('div');
