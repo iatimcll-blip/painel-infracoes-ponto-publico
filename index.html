@@ -136,6 +136,13 @@
     background:none; border:none; cursor:pointer; padding:0; font-family:var(--sans);
   }
   .reset-link:hover{ color:var(--text-primary); }
+  .sync-retry-btn{
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--warning);
+    background:var(--warning-tint); border:1px solid transparent; border-radius:999px; padding:5px 12px;
+    cursor:pointer; margin-top:4px; width:fit-content;
+  }
+  .sync-retry-btn:hover{ border-color:var(--warning); }
+  .sync-retry-btn:disabled{ opacity:.6; cursor:not-allowed; }
   .source-note{ font-size:11.5px; color:var(--text-muted); }
 
   /* ---------- section shell ---------- */
@@ -453,6 +460,10 @@
     </div>
     <div class="source-note" id="source-note"></div>
     <div class="source-note" id="sync-timestamp"></div>
+    <button type="button" class="sync-retry-btn" id="sync-retry-btn" hidden>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M13.5 8a5.5 5.5 0 11-1.6-3.9M13.5 2v3.5H10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Salvar e sincronizar agora
+    </button>
   </header>
 
   <input type="file" id="file-base" accept=".xlsx" hidden>
@@ -809,13 +820,44 @@ function fmtSyncTimestamp(iso){
 }
 function renderSyncTimestamp(){
   const el = document.getElementById('sync-timestamp');
+  const retryBtn = document.getElementById('sync-retry-btn');
   if (!el) return;
-  if (!STATE.usingSupabase || !STATE.lastSync) { el.textContent = ''; return; }
-  const when = fmtSyncTimestamp(STATE.lastSync.quando);
-  if (!when) { el.textContent = ''; return; }
-  const tipoLabel = STATE.lastSync.tipo === 'hierarquia' ? 'hierarquia' : 'base';
-  el.textContent = 'Última atualização (' + tipoLabel + '): ' + when + ', por ' + esc(STATE.lastSync.por || '—');
+  if (!STATE.usingSupabase || !STATE.lastSync) { el.textContent = ''; }
+  else {
+    const when = fmtSyncTimestamp(STATE.lastSync.quando);
+    const tipoLabel = STATE.lastSync.tipo === 'hierarquia' ? 'hierarquia' : 'base';
+    el.textContent = when ? ('Última atualização (' + tipoLabel + '): ' + when + ', por ' + esc(STATE.lastSync.por || '—')) : '';
+  }
+  if (retryBtn) retryBtn.hidden = !(STATE.pendingSync && isAdmin());
 }
+// tenta de novo, sem precisar reanexar o arquivo — usa os dados já parseados/salvos localmente
+// (STATE.raw/STATE.hierMap já foram atualizados mesmo quando a sincronização falhou).
+async function retrySyncNow(){
+  const pending = STATE.pendingSync;
+  if (!pending) return;
+  const btn = document.getElementById('sync-retry-btn');
+  if (btn) btn.disabled = true;
+  if (!(await hasSupabaseWriteSession())) {
+    if (btn) btn.disabled = false;
+    showToast('Entre como Administrador em Configurações para poder sincronizar.');
+    return;
+  }
+  try {
+    if (pending.tipo === 'hierarquia') await upsertHierToSupabase(STATE.hierMap);
+    else await upsertBaseToSupabase(STATE.raw, STATE.hierMap);
+    await recordSyncTimestamp(pending.tipo, pending.arquivo);
+    STATE.usingSupabase = true;
+    STATE.pendingSync = null;
+    recomputeAndRender();
+    showToast('Sincronizado com sucesso.');
+  } catch(err) {
+    console.error('Nova tentativa de sincronização falhou.', err);
+    showToast('Ainda não deu pra sincronizar — tente de novo em instantes.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+document.getElementById('sync-retry-btn').addEventListener('click', retrySyncNow);
 
 async function hasSupabaseWriteSession(){
   if (!sb) return false;
@@ -937,7 +979,7 @@ function cssVar(name){
 }
 
 /* ---------------- estado ---------------- */
-let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false };
+let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null };
 
 function buildHierMap(entries){
   const m = {};
@@ -1045,13 +1087,18 @@ document.getElementById('file-base').addEventListener('change', async evt => {
         await upsertBaseToSupabase(STATE.raw, STATE.hierMap);
         await recordSyncTimestamp('base', file.name);
         STATE.usingSupabase = true;
+        STATE.pendingSync = null;
         recomputeAndRender();
         showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
       } catch(syncErr) {
         console.error('Base salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
-        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas a sincronização falhou — salva só neste navegador.');
+        STATE.pendingSync = { tipo: 'base', arquivo: file.name };
+        recomputeAndRender();
+        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas a sincronização falhou — salva só neste navegador. Use "Salvar e sincronizar agora" pra tentar de novo.');
       }
     } else {
+      STATE.pendingSync = { tipo: 'base', arquivo: file.name };
+      recomputeAndRender();
       showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
     }
   } catch(err) { showToast('Erro ao importar Base — ' + err.message); }
@@ -1078,13 +1125,18 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
         await upsertHierToSupabase(STATE.hierMap);
         await recordSyncTimestamp('hierarquia', file.name);
         STATE.usingSupabase = true;
+        STATE.pendingSync = null;
         recomputeAndRender();
         showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
       } catch(syncErr) {
         console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
-        showToast('Hierarquia compatibilizada, mas a sincronização falhou — salva só neste navegador.');
+        STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
+        recomputeAndRender();
+        showToast('Hierarquia compatibilizada, mas a sincronização falhou — salva só neste navegador. Use "Salvar e sincronizar agora" pra tentar de novo.');
       }
     } else {
+      STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
+      recomputeAndRender();
       showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — faça login novamente para sincronizar).');
     }
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
@@ -1094,7 +1146,7 @@ function resetData(){
   // restaura só neste navegador — de propósito NÃO mexe no Supabase, pra não apagar os dados
   // compartilhados de todo mundo a partir de uma ação de um único dispositivo.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false };
+  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null };
   recomputeAndRender();
   showToast('Dados originais restaurados neste navegador (dados sincronizados no Supabase não foram alterados).');
 }
@@ -1993,12 +2045,19 @@ document.getElementById('he-save').addEventListener('click', async () => {
   if (await hasSupabaseWriteSession()) {
     try {
       await upsertSingleHierEntryToSupabase(nome, ga, go || ga);
+      STATE.pendingSync = null;
       showToast('Hierarquia de ' + nome + ' definida e sincronizada.');
     } catch(syncErr) {
       console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase.', syncErr);
-      showToast('Hierarquia de ' + nome + ' salva só neste navegador — a sincronização falhou.');
+      STATE.pendingSync = { tipo: 'hierarquia', arquivo: null };
+      renderSyncTimestamp();
+      showToast('Hierarquia de ' + nome + ' salva só neste navegador — a sincronização falhou. Use "Salvar e sincronizar agora" pra tentar de novo.');
     }
   } else {
+    // Usuário Padrão pode editar hierarquia sem estar logado — nesse caso é esperado que fique
+    // só local, não é uma falha de sincronização; só mostra o botão de retry pra quem já é
+    // Admin localmente (sessão do Supabase que expirou ou algo assim).
+    if (isAdmin()) { STATE.pendingSync = { tipo: 'hierarquia', arquivo: null }; renderSyncTimestamp(); }
     showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
   }
 });
