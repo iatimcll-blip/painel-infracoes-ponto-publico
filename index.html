@@ -751,6 +751,15 @@ function isAdmin(){ return !!AUTH.currentUser; }
 // igual à senha do Admin principal). Se não bater, a escrita sincronizada só fica indisponível
 // — o login local continua funcionando normalmente.
 const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
+// nenhuma chamada ao Supabase pode ficar pendurada pra sempre — sem isto, uma rede lenta/instável
+// deixava botões (ex.: "Salvar e sincronizar agora") travados em "carregando" indefinidamente,
+// sem nenhum toast de erro, parecendo que o clique "não fez nada".
+function withTimeout(promise, ms, label){
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Tempo esgotado' + (label ? (' (' + label + ')') : ''))), ms)),
+  ]);
+}
 async function authLogin(username, password){
   const u = (username||'').trim();
   const user = AUTH.users.find(x => x.username.toLowerCase() === u.toLowerCase());
@@ -760,7 +769,7 @@ async function authLogin(username, password){
   AUTH.currentUser = user.username;
   try { localStorage.setItem(AUTH_SESSION_KEY, user.username); } catch(e) {}
   if (sb) {
-    try { await sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }); }
+    try { await withTimeout(sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }), 10000, 'login Supabase'); }
     catch(e) { console.error('Não foi possível autenticar no Supabase — escrita sincronizada fica indisponível.', e); }
   }
   return true;
@@ -768,7 +777,7 @@ async function authLogin(username, password){
 function authLogout(){
   AUTH.currentUser = null;
   try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
-  if (sb) sb.auth.signOut().catch(() => {});
+  if (sb) withTimeout(sb.auth.signOut(), 5000, 'logout Supabase').catch(() => {});
 }
 async function authAddUser(username, password){
   const u = (username||'').trim();
@@ -818,11 +827,11 @@ const SYNC_META_KEY = 'ultima_sincronizacao_painel';
 async function loadFromSupabase(){
   if (!sb) { STATE.readSyncFailed = true; return false; }
   try {
-    const [{ data: regs, error: e1 }, { data: roster, error: e2 }, metaRes] = await Promise.all([
+    const [{ data: regs, error: e1 }, { data: roster, error: e2 }, metaRes] = await withTimeout(Promise.all([
       sb.from('infracoes_registros').select('data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
       sb.from('infracoes_roster').select('nome,ga,go'),
       sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(),
-    ]);
+    ]), 15000, 'ler dados');
     if (e1 || e2) throw (e1 || e2);
     STATE.readSyncFailed = false;
     if (!regs || !regs.length) return false;
@@ -891,7 +900,7 @@ const versionCheckTimer = setInterval(checkForNewVersion, 3 * 60 * 1000);
 if (versionCheckTimer && typeof versionCheckTimer.unref === 'function') versionCheckTimer.unref();
 async function recordSyncTimestamp(tipo, arquivo){
   const valor = { quando: new Date().toISOString(), por: (AUTH.currentUser || '—'), tipo, arquivo: arquivo || null };
-  const { error } = await sb.from('infracoes_meta').upsert({ chave: SYNC_META_KEY, valor }, { onConflict: 'chave' });
+  const { error } = await withTimeout(sb.from('infracoes_meta').upsert({ chave: SYNC_META_KEY, valor }, { onConflict: 'chave' }), 10000, 'gravar data/hora');
   if (error) throw error;
   STATE.lastSync = valor;
 }
@@ -945,8 +954,8 @@ document.getElementById('sync-retry-btn').addEventListener('click', retrySyncNow
 
 async function hasSupabaseWriteSession(){
   if (!sb) return false;
-  try { const { data } = await sb.auth.getSession(); return !!(data && data.session); }
-  catch(e) { return false; }
+  try { const { data } = await withTimeout(sb.auth.getSession(), 8000, 'verificar sessão'); return !!(data && data.session); }
+  catch(e) { console.error('Não foi possível confirmar a sessão do Supabase a tempo.', e); return false; }
 }
 // escrita sincronizada é sempre "upsert" (atualiza quem já existe, adiciona quem é novo) —
 // NUNCA apaga linhas em massa. Remover alguém da hierarquia compartilhada é uma ação separada
@@ -966,19 +975,19 @@ async function upsertBaseToSupabase(raw, hierMap){
     };
   });
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await sb.rpc('upsert_infracoes_registros', { novos: rows.slice(i, i + 500) });
+    const { error } = await withTimeout(sb.rpc('upsert_infracoes_registros', { novos: rows.slice(i, i + 500) }), 20000, 'gravar base');
     if (error) throw error;
   }
 }
 async function upsertHierToSupabase(hierMap){
   const rows = Object.entries(hierMap).map(([nome, h]) => ({ nome, ga: h.ga, go: h.go || h.ga || null }));
   for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await sb.rpc('upsert_infracoes_roster', { novos: rows.slice(i, i + 500) });
+    const { error } = await withTimeout(sb.rpc('upsert_infracoes_roster', { novos: rows.slice(i, i + 500) }), 20000, 'gravar hierarquia');
     if (error) throw error;
   }
 }
 async function upsertSingleHierEntryToSupabase(nome, ga, go){
-  const { error } = await sb.rpc('upsert_infracoes_roster', { novos: [{ nome, ga, go: go || ga }] });
+  const { error } = await withTimeout(sb.rpc('upsert_infracoes_roster', { novos: [{ nome, ga, go: go || ga }] }), 10000, 'gravar hierarquia');
   if (error) throw error;
 }
 
