@@ -834,7 +834,13 @@ async function loadFromSupabase(){
     ]), 15000, 'ler dados');
     if (e1 || e2) throw (e1 || e2);
     STATE.readSyncFailed = false;
-    if (!regs || !regs.length) return false;
+    if (!regs || !regs.length) {
+      // consulta funcionou mas veio vazia (ex.: dados zerados) — não pode deixar "usingSupabase"
+      // travado em true de uma sincronização anterior nesta mesma aba, senão o aviso "Dados
+      // sincronizados" fica mentindo enquanto o Supabase já não tem nada de verdade.
+      STATE.usingSupabase = false;
+      return false;
+    }
 
     STATE.raw = regs.map(r => ({
       data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
@@ -891,6 +897,13 @@ async function checkForNewVersion(){
     if (tag !== pageEtagAtLoad) {
       const el = document.getElementById('version-banner');
       if (el) el.hidden = false;
+      // se o código desta aba está desatualizado, os outros avisos de sincronização (calculados
+      // por esse mesmo código antigo) não são confiáveis — evita empilhar vários avisos ao mesmo
+      // tempo quando o único passo que realmente resolve tudo é recarregar a página.
+      const warn = document.getElementById('sync-warning');
+      if (warn) warn.hidden = true;
+      const retryBtn = document.getElementById('sync-retry-btn');
+      if (retryBtn) retryBtn.hidden = true;
     }
   } catch(e) { /* checagem best-effort — se falhar (ex.: artifact sem suporte a HEAD), ignora */ }
 }
@@ -1457,7 +1470,7 @@ function recomputeAndRender(){
     sourceNote.textContent = 'Nenhum dado carregado — importe um arquivo Base para começar.';
     return;
   }
-  sourceNote.textContent = STATE.usingSupabase
+  sourceNote.textContent = (STATE.usingSupabase && !STATE.readSyncFailed)
     ? 'Dados sincronizados — mesma informação em qualquer dispositivo que abrir este painel.'
     : (STATE.usingDefault
       ? 'Exibindo o snapshot padrão do workbook. Use o menu Configurações para importar dados novos.'
