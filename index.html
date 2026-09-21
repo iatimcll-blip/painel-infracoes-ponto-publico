@@ -132,15 +132,26 @@
   .kpi .sub{ font-size:11.5px; color:var(--text-secondary); }
 
   /* ---------- horizontal bar lists ---------- */
-  .bars{ display:flex; flex-direction:column; gap:10px; }
+  .bars{ display:flex; flex-direction:column; gap:24px; }
   .bar-item{ display:grid; grid-template-columns:190px 1fr 46px; align-items:center; gap:10px; }
   .bar-item .bname{ font-size:12px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bar-item .btotal{ font-size:12.5px; text-align:right; font-weight:600; }
+  .stack-wrap{ position:relative; }
   .stack-track{ position:relative; height:16px; background:var(--grid); border-radius:4px; overflow:hidden; display:flex; }
   .stack-track.single{ background:var(--grid); }
-  .seg{ height:100%; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
-  .seg-label{ font-family:var(--mono); font-size:9.5px; font-weight:700; color:#fff; white-space:nowrap; text-shadow:0 1px 1px rgba(0,0,0,.35); }
+  .seg{ height:100%; }
   .seg + .seg{ box-shadow:-2px 0 0 0 var(--surface); }
+  /* rótulos de valor: camada separada por cima da track, NÃO recortada pelo overflow:hidden
+     dela — assim o número aparece por inteiro mesmo quando o segmento é bem estreito e fica
+     colado numa das pontas arredondadas da barra. */
+  .seg-labels{ position:absolute; inset:0; pointer-events:none; }
+  .seg-label{
+    position:absolute; top:50%; transform:translate(-50%,-50%); font-family:var(--mono);
+    font-size:9.5px; font-weight:700; color:#fff; white-space:nowrap;
+    background:rgba(0,0,0,.45); padding:1px 4px; border-radius:3px; line-height:1.5;
+  }
+  .seg-label-above{ top:-3px; transform:translate(-50%,-100%); }
+  .seg-label-below{ top:calc(100% + 3px); transform:translate(-50%,0); }
   .legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--text-secondary); }
   .legend .item{ display:inline-flex; align-items:center; gap:6px; }
   .legend .swatch{ width:9px; height:9px; border-radius:2px; }
@@ -1074,8 +1085,9 @@ function moveTip(evt){
 function hideTip(){ tip.classList.remove('show'); }
 
 function segLabelHTML(val, widthPct){
-  // só mostra o número dentro do segmento se ele tiver largura suficiente pra caber
-  if (val <= 0 || widthPct < 7) return '';
+  // sempre mostra o valor do segmento, mesmo quando ele é estreito demais pra caber —
+  // o rótulo tem fundo próprio (pill) e pode "vazar" pro segmento vizinho sem cortar.
+  if (val <= 0) return '';
   return '<span class="seg-label">'+fmt(val)+'</span>';
 }
 function renderBars(containerId, rows){
@@ -1086,12 +1098,30 @@ function renderBars(containerId, rows){
     const item = document.createElement('div');
     item.className = 'bar-item';
     const w7 = r.d7/max*100, wi = r.interj/max*100, wh = r.hex/max*100;
+    // rótulos de valor ficam numa camada separada (.seg-labels), por CIMA da track, não
+    // dentro dela — assim eles nunca são cortados pelo overflow:hidden que arredonda as
+    // pontas da barra, mesmo quando o segmento é bem estreito e fica coladinho na borda.
+    let cursor = 0;
+    let smallIdx = 0;
+    const labelSpans = [[r.d7,w7],[r.interj,wi],[r.hex,wh]].map(([val,w]) => {
+      const centerPct = cursor + w/2;
+      cursor += w;
+      if (val <= 0) return '';
+      // segmentos estreitos ficam perto demais uns dos outros pro rótulo caber centralizado
+      // sem sobrepor o vizinho — nesse caso alterna o rótulo pra cima/baixo da barra.
+      let cls = 'seg-label';
+      if (w < 6) { cls += (smallIdx % 2 === 0) ? ' seg-label-above' : ' seg-label-below'; smallIdx++; }
+      return '<span class="'+cls+'" style="left:'+centerPct+'%">'+fmt(val)+'</span>';
+    }).join('');
     item.innerHTML =
       '<span class="bname" title="' + esc(r.nome) + '">' + esc(r.nome) + '</span>' +
-      '<div class="stack-track" data-tip>' +
-        '<div class="seg" style="width:'+w7+'%; background:var(--s1)">'+segLabelHTML(r.d7,w7)+'</div>' +
-        '<div class="seg" style="width:'+wi+'%; background:var(--s2)">'+segLabelHTML(r.interj,wi)+'</div>' +
-        '<div class="seg" style="width:'+wh+'%; background:var(--s3)">'+segLabelHTML(r.hex,wh)+'</div>' +
+      '<div class="stack-wrap">' +
+        '<div class="stack-track" data-tip>' +
+          '<div class="seg" style="width:'+w7+'%; background:var(--s1)"></div>' +
+          '<div class="seg" style="width:'+wi+'%; background:var(--s2)"></div>' +
+          '<div class="seg" style="width:'+wh+'%; background:var(--s3)"></div>' +
+        '</div>' +
+        '<div class="seg-labels">'+labelSpans+'</div>' +
       '</div>' +
       '<span class="btotal num">' + fmt(r.total) + '</span>';
     const track = item.querySelector('[data-tip]');
@@ -1141,6 +1171,18 @@ function renderRanking(d){
   });
 }
 
+// texto com um "pill" de fundo atrás, pra ficar legível em cima de qualquer cor —
+// usado nos rótulos de valor dos gráficos SVG (sempre visíveis, mesmo em segmentos
+// pequenos, onde o texto pode "vazar" um pouco pra fora do segmento).
+function svgChipLabel(cx, cy, text, cMono, opts){
+  opts = opts || {};
+  const fontSize = opts.fontSize || 9.5;
+  const bold = opts.bold !== false;
+  const chipW = Math.max(18, text.length * (fontSize*0.62) + 8);
+  const chipH = fontSize + 5;
+  return '<rect x="'+(cx-chipW/2).toFixed(1)+'" y="'+(cy-chipH/2).toFixed(1)+'" width="'+chipW.toFixed(1)+'" height="'+chipH.toFixed(1)+'" rx="3" fill="rgba(0,0,0,0.45)"/>' +
+    '<text x="'+cx.toFixed(1)+'" y="'+(cy+fontSize*0.35).toFixed(1)+'" text-anchor="middle" font-size="'+fontSize+'" font-weight="'+(bold?700:600)+'" fill="#fff" font-family="'+esc(cMono)+'">'+text+'</text>';
+}
 function linearRegression(values){
   const n = values.length;
   if (n < 2) return { slope: 0, intercept: values[0] || 0 };
@@ -1278,9 +1320,8 @@ function renderAnoChart(){
       const segH = (val/maxY)*plotH;
       const yTop = yCursor - segH;
       bars += '<rect x="'+x0.toFixed(1)+'" y="'+yTop.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+segH.toFixed(1)+'" fill="'+color+'"/>';
-      if (segH >= 13) {
-        segLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yTop+segH/2+3.5).toFixed(1)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="#fff" font-family="'+esc(cMono)+'">'+fmt(val)+'</text>';
-      }
+      // sempre mostra o valor do segmento (com "pill" de fundo, mesmo em segmentos bem baixos)
+      segLabels += svgChipLabel(cx, yTop+segH/2, fmt(val), cMono);
       yCursor = yTop;
     });
     totalLabels += '<text x="'+cx.toFixed(1)+'" y="'+(yFor(m.total)-10).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="700" fill="'+cPrimary+'" font-family="'+esc(cMono)+'">'+fmt(m.total)+'</text>';
