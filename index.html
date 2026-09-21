@@ -140,18 +140,9 @@
   .rank-delta.bad{ color:var(--critical); }
   .rank-delta.flat{ color:var(--text-muted); }
 
-  /* ---------- weekly block ---------- */
-  .weekly-wrap{ display:grid; grid-template-columns:1.3fr 1fr; gap:18px; }
-  @media (max-width:820px){ .weekly-wrap{ grid-template-columns:1fr; } }
-  .weekly-chart{ display:flex; align-items:flex-end; gap:8px; height:140px; overflow-x:auto; padding-bottom:4px; }
-  .weekly-bar{ display:flex; flex-direction:column; align-items:center; gap:6px; min-width:34px; flex:none; }
-  .weekly-bar .col{ width:22px; border-radius:4px 4px 0 0; background:var(--s1); }
-  .weekly-bar .v{ font-size:10.5px; font-weight:600; }
-  .weekly-bar .l{ font-size:9px; color:var(--text-muted); text-align:center; white-space:nowrap; }
-  .weekly-table{ width:100%; border-collapse:collapse; font-size:12px; }
-  .weekly-table th{ text-align:left; font-size:10px; text-transform:uppercase; color:var(--text-muted); font-weight:600; padding:0 8px 6px; border-bottom:1px solid var(--grid); }
-  .weekly-table td{ padding:6px 8px; border-bottom:1px solid var(--grid); }
-  .weekly-table th.num-col, .weekly-table td.num-col{ text-align:right; }
+  /* ---------- weekly trend chart ---------- */
+  #weekly-chart svg{ overflow:visible; }
+  #weekly-chart .wk-dot{ cursor:pointer; }
 
   /* ---------- extra dashboards grid ---------- */
   .dash-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
@@ -268,7 +259,8 @@
         <div class="subtitle">Consolidado por GO, GA e evolução semanal/mensal — recalcula a partir dos arquivos importados</div>
       </div>
       <div class="toolbar">
-        <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo"></select>
+        <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo (mês)"></select>
+        <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
         <label class="upload-btn" for="file-base">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Base
@@ -286,7 +278,7 @@
   </header>
 
   <section>
-    <div class="section-head"><h2>Indicadores do ciclo selecionado</h2></div>
+    <div class="section-head"><h2 id="kpi-section-title">Indicadores do ciclo selecionado</h2></div>
     <div class="kpi-grid" id="kpi-grid"></div>
   </section>
 
@@ -326,23 +318,17 @@
   <section>
     <div class="section-head">
       <h2>Infrações por semana</h2>
-      <span class="hint">todas as semanas presentes nos dados carregados</span>
+      <span class="hint">todas as semanas presentes nos dados carregados, com linha de tendência</span>
     </div>
-    <div class="card weekly-wrap">
-      <div class="weekly-chart" id="weekly-chart"></div>
-      <div class="table-scroll">
-        <table class="weekly-table">
-          <thead><tr><th>Semana</th><th class="num-col">Total</th></tr></thead>
-          <tbody id="weekly-rows"></tbody>
-        </table>
-      </div>
+    <div class="card">
+      <div id="weekly-chart"></div>
     </div>
   </section>
 
   <section>
     <div class="section-head">
       <h2>Dashboards adicionais</h2>
-      <span class="hint">ciclo selecionado</span>
+      <span class="hint" id="dash-period-hint"></span>
     </div>
     <div class="dash-grid">
       <div class="card dash-card"><h3>Por dia da semana</h3><div class="mini-bars" id="dash-weekday"></div></div>
@@ -353,7 +339,7 @@
 
   <section>
     <div class="section-head">
-      <h2>Top colaboradores por infrações no ciclo</h2>
+      <h2 id="top-section-title">Top colaboradores por infrações no ciclo</h2>
       <span class="hint" id="afetados-hint"></span>
     </div>
     <div class="card table-scroll">
@@ -427,6 +413,9 @@ const STORAGE_HIER = 'painelInfracoes.hier.v1';
 const WEEKDAY_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 const GO_PALETTE = ['var(--s1)','var(--s2)','var(--s3)','var(--s4)','#9085e9','#e87ba4'];
 const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
+// GAs que são, na verdade, entradas administrativas dos próprios GOs (sem equipe operacional
+// própria abaixo deles nesta visão) - excluídas das análises "por GA" a pedido do usuário.
+const EXCLUDED_GA = new Set(['WALMIR FERNANDES DA SILVA', 'IVANDRO PESSOA DA NOBREGA ALENCAR', 'WANDERSON MARCELLUS PENHA COSTA']);
 const TYPE_COLOR = { d7: 'var(--s1)', interj: 'var(--s2)', hex: 'var(--s3)' };
 
 /* ---------------- helpers de data ---------------- */
@@ -457,18 +446,39 @@ function prevCicloKey(key){
   const prev = new Date(d.getFullYear(), d.getMonth()-1, 15);
   return isoKey(prev);
 }
+// número da semana ISO-8601 (semana 1 = a que contém a primeira quinta-feira do ano)
+function isoWeekNumber(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = (d.getUTCDay() + 6) % 7; // 0=Seg..6=Dom
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  return 1 + Math.round((d - firstThursday) / (7*24*3600*1000));
+}
 function weekOf(dateStr){
   const d = parseISODate(dateStr);
   if (!d) return null;
   const dow = (d.getDay()+6) % 7; // 0=Seg
   const start = new Date(d); start.setDate(d.getDate()-dow);
-  return { start, key: isoKey(start), label: fmtDM(start)+' a '+fmtDM(new Date(start.getFullYear(),start.getMonth(),start.getDate()+6)) };
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate()+6);
+  const weekNo = isoWeekNumber(start);
+  const shortLabel = 'S' + pad2(weekNo);
+  return {
+    start, end, key: isoKey(start), weekNo, shortLabel,
+    label: shortLabel + ' · ' + fmtDMY(start) + ' a ' + fmtDMY(end)
+  };
+}
+function prevWeekKey(key){
+  const d = parseISODate(key);
+  const prev = new Date(d.getFullYear(), d.getMonth(), d.getDate()-7);
+  return isoKey(prev);
 }
 function fmt(n){ return (n||0).toLocaleString('pt-BR'); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------------- estado ---------------- */
-let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, usingDefault: true };
+let STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
 
 function buildHierMap(entries){
   const m = {};
@@ -595,7 +605,7 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
 
 document.getElementById('reset-data').addEventListener('click', () => {
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, usingDefault: true };
+  STATE = { raw: RAW_DEFAULT, hierMap: buildHierMap(HIER_DEFAULT), cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true };
   recomputeAndRender();
   showToast('Dados originais restaurados.');
 });
@@ -612,7 +622,7 @@ function enrichRows(raw, hierMap){
     out.push(Object.assign({}, r, {
       ga: h.ga || null, go: h.go || h.ga || null,
       cicloKey: c.key, cicloLabel: c.label,
-      weekKey: w.key, weekLabel: w.label,
+      weekKey: w.key, weekLabel: w.label, weekShortLabel: w.shortLabel,
       total: total
     }));
   });
@@ -623,6 +633,14 @@ function distinctCiclos(rows){
   const map = new Map();
   rows.forEach(r => { if (!map.has(r.cicloKey)) map.set(r.cicloKey, r.cicloLabel); });
   return [...map.entries()].sort((a,b) => b[0].localeCompare(a[0])).map(([key,label]) => ({key,label}));
+}
+function distinctSemanas(rows){
+  const map = new Map();
+  rows.forEach(r => {
+    if (!map.has(r.weekKey)) map.set(r.weekKey, { label: r.weekLabel, shortLabel: r.weekShortLabel, total: 0 });
+    map.get(r.weekKey).total += r.total;
+  });
+  return [...map.entries()].sort((a,b) => a[0].localeCompare(b[0])).map(([key,v]) => ({key, label:v.label, shortLabel:v.shortLabel, total:v.total}));
 }
 
 function groupSum(rows, keyFn){
@@ -643,26 +661,40 @@ function goColorFor(go){
   return goColorCache.get(go);
 }
 
+function currentPeriod(enriched, ciclos, semanas){
+  if (STATE.filterMode === 'semana' && STATE.semanaSel && semanas.some(s => s.key === STATE.semanaSel)) {
+    const atual = semanas.find(s => s.key === STATE.semanaSel);
+    const rows = enriched.filter(r => r.weekKey === atual.key);
+    const antKey = prevWeekKey(atual.key);
+    const antRows = enriched.filter(r => r.weekKey === antKey);
+    return { type: 'semana', key: atual.key, label: atual.label, rows, antRows, temAnterior: antRows.length > 0 };
+  }
+  if (!STATE.cicloSel || !ciclos.some(c => c.key === STATE.cicloSel)) {
+    STATE.cicloSel = ciclos[0].key;
+  }
+  const atual = ciclos.find(c => c.key === STATE.cicloSel);
+  const rows = enriched.filter(r => r.cicloKey === atual.key);
+  const antKey = prevCicloKey(atual.key);
+  const antRows = enriched.filter(r => r.cicloKey === antKey);
+  return { type: 'ciclo', key: atual.key, label: atual.label, rows, antRows, temAnterior: antRows.length > 0 };
+}
+
 function deriveAll(){
   const enriched = enrichRows(STATE.raw, STATE.hierMap);
   const ciclos = distinctCiclos(enriched);
   if (!ciclos.length) return null;
+  const semanas = distinctSemanas(enriched);
 
-  if (!STATE.cicloSel || !ciclos.some(c => c.key === STATE.cicloSel)) {
-    STATE.cicloSel = ciclos[0].key;
-  }
-  const cicloAtualKey = STATE.cicloSel;
-  const cicloAtualLabel = ciclos.find(c => c.key === cicloAtualKey).label;
-  const cicloRows = enriched.filter(r => r.cicloKey === cicloAtualKey);
-  const cicloAntKey = prevCicloKey(cicloAtualKey);
-  const cicloAntRows = enriched.filter(r => r.cicloKey === cicloAntKey);
+  const period = currentPeriod(enriched, ciclos, semanas);
+  const periodRows = period.rows;
+  const periodAntRows = period.antRows;
 
-  // agregação por colaborador no ciclo selecionado
-  const porColab = groupSum(cicloRows, r => r.nome);
-  const porColabAnt = groupSum(cicloAntRows, r => r.nome);
+  // agregação por colaborador no período selecionado
+  const porColab = groupSum(periodRows, r => r.nome);
+  const porColabAnt = groupSum(periodAntRows, r => r.nome);
 
   const roster = Object.keys(STATE.hierMap);
-  const nomesComDados = new Set([...roster, ...cicloRows.map(r=>r.nome)]);
+  const nomesComDados = new Set([...roster, ...periodRows.map(r=>r.nome)]);
 
   const colaboradores = [...nomesComDados].map(nome => {
     const h = STATE.hierMap[nome] || {};
@@ -678,7 +710,7 @@ function deriveAll(){
   const total = colaboradores.reduce((a,c)=>a+c.total, 0);
   const totalAnterior = [...porColabAnt.values()].reduce((a,c)=>a+c.total, 0);
   const variacaoAbs = total - totalAnterior;
-  const temAnterior = cicloAntRows.length > 0;
+  const temAnterior = period.temAnterior;
 
   const sums = { d7:0, interj:0, hex:0 };
   colaboradores.forEach(c => { sums.d7+=c.d7; sums.interj+=c.interj; sums.hex+=c.hex; });
@@ -689,15 +721,15 @@ function deriveAll(){
   const afetados = colaboradores.filter(c => c.total > 0);
   const pctEfetivo = roster.length ? (afetados.length / roster.length * 100) : 0;
   const mediaAfetado = afetados.length ? total / afetados.length : 0;
-  const topReincidenteRow = [...colaboradores].sort((a,b)=>b.total-a.total)[0];
 
-  // por GO / por GA
+  // por GO / por GA (GAs administrativos em EXCLUDED_GA ficam fora das análises "por GA")
   const porGoMap = new Map();
   const porGaMap = new Map();
   colaboradores.forEach(c => {
     if (!porGoMap.has(c.go)) porGoMap.set(c.go, {nome:c.go, d7:0, interj:0, hex:0, total:0});
-    if (!porGaMap.has(c.ga)) porGaMap.set(c.ga, {nome:c.ga, go:c.go, d7:0, interj:0, hex:0, total:0, equipe:0, afetados:0, reincidentes:0});
     const go = porGoMap.get(c.go); go.d7+=c.d7; go.interj+=c.interj; go.hex+=c.hex; go.total+=c.total;
+    if (EXCLUDED_GA.has(c.ga)) return;
+    if (!porGaMap.has(c.ga)) porGaMap.set(c.ga, {nome:c.ga, go:c.go, d7:0, interj:0, hex:0, total:0, equipe:0, afetados:0, reincidentes:0});
     const ga = porGaMap.get(c.ga); ga.d7+=c.d7; ga.interj+=c.interj; ga.hex+=c.hex; ga.total+=c.total;
     ga.equipe++; if (c.total>0) ga.afetados++; if (c.reinc) ga.reincidentes++;
   });
@@ -712,50 +744,52 @@ function deriveAll(){
   const topColaboradores = [...colaboradores].filter(c=>c.total>0).sort((a,b)=>b.total-a.total).slice(0,20);
 
   const detalhesByNome = {};
-  cicloRows.forEach(r => {
+  periodRows.forEach(r => {
     (detalhesByNome[r.nome] = detalhesByNome[r.nome] || []).push(r);
   });
   Object.values(detalhesByNome).forEach(list => list.sort((a,b)=>a.data.localeCompare(b.data)));
 
-  // semanas (todo o dataset carregado, independente do ciclo selecionado)
-  const porSemanaMap = groupSum(enriched, r => r.weekKey);
-  const semanas = [...porSemanaMap.values()].sort((a,b)=>a.key.localeCompare(b.key)).map(s => {
-    const w = enriched.find(r=>r.weekKey===s.key);
-    return { key:s.key, label:w.weekLabel, total:s.total };
-  });
-
-  // ranking semana anterior x atual, por GA
-  const weekKeysDesc = [...new Set(enriched.map(r=>r.weekKey))].sort((a,b)=>b.localeCompare(a));
+  // ranking semana anterior x atual, por GA — usa a semana selecionada quando o filtro
+  // está em modo "semana"; caso contrário, usa as 2 semanas mais recentes da base carregada.
   let rankGa = [], weekAtualLabel = null, weekAntLabel = null;
-  if (weekKeysDesc.length >= 1) {
-    const wAtual = weekKeysDesc[0];
-    const wAnt = weekKeysDesc[1] || null;
-    const rowsAtual = enriched.filter(r=>r.weekKey===wAtual);
-    const rowsAnt = wAnt ? enriched.filter(r=>r.weekKey===wAnt) : [];
-    weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : null;
-    weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
-    const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(Boolean));
-    const sumAtual = groupSum(rowsAtual, r=>r.ga||'SEM HIERARQUIA');
-    const sumAnt = groupSum(rowsAnt, r=>r.ga||'SEM HIERARQUIA');
-    rankGa = [...gasSet].map(ga => {
-      const a = (sumAtual.get(ga)||{total:0}).total;
-      const p = (sumAnt.get(ga)||{total:0}).total;
-      return { ga, atual:a, anterior:p, delta: p - a, temAnterior: !!wAnt };
-    }).sort((x,y)=>y.delta-x.delta);
+  {
+    let wAtual, wAnt;
+    if (period.type === 'semana') {
+      wAtual = period.key;
+      wAnt = period.temAnterior ? prevWeekKey(wAtual) : null;
+    } else {
+      const weekKeysDesc = [...new Set(enriched.map(r=>r.weekKey))].sort((a,b)=>b.localeCompare(a));
+      wAtual = weekKeysDesc[0] || null;
+      wAnt = weekKeysDesc[1] || null;
+    }
+    if (wAtual) {
+      const rowsAtual = enriched.filter(r=>r.weekKey===wAtual);
+      const rowsAnt = wAnt ? enriched.filter(r=>r.weekKey===wAnt) : [];
+      weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : (semanas.find(s=>s.key===wAtual)||{}).label || null;
+      weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
+      const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(ga => ga && !EXCLUDED_GA.has(ga)));
+      const sumAtual = groupSum(rowsAtual, r=>r.ga||'SEM HIERARQUIA');
+      const sumAnt = groupSum(rowsAnt, r=>r.ga||'SEM HIERARQUIA');
+      rankGa = [...gasSet].map(ga => {
+        const a = (sumAtual.get(ga)||{total:0}).total;
+        const p = (sumAnt.get(ga)||{total:0}).total;
+        return { ga, atual:a, anterior:p, delta: p - a, temAnterior: !!wAnt };
+      }).sort((x,y)=>y.delta-x.delta);
+    }
   }
 
-  // dashboards extras (ciclo selecionado)
-  const porWeekday = groupSum(cicloRows, r => WEEKDAY_LABELS[(parseISODate(r.data).getDay()+6)%7]);
+  // dashboards extras (período selecionado)
+  const porWeekday = groupSum(periodRows, r => WEEKDAY_LABELS[(parseISODate(r.data).getDay()+6)%7]);
   const weekdayOrdered = WEEKDAY_LABELS.map(l => ({label:l, total:(porWeekday.get(l)||{total:0}).total}));
-  const porFuncao = [...groupSum(cicloRows, r=>r.funcao||'—').values()].sort((a,b)=>b.total-a.total).slice(0,10);
-  const porSubbu = [...groupSum(cicloRows, r=>r.subbu||'—').values()].sort((a,b)=>b.total-a.total).slice(0,10);
+  const porFuncao = [...groupSum(periodRows, r=>r.funcao||'—').values()].sort((a,b)=>b.total-a.total).slice(0,10);
+  const porSubbu = [...groupSum(periodRows, r=>r.subbu||'—').values()].sort((a,b)=>b.total-a.total).slice(0,10);
 
   return {
-    ciclos, cicloAtualKey, cicloAtualLabel, temAnterior,
+    ciclos, semanas, periodType: period.type, periodKey: period.key, cicloAtualLabel: period.label, temAnterior,
     total, totalAnterior, variacaoAbs, tipoRecorrente,
-    pctEfetivo, afetadosCount: afetados.length, roster: roster.length, mediaAfetado, topReincidenteRow,
+    pctEfetivo, afetadosCount: afetados.length, roster: roster.length, mediaAfetado,
     porGo, porGa, hierBlocks, topColaboradores, detalhesByNome,
-    semanas, rankGa, weekAtualLabel, weekAntLabel,
+    rankGa, weekAtualLabel, weekAntLabel,
     weekdayOrdered, porFuncao, porSubbu
   };
 }
@@ -787,7 +821,7 @@ function recomputeAndRender(){
     renderKpis(d);
     renderGoGa(d);
     renderRanking(d);
-    renderWeekly(d);
+    renderWeeklyTrend(d.semanas);
     renderDashboards(d);
     renderTop(d);
     renderHierarchy(d);
@@ -808,10 +842,36 @@ function renderCycleSelect(d){
   d.ciclos.forEach(c => {
     const o = document.createElement('option');
     o.value = c.key; o.textContent = c.label;
-    if (c.key === d.cicloAtualKey) o.selected = true;
+    if (d.periodType === 'ciclo' && c.key === d.periodKey) o.selected = true;
     sel.appendChild(o);
   });
-  sel.onchange = () => { STATE.cicloSel = sel.value === 'TODOS' ? 'TODOS' : sel.value; recomputeAndRenderKeepingCiclo(sel.value); };
+  sel.onchange = () => {
+    STATE.filterMode = 'ciclo';
+    STATE.cicloSel = sel.value === 'TODOS' ? 'TODOS' : sel.value;
+    recomputeAndRenderKeepingCiclo(sel.value);
+  };
+
+  const weekSel = document.getElementById('week-select');
+  clear(weekSel);
+  const optNone = document.createElement('option');
+  optNone.value = ''; optNone.textContent = 'Todas as semanas';
+  weekSel.appendChild(optNone);
+  d.semanas.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.key; o.textContent = s.label;
+    if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
+    weekSel.appendChild(o);
+  });
+  weekSel.onchange = () => {
+    if (!weekSel.value) {
+      STATE.filterMode = 'ciclo';
+      STATE.semanaSel = null;
+    } else {
+      STATE.filterMode = 'semana';
+      STATE.semanaSel = weekSel.value;
+    }
+    recomputeAndRender();
+  };
 }
 function recomputeAndRenderKeepingCiclo(key){
   // "TODOS" não é um ciclo real de agregação por 15-14; tratamos como o ciclo mais recente + aviso,
@@ -827,16 +887,18 @@ function recomputeAndRenderKeepingCiclo(key){
 function renderKpis(d){
   const kpiGrid = document.getElementById('kpi-grid');
   clear(kpiGrid);
+  const isWeek = d.periodType === 'semana';
+  const prevLabel = isWeek ? 'Semana anterior' : 'Ciclo anterior';
+  const varLabel = isWeek ? 'Variação vs. semana anterior' : 'Variação vs. ciclo anterior';
   const kpis = [
     { label: 'Total de infrações', value: fmt(d.total) },
-    { label: 'Ciclo anterior', value: d.temAnterior ? fmt(d.totalAnterior) : '-' },
-    { label: 'Variação vs. ciclo anterior', value: d.temAnterior ? ((d.variacaoAbs>=0?'+':'')+fmt(d.variacaoAbs)) : '-',
+    { label: prevLabel, value: d.temAnterior ? fmt(d.totalAnterior) : '-' },
+    { label: varLabel, value: d.temAnterior ? ((d.variacaoAbs>=0?'+':'')+fmt(d.variacaoAbs)) : '-',
       delta: d.temAnterior ? (d.variacaoAbs>=0?'up-bad':'down-good') : null,
       deltaText: d.temAnterior ? ((d.variacaoAbs>=0?'▲ ':'▼ ') + Math.abs(d.totalAnterior? Math.round(d.variacaoAbs/d.totalAnterior*100):0) + '% ' + (d.variacaoAbs>=0?'piora':'melhora')) : null },
     { label: 'Tipo mais recorrente', value: d.tipoRecorrente, small: true },
     { label: '% do efetivo com infração', value: Math.round(d.pctEfetivo) + '%', sub: d.afetadosCount + ' de ' + d.roster + ' colaboradores' },
     { label: 'Média por colaborador afetado', value: d.mediaAfetado.toFixed(1).replace('.', ',') },
-    { label: 'Top reincidente do ciclo', value: d.topReincidenteRow ? d.topReincidenteRow.nome : '—', small: true, sub: d.topReincidenteRow ? (d.topReincidenteRow.total + ' infrações no ciclo') : '' },
   ];
   kpis.forEach(k => {
     const el = document.createElement('div');
@@ -848,6 +910,10 @@ function renderKpis(d){
       (k.sub ? '<span class="sub">' + esc(k.sub) + '</span>' : '');
     kpiGrid.appendChild(el);
   });
+  const title = document.getElementById('kpi-section-title');
+  if (title) title.textContent = isWeek ? 'Indicadores da semana selecionada' : 'Indicadores do ciclo selecionado';
+  const topTitle = document.getElementById('top-section-title');
+  if (topTitle) topTitle.textContent = isWeek ? 'Top colaboradores por infrações na semana' : 'Top colaboradores por infrações no ciclo';
 }
 
 /* tooltip */
@@ -925,24 +991,75 @@ function renderRanking(d){
   });
 }
 
-function renderWeekly(d){
-  const chart = document.getElementById('weekly-chart');
-  clear(chart);
-  const max = Math.max(...d.semanas.map(s=>s.total), 1);
-  const H = 96;
-  d.semanas.forEach(s => {
-    const h = Math.max(4, s.total/max*H);
-    const b = document.createElement('div');
-    b.className = 'weekly-bar';
-    b.innerHTML = '<span class="v num">'+fmt(s.total)+'</span><div class="col" style="height:'+h+'px"></div><span class="l">'+esc(s.label)+'</span>';
-    chart.appendChild(b);
-  });
-  const rows = document.getElementById('weekly-rows');
-  clear(rows);
-  [...d.semanas].reverse().forEach(s => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td>'+esc(s.label)+'</td><td class="num-col num">'+fmt(s.total)+'</td>';
-    rows.appendChild(tr);
+function linearRegression(values){
+  const n = values.length;
+  if (n < 2) return { slope: 0, intercept: values[0] || 0 };
+  let sumX=0,sumY=0,sumXY=0,sumXX=0;
+  values.forEach((y,i) => { sumX+=i; sumY+=y; sumXY+=i*y; sumXX+=i*i; });
+  const denom = n*sumXX - sumX*sumX;
+  const slope = denom !== 0 ? (n*sumXY - sumX*sumY)/denom : 0;
+  const intercept = (sumY - slope*sumX)/n;
+  return { slope, intercept };
+}
+function renderWeeklyTrend(semanas){
+  const host = document.getElementById('weekly-chart');
+  clear(host);
+  if (!semanas.length) { host.innerHTML = '<p style="font-size:12px;color:var(--text-muted);font-style:italic;">Sem dados.</p>'; return; }
+  const n = semanas.length;
+  const W = Math.max(380, n*64), H = 200;
+  const padL = 34, padR = 16, padT = 16, padB = 30;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const maxY = Math.max(...semanas.map(s=>s.total), 1) * 1.15;
+  const xFor = i => padL + (n===1 ? plotW/2 : i/(n-1)*plotW);
+  const yFor = v => padT + plotH - (v/maxY)*plotH;
+
+  const pts = semanas.map((s,i) => ({ x:xFor(i), y:yFor(s.total), s }));
+  const linePath = pts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const areaPath = linePath + ' L'+pts[pts.length-1].x.toFixed(1)+','+(padT+plotH)+' L'+pts[0].x.toFixed(1)+','+(padT+plotH)+' Z';
+
+  const reg = linearRegression(semanas.map(s=>s.total));
+  const trendY0 = yFor(Math.max(0, reg.intercept));
+  const trendY1 = yFor(Math.max(0, reg.intercept + reg.slope*(n-1)));
+
+  const gridLines = [0,0.5,1].map(f => {
+    const y = padT + plotH*f;
+    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="var(--grid)" stroke-width="1"/>';
+  }).join('');
+  const xLabels = pts.map(p => '<text x="'+p.x+'" y="'+(H-8)+'" text-anchor="middle" font-size="9.5" fill="var(--text-muted)" font-family="var(--mono)">'+esc(p.s.shortLabel)+'</text>').join('');
+  const dots = pts.map((p,i) => '<circle class="wk-dot" data-idx="'+i+'" cx="'+p.x+'" cy="'+p.y+'" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"></circle>').join('');
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox', '0 0 '+W+' '+H);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.innerHTML =
+    gridLines +
+    '<path d="'+areaPath+'" fill="var(--s1)" fill-opacity="0.10" stroke="none"/>' +
+    '<path d="'+linePath+'" fill="none" stroke="var(--s1)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<line x1="'+xFor(0)+'" y1="'+trendY0+'" x2="'+xFor(n-1)+'" y2="'+trendY1+'" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5,4"/>' +
+    dots + xLabels;
+
+  const scroller = document.createElement('div');
+  scroller.style.overflowX = 'auto';
+  scroller.appendChild(svg);
+  host.appendChild(scroller);
+
+  const trendWord = reg.slope > 0.05 ? '▲ piora' : (reg.slope < -0.05 ? '▼ melhora' : '= estável');
+  const trendClass = reg.slope > 0.05 ? 'up-bad' : (reg.slope < -0.05 ? 'down-good' : '');
+  const legend = document.createElement('div');
+  legend.className = 'legend';
+  legend.style.marginTop = '12px';
+  legend.innerHTML =
+    '<span class="item"><span class="swatch" style="background:var(--s1)"></span>Total semanal</span>' +
+    '<span class="item"><span class="swatch" style="background:var(--text-muted)"></span>Linha de tendência</span>' +
+    '<span class="item ' + trendClass + '" style="font-weight:600;">' + trendWord + '</span>';
+  host.appendChild(legend);
+
+  svg.querySelectorAll('.wk-dot').forEach(dot => {
+    const s = semanas[Number(dot.dataset.idx)];
+    dot.addEventListener('mousemove', evt => showTip(evt,
+      '<div class="t-title">'+esc(s.label)+'</div><div class="t-row"><span class="k">Total</span><span class="num">'+fmt(s.total)+'</span></div>'
+    ));
+    dot.addEventListener('mouseleave', hideTip);
   });
 }
 
@@ -965,6 +1082,8 @@ function renderDashboards(d){
   renderMiniBars('dash-weekday', d.weekdayOrdered.map(w=>({key:w.label, total:w.total})));
   renderMiniBars('dash-funcao', d.porFuncao);
   renderMiniBars('dash-subbu', d.porSubbu);
+  const hint = document.getElementById('dash-period-hint');
+  if (hint) hint.textContent = d.periodType === 'semana' ? 'semana selecionada' : 'ciclo selecionado';
 }
 
 /* modal de detalhe */
