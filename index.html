@@ -396,6 +396,19 @@
   }
   .settings-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
 
+  /* ---------- zona de perigo (apagar dados do servidor) ---------- */
+  .danger-zone{
+    border:1px solid var(--critical); border-radius:10px; padding:12px 14px; background:var(--critical-tint);
+  }
+  .danger-zone h3{ color:var(--critical); }
+  .danger-zone .settings-note{ color:var(--text-secondary); }
+  .danger-btn{
+    font-family:var(--sans); font-size:12.5px; font-weight:700; color:#fff; background:var(--critical);
+    border:1px solid var(--critical); border-radius:7px; padding:8px 14px; cursor:pointer;
+  }
+  .danger-btn:hover{ filter:brightness(1.1); }
+  .danger-btn:disabled{ opacity:.6; cursor:not-allowed; }
+
   /* ---------- image preview fallback (copy button) ---------- */
   .img-preview-panel{ max-width:720px; }
   .img-preview-hint{ font-size:12.5px; color:var(--text-secondary); line-height:1.6; margin:0 0 14px; }
@@ -998,6 +1011,14 @@ async function upsertHierToSupabase(hierMap){
 }
 async function upsertSingleHierEntryToSupabase(nome, ga, go){
   const { error } = await withTimeout(sb.rpc('upsert_infracoes_roster', { novos: [{ nome, ga, go: go || ga }] }), 10000, 'gravar hierarquia');
+  if (error) throw error;
+}
+// APAGA de vez os dados compartilhados no Supabase (registros + hierarquia) — afeta TODO
+// dispositivo que sincronizar, e qualquer outro processo que escreva nessa mesma base.
+// Irreversível. Só a função server-side ("clear_infracoes_shared_data", authenticated-only,
+// criada especificamente pra isto) tem permissão de apagar — nunca um DELETE direto daqui.
+async function clearSharedSupabaseData(){
+  const { error } = await withTimeout(sb.rpc('clear_infracoes_shared_data'), 20000, 'apagar dados do servidor');
   if (error) throw error;
 }
 
@@ -2339,6 +2360,38 @@ function renderSettingsPanel(){
     '</div>';
   body.appendChild(importSec);
   importSec.querySelector('#reset-data-inline').addEventListener('click', resetData);
+
+  const dangerSec = document.createElement('div');
+  dangerSec.className = 'settings-section danger-zone';
+  dangerSec.innerHTML =
+    '<h3>Zona de perigo</h3>' +
+    '<p class="settings-note">Apaga de vez os dados compartilhados no Supabase (Base + Hierarquia). Afeta <b>todo dispositivo</b> que sincronizar com este painel, e qualquer outro processo que também escreva nessa base. Não tem como desfazer.</p>' +
+    '<button type="button" class="danger-btn" id="danger-clear-server">Apagar dados do servidor</button>';
+  body.appendChild(dangerSec);
+  dangerSec.querySelector('#danger-clear-server').addEventListener('click', async () => {
+    if (!sb) { showToast('Supabase não está disponível agora.'); return; }
+    const step1 = window.confirm(
+      'Isto apaga PERMANENTEMENTE todos os dados compartilhados no Supabase (Base + Hierarquia), ' +
+      'em todos os dispositivos, incluindo o que qualquer outro processo tenha gravado lá. Não tem como desfazer.\n\n' +
+      'Quer continuar?'
+    );
+    if (!step1) return;
+    const step2 = window.prompt('Pra confirmar de verdade, digite APAGAR (em maiúsculas):');
+    if (step2 !== 'APAGAR') { showToast('Cancelado — texto de confirmação não bateu.'); return; }
+    const btn = dangerSec.querySelector('#danger-clear-server');
+    btn.disabled = true;
+    try {
+      await clearSharedSupabaseData();
+      showToast('Dados do servidor apagados.');
+      await loadFromSupabase();
+      recomputeAndRender();
+    } catch(err) {
+      console.error('Falha ao apagar dados do servidor.', err);
+      showToast('Não foi possível apagar os dados do servidor — tente de novo em instantes.');
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   const usersSec = document.createElement('div');
   usersSec.className = 'settings-section';
