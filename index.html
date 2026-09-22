@@ -634,7 +634,7 @@
   <section data-export="weekly">
     <div class="section-head">
       <h2>Infrações por semana</h2>
-      <span class="hint">todas as semanas presentes nos dados carregados, com linha de tendência</span>
+      <span class="hint" id="weekly-hint">todas as semanas presentes nos dados carregados, com linha de tendência</span>
     </div>
     <div class="card">
       <div id="weekly-chart"></div>
@@ -1545,6 +1545,13 @@ function deriveAll(){
   const periodRows = period.rows;
   const periodAntRows = period.antRows;
 
+  // "semanas" (completo) segue alimentando só o dropdown de semana — precisa listar toda semana
+  // disponível pra dar pra escolher qualquer uma. Já o que o bloco "Infrações por semana" MOSTRA
+  // (gráfico, Excel, apresentação) respeita o filtro Período quando ele está ativo — sem isto, o
+  // gráfico continuava trazendo semanas de fora do intervalo escolhido, mesmo com "Período"
+  // aplicado (peça do usuário: "reportar os chamados apenas do período selecionado").
+  const semanasExibicao = period.type === 'periodo' ? distinctSemanas(periodRows) : semanas;
+
   // agregação por colaborador no período selecionado
   const porColab = groupSum(periodRows, r => r.nome);
   const porColabAnt = groupSum(periodAntRows, r => r.nome);
@@ -1619,22 +1626,31 @@ function deriveAll(){
   });
   Object.values(detalhesByNome).forEach(list => list.sort((a,b)=>a.data.localeCompare(b.data)));
 
-  // ranking semana anterior x atual, por GA — usa a semana selecionada quando o filtro
-  // está em modo "semana"; caso contrário, usa as 2 semanas mais recentes da base carregada.
+  // ranking semana anterior x atual, por GA — usa a semana selecionada quando o filtro está em
+  // modo "semana"; as duas semanas mais recentes DENTRO do período quando o filtro é "Período"
+  // (nunca semanas de fora do intervalo escolhido); e as 2 semanas mais recentes da base inteira
+  // só no modo "ciclo" (sem período/semana restringindo nada).
   let rankGa = [], weekAtualLabel = null, weekAntLabel = null;
   {
-    let wAtual, wAnt;
+    let wAtual, wAnt, fonte;
     if (period.type === 'semana') {
       wAtual = period.key;
       wAnt = period.temAnterior ? prevWeekKey(wAtual) : null;
+      fonte = enriched;
+    } else if (period.type === 'periodo') {
+      const weekKeysDesc = [...new Set(periodRows.map(r=>r.weekKey))].sort((a,b)=>b.localeCompare(a));
+      wAtual = weekKeysDesc[0] || null;
+      wAnt = weekKeysDesc[1] || null;
+      fonte = periodRows;
     } else {
       const weekKeysDesc = [...new Set(enriched.map(r=>r.weekKey))].sort((a,b)=>b.localeCompare(a));
       wAtual = weekKeysDesc[0] || null;
       wAnt = weekKeysDesc[1] || null;
+      fonte = enriched;
     }
     if (wAtual) {
-      const rowsAtual = enriched.filter(r=>r.weekKey===wAtual);
-      const rowsAnt = wAnt ? enriched.filter(r=>r.weekKey===wAnt) : [];
+      const rowsAtual = fonte.filter(r=>r.weekKey===wAtual);
+      const rowsAnt = wAnt ? fonte.filter(r=>r.weekKey===wAnt) : [];
       weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : (semanas.find(s=>s.key===wAtual)||{}).label || null;
       weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
       const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(ga => ga && !EXCLUDED_GA.has(ga)));
@@ -1655,7 +1671,7 @@ function deriveAll(){
   const porSubbu = [...groupSum(periodRows, r=>r.subbu||'—').values()].sort((a,b)=>b.total-a.total).slice(0,10);
 
   return {
-    ciclos, semanas, periodType: period.type, periodKey: period.key, cicloAtualLabel: period.label, temAnterior,
+    ciclos, semanas, semanasExibicao, periodType: period.type, periodKey: period.key, cicloAtualLabel: period.label, temAnterior,
     total, totalAnterior, variacaoAbs, tipoRecorrente,
     pctEfetivo, afetadosCount: afetados.length, roster: roster.length, mediaAfetado,
     porGo, porGa, hierBlocks, topColaboradores, detalhesByNome,
@@ -1720,7 +1736,10 @@ function recomputeAndRender(){
     renderAnoChart();
     renderGoGa(d);
     renderRanking(d);
-    renderWeeklyTrend(d.semanas);
+    document.getElementById('weekly-hint').textContent = d.periodType === 'periodo'
+      ? 'semanas dentro do período selecionado, com linha de tendência'
+      : 'todas as semanas presentes nos dados carregados, com linha de tendência';
+    renderWeeklyTrend(d.semanasExibicao);
     renderDashboards(d);
     renderTop(d);
     renderVerification();
@@ -2884,7 +2903,7 @@ function exportSectionToExcel(exportId){
       nomeBase = 'ranking-reducao';
       break;
     case 'weekly':
-      addSheet(d.semanas.map(s => ({ Semana: s.label, Total: s.total })), 'Por semana');
+      addSheet(d.semanasExibicao.map(s => ({ Semana: s.label, Total: s.total })), 'Por semana');
       nomeBase = 'infracoes-por-semana';
       break;
     case 'dashboards':
@@ -3084,15 +3103,15 @@ function buildApresentacaoPres(d){
   }
 
   // --- slide 4: infrações por semana ---
-  if (d.semanas && d.semanas.length) {
+  if (d.semanasExibicao && d.semanasExibicao.length) {
     const s = pres.addSlide();
-    pptCabecalho(s, 'Infrações por semana', 'Todas as semanas presentes nos dados carregados', eyebrow);
+    pptCabecalho(s, 'Infrações por semana', d.periodType === 'periodo' ? 'Semanas dentro do período selecionado' : 'Todas as semanas presentes nos dados carregados', eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
     const rows = [[
       { text:'Semana', options: Object.assign({}, headerOpts, { align:'left' }) },
       { text:'Total de infrações', options: headerOpts },
     ]];
-    d.semanas.forEach(sem => {
+    d.semanasExibicao.forEach(sem => {
       const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:11, valign:'middle' };
       rows.push([
         { text:sem.label, options: Object.assign({}, cel, { align:'left' }) },
