@@ -2531,7 +2531,7 @@ function renderHierarchy(d){
           '<td class="num-col num'+(c.d7>0?' has-infra':'')+'">'+fmt(c.d7)+'</td>' +
           '<td class="num-col num'+(c.interj>0?' has-infra':'')+'">'+fmt(c.interj)+'</td>' +
           '<td class="num-col num'+(c.hex>0?' has-infra':'')+'">'+fmt(c.hex)+'</td>' +
-          '<td class="num-col'+(c.total>0?' has-infra':'')+'">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
+          '<td class="num-col">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
           '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>' +
           '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
         tbody.appendChild(tr);
