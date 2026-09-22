@@ -741,6 +741,22 @@
         </table>
       </div>
     </section>
+
+    <section data-export="bh-go">
+      <div class="section-head">
+        <h2>Banco de Horas por GO (Gestor Operacional)</h2>
+        <span class="hint" id="bh-go-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="bh-go-bars"></div></div>
+    </section>
+
+    <section data-export="bh-ga">
+      <div class="section-head">
+        <h2>Banco de Horas por GA (Gestor de Área)</h2>
+        <span class="hint" id="bh-ga-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="bh-ga-bars"></div></div>
+    </section>
   </div>
 
   <div id="tab-dsr" class="tab-panel">
@@ -766,6 +782,22 @@
         </table>
       </div>
     </section>
+
+    <section data-export="dsr-go">
+      <div class="section-head">
+        <h2>DSR por GO (Gestor Operacional)</h2>
+        <span class="hint" id="dsr-go-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="dsr-go-bars"></div></div>
+    </section>
+
+    <section data-export="dsr-ga">
+      <div class="section-head">
+        <h2>DSR por GA (Gestor de Área)</h2>
+        <span class="hint" id="dsr-ga-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="dsr-ga-bars"></div></div>
+    </section>
   </div>
 
   <div id="tab-feriado" class="tab-panel">
@@ -790,6 +822,22 @@
           <tbody id="feriado-rows"></tbody>
         </table>
       </div>
+    </section>
+
+    <section data-export="feriado-go">
+      <div class="section-head">
+        <h2>Feriados por GO (Gestor Operacional)</h2>
+        <span class="hint" id="feriado-go-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="feriado-go-bars"></div></div>
+    </section>
+
+    <section data-export="feriado-ga">
+      <div class="section-head">
+        <h2>Feriados por GA (Gestor de Área)</h2>
+        <span class="hint" id="feriado-ga-hint"></span>
+      </div>
+      <div class="card"><div class="bars" id="feriado-ga-bars"></div></div>
     </section>
   </div>
 
@@ -3077,6 +3125,12 @@ function exportSectionToExcel(exportId){
   if (exportId === 'bh-tabela') return exportAuxToExcel(STATE_BH, 'bh', 'Banco de Horas');
   if (exportId === 'dsr-tabela') return exportAuxToExcel(STATE_DSR, 'dsr', 'DSR');
   if (exportId === 'feriado-tabela') return exportAuxToExcel(STATE_FERIADO, 'feriado', 'Feriados');
+  if (exportId === 'bh-go') return exportAuxPorCampo(STATE_BH, 'go', 'bh');
+  if (exportId === 'bh-ga') return exportAuxPorCampo(STATE_BH, 'ga', 'bh');
+  if (exportId === 'dsr-go') return exportAuxPorCampo(STATE_DSR, 'go', 'dsr');
+  if (exportId === 'dsr-ga') return exportAuxPorCampo(STATE_DSR, 'ga', 'dsr');
+  if (exportId === 'feriado-go') return exportAuxPorCampo(STATE_FERIADO, 'go', 'feriado');
+  if (exportId === 'feriado-ga') return exportAuxPorCampo(STATE_FERIADO, 'ga', 'feriado');
 
   const d = STATE.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
@@ -3597,6 +3651,54 @@ function derivarAux(estado, camposLinha){
   return { ciclos, cicloSel: estado.cicloSel, cicloLabel: cicloAtual.label, rows };
 }
 
+/* -------- gráficos por GO/GA (painéis auxiliares) --------
+   Reaproveita o mesmo visual de barra usada em Infrações (.bars/.bar-item/.stack-track), só que
+   com 1 segmento único em vez de empilhado (não há sub-tipos aqui) — cor identifica o painel. */
+function agregarPorCampoAux(pessoas, campo, metricaFn){
+  const mapa = new Map();
+  pessoas.forEach(p => {
+    const chave = p[campo] || 'SEM HIERARQUIA';
+    mapa.set(chave, (mapa.get(chave)||0) + metricaFn(p));
+  });
+  return [...mapa.entries()].map(([nome,valor]) => ({ nome, valor })).sort((a,b) => Math.abs(b.valor)-Math.abs(a.valor));
+}
+function renderAuxBars(containerId, rows, corVar, fmtFn){
+  const el = document.getElementById(containerId);
+  clear(el);
+  if (!rows.length) { el.innerHTML = '<p style="font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0;">Sem dados.</p>'; return; }
+  const max = Math.max(...rows.map(r => Math.abs(r.valor)), 1);
+  rows.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'bar-item';
+    const w = Math.abs(r.valor)/max*100;
+    item.innerHTML =
+      '<span class="bname" title="'+esc(r.nome)+'">'+esc(r.nome)+'</span>' +
+      '<div class="stack-wrap">' +
+        '<div class="stack-track single" data-tip>' +
+          '<div class="seg" style="width:'+w+'%; background:'+corVar+'"></div>' +
+        '</div>' +
+      '</div>' +
+      '<span class="btotal num">'+esc(fmtFn(r.valor))+'</span>';
+    const track = item.querySelector('[data-tip]');
+    track.addEventListener('mousemove', evt => showTip(evt,
+      '<div class="t-title">'+esc(r.nome)+'</div>' +
+      '<div class="t-row"><span class="k">Total</span><span class="num">'+esc(fmtFn(r.valor))+'</span></div>'
+    ));
+    track.addEventListener('mouseleave', hideTip);
+    el.appendChild(item);
+  });
+}
+function exportAuxPorCampo(estado, campo, tema){
+  const d = estado.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  const dados = campo === 'go' ? d.porGo : d.porGa;
+  const rows = dados.map(x => ({ [campo.toUpperCase()]: x.nome, Total: x.valor }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), ('Por '+campo.toUpperCase()).slice(0,31));
+  baixarPlanilha(wb, tema + '-por-' + campo + '-' + nomeArquivoSeguro(d.cicloLabel));
+}
+
 /* -------- Banco de Horas -------- */
 function deriveBH(){
   const d = derivarAux(STATE_BH, r => ({ cicloDate: r.limiteComp, valores:null }));
@@ -3610,7 +3712,9 @@ function deriveBH(){
   const totalHoras = pessoas.reduce((a,p)=>a+p.horasDec,0);
   const totalVlr = pessoas.reduce((a,p)=>a+p.vlr,0);
   const totalDias = pessoas.reduce((a,p)=>a+p.dias,0);
-  return { ciclos: d.ciclos, cicloSel: d.cicloSel, cicloLabel: d.cicloLabel, pessoas, totalHoras, totalVlr, totalDias };
+  const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.vlr);
+  const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.vlr);
+  return { ciclos: d.ciclos, cicloSel: d.cicloSel, cicloLabel: d.cicloLabel, pessoas, totalHoras, totalVlr, totalDias, porGo, porGa };
 }
 function renderBH(){
   const d = deriveBH();
@@ -3622,7 +3726,13 @@ function renderBH(){
   document.getElementById('bh-source-note').textContent = !STATE_BH.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_BH.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
-  if (!d) return;
+  if (!d) {
+    renderAuxBars('bh-go-bars', [], 'var(--s1)', fmtMoeda);
+    renderAuxBars('bh-ga-bars', [], 'var(--s1)', fmtMoeda);
+    document.getElementById('bh-go-hint').textContent = '';
+    document.getElementById('bh-ga-hint').textContent = '';
+    return;
+  }
   d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
   selEl.onchange = () => { STATE_BH.cicloSel = selEl.value; renderBH(); };
   document.getElementById('bh-hint').textContent = 'Ciclo: ' + d.cicloLabel;
@@ -3632,6 +3742,10 @@ function renderBH(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
+  renderAuxBars('bh-go-bars', d.porGo, 'var(--s1)', fmtMoeda);
+  renderAuxBars('bh-ga-bars', d.porGa, 'var(--s1)', fmtMoeda);
+  document.getElementById('bh-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
+  document.getElementById('bh-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
   d.pessoas.forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
@@ -3685,7 +3799,9 @@ function deriveDSR(){
     const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor;
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
-  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas,
+  const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
+  const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
+  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas, porGo, porGa,
     totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
 }
 function renderDSR(){
@@ -3698,7 +3814,13 @@ function renderDSR(){
   document.getElementById('dsr-source-note').textContent = !STATE_DSR.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_DSR.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
-  if (!d) return;
+  if (!d) {
+    renderAuxBars('dsr-go-bars', [], 'var(--s2)', fmtMoeda);
+    renderAuxBars('dsr-ga-bars', [], 'var(--s2)', fmtMoeda);
+    document.getElementById('dsr-go-hint').textContent = '';
+    document.getElementById('dsr-ga-hint').textContent = '';
+    return;
+  }
   d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
   selEl.onchange = () => { STATE_DSR.cicloSel = selEl.value; renderDSR(); };
   document.getElementById('dsr-hint').textContent = 'Ciclo: ' + d.cicloLabel;
@@ -3708,6 +3830,10 @@ function renderDSR(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
+  renderAuxBars('dsr-go-bars', d.porGo, 'var(--s2)', fmtMoeda);
+  renderAuxBars('dsr-ga-bars', d.porGa, 'var(--s2)', fmtMoeda);
+  document.getElementById('dsr-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
+  document.getElementById('dsr-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
   d.pessoas.forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
@@ -3762,7 +3888,9 @@ function deriveFeriado(){
     const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; if (r.tipoFeriado) p.tipos.add(r.tipoFeriado);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
-  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas,
+  const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
+  const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
+  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas, porGo, porGa,
     totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
 }
 function renderFeriado(){
@@ -3775,7 +3903,13 @@ function renderFeriado(){
   document.getElementById('feriado-source-note').textContent = !STATE_FERIADO.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_FERIADO.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
-  if (!d) return;
+  if (!d) {
+    renderAuxBars('feriado-go-bars', [], 'var(--s3)', fmtMoeda);
+    renderAuxBars('feriado-ga-bars', [], 'var(--s3)', fmtMoeda);
+    document.getElementById('feriado-go-hint').textContent = '';
+    document.getElementById('feriado-ga-hint').textContent = '';
+    return;
+  }
   d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
   selEl.onchange = () => { STATE_FERIADO.cicloSel = selEl.value; renderFeriado(); };
   document.getElementById('feriado-hint').textContent = 'Ciclo: ' + d.cicloLabel;
@@ -3785,6 +3919,10 @@ function renderFeriado(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
+  renderAuxBars('feriado-go-bars', d.porGo, 'var(--s3)', fmtMoeda);
+  renderAuxBars('feriado-ga-bars', d.porGa, 'var(--s3)', fmtMoeda);
+  document.getElementById('feriado-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
+  document.getElementById('feriado-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
   d.pessoas.forEach(p => {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td><td>'+esc([...p.tipos].join(', '))+'</td>'+
