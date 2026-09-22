@@ -2922,7 +2922,7 @@ function pptCabecalho(s, titulo, subtitulo, regiaoTxt){
 function pptRodape(s, texto){
   s.addText(texto, { x:0.5, y:7.12, w:12.3, h:0.3, fontFace:'Arial', fontSize:9, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
 }
-function pptTabelaColaboradoresGA(block){
+function pptTabelaColaboradoresGA(block, d){
   const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
   const rows = [[
     { text:'Colaborador', options: Object.assign({}, headerOpts, { align:'left' }) },
@@ -2930,18 +2930,23 @@ function pptTabelaColaboradoresGA(block){
     { text:'Interjornada', options: Object.assign({}, headerOpts, { align:'center' }) },
     { text:'>2h extras', options: Object.assign({}, headerOpts, { align:'center' }) },
     { text:'Total', options: Object.assign({}, headerOpts, { align:'center' }) },
+    { text:'Justificativa (FCA)', options: Object.assign({}, headerOpts, { align:'left' }) },
   ]];
   let sD7=0, sInt=0, sHex=0, sTot=0;
   block.colaboradores.forEach(c => {
     sD7+=c.d7; sInt+=c.interj; sHex+=c.hex; sTot+=c.total;
     const cor = corCelulaTotalPPT(c.total);
     const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:10.5, valign:'middle' };
+    // mesma origem do campo Justificativa (FCA) da tela e da exportação Excel do bloco —
+    // texto do GA pro colaborador, específico ao período em exibição.
+    const justTexto = (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '';
     rows.push([
       { text:c.nome, options: Object.assign({}, cel, { align:'left' }) },
       { text:String(c.d7), options: Object.assign({}, cel, { align:'center' }) },
       { text:String(c.interj), options: Object.assign({}, cel, { align:'center' }) },
       { text:String(c.hex), options: Object.assign({}, cel, { align:'center' }) },
       { text:String(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
+      { text: justTexto || '—', options: Object.assign({}, cel, { align:'left', fontSize:9.5, italic: !justTexto, color: justTexto ? PPT_NAVY : PPT_TEXT_MUTED }) },
     ]);
   });
   const totalOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY_DARK }, fontFace:'Arial', fontSize:11, valign:'middle' };
@@ -2951,6 +2956,7 @@ function pptTabelaColaboradoresGA(block){
     { text:String(sInt), options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:String(sHex), options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:String(sTot), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:'', options: Object.assign({}, totalOpts, { align:'left' }) },
   ]);
   return rows;
 }
@@ -3055,7 +3061,7 @@ function buildApresentacaoPres(d){
       { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
       { text:'   ·   GO: ', options:{ bold:true, color:PPT_NAVY } }, { text:(block.go||'—'), options:{ color:PPT_NAVY } },
     ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
-    s.addTable(pptTabelaColaboradoresGA(block), { x:0.5, y:2.05, w:12.3, colW:[5.5,2.2,2.2,2.2,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
+    s.addTable(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
     pptRodape(s, rodapeTxt);
   });
 
