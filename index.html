@@ -917,6 +917,15 @@ function authRemoveUser(username){
 
 const STORAGE_RAW = 'painelInfracoes.raw.v1';
 const STORAGE_HIER = 'painelInfracoes.hier.v1';
+// hierarquia definida direto no painel (popover "Definir GA/GO") que AINDA não foi confirmada
+// no Supabase — guardada à parte pra nunca ser apagada por engano. Sem isto: alguém define o
+// GA/GO de um colaborador, a sincronização falha (ou nem é tentada — Usuário Padrão não tem
+// sessão de escrita), e na próxima vez que o painel lê do Supabase com sucesso (recarregar a
+// página, "Atualizar dados agora", etc.) o STATE.hierMap inteiro é SUBSTITUÍDO pelo que veio do
+// servidor — apagando silenciosamente o que tinha sido definido aqui. Essas entradas pendentes
+// ficam gravadas no navegador e são sempre reaplicadas por cima de qualquer leitura do servidor,
+// até conseguirem sincronizar de verdade.
+const STORAGE_HIER_PENDENTE = 'painelInfracoes.hierPendente.v1';
 // justificativas (FCA) que o GA escreve por colaborador+período na tabela de "Colaboradores por
 // hierarquia" — por enquanto só neste navegador (não sincroniza pelo Supabase ainda; ver aviso
 // perto de renderHierarchy). Chave: nome + tipo/valor do período selecionado no momento do save,
@@ -1003,7 +1012,11 @@ async function loadFromSupabase(){
     }));
     const hierMap = {};
     (roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
-    if (Object.keys(hierMap).length) STATE.hierMap = hierMap;
+    // reaplica por cima qualquer hierarquia definida aqui no painel que ainda não foi confirmada
+    // no servidor — sem isto, essa leitura substituiria STATE.hierMap inteiro e apagaria a
+    // correção sem ninguém perceber.
+    if (Object.keys(hierMap).length) STATE.hierMap = aplicarHierPendente(hierMap);
+    else if (Object.keys(STATE.hierMapPendente).length) STATE.hierMap = aplicarHierPendente(Object.assign({}, STATE.hierMap));
     STATE.usingDefault = false;
     STATE.usingSupabase = true;
     STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
@@ -1036,7 +1049,8 @@ async function loadFromGithubMirror(){
     }));
     const hierMap = {};
     (d.roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
-    if (Object.keys(hierMap).length) STATE.hierMap = hierMap;
+    if (Object.keys(hierMap).length) STATE.hierMap = aplicarHierPendente(hierMap);
+    else if (Object.keys(STATE.hierMapPendente).length) STATE.hierMap = aplicarHierPendente(Object.assign({}, STATE.hierMap));
     STATE.usingDefault = false;
     STATE.usingSupabase = true;
     STATE.readSyncFailed = false;
@@ -1212,7 +1226,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1222,6 +1236,61 @@ function tryLoadFromStorage(){
     if (h) { STATE.hierMap = JSON.parse(h); STATE.usingDefault = false; }
   } catch(e) { /* ignora - segue com defaults */ }
   loadJustificativasFromStorage();
+  loadHierPendenteFromStorage();
+}
+function loadHierPendenteFromStorage(){
+  try {
+    const p = localStorage.getItem(STORAGE_HIER_PENDENTE);
+    if (p) STATE.hierMapPendente = JSON.parse(p);
+  } catch(e) { /* ignora - segue com defaults */ }
+}
+function saveHierPendenteToStorage(){
+  try { localStorage.setItem(STORAGE_HIER_PENDENTE, JSON.stringify(STATE.hierMapPendente)); } catch(e) {}
+}
+// marca uma entrada de hierarquia como "ainda não confirmada no servidor" — protegida contra
+// ser apagada por qualquer leitura futura do Supabase até sincronizar de verdade.
+function marcarHierPendente(nome, ga, go){
+  STATE.hierMapPendente[nome] = { ga, go: go || ga };
+  saveHierPendenteToStorage();
+}
+function limparHierPendente(nome){
+  if (!(nome in STATE.hierMapPendente)) return;
+  delete STATE.hierMapPendente[nome];
+  saveHierPendenteToStorage();
+}
+// aplica por cima de um hierMap recém-lido do servidor (ou do espelho do GitHub) qualquer
+// entrada ainda pendente — pra nunca sumir uma correção feita aqui só porque a leitura mais
+// recente do servidor não tinha chegado a receber essa escrita ainda.
+function aplicarHierPendente(hierMap){
+  Object.keys(STATE.hierMapPendente).forEach(nome => { hierMap[nome] = STATE.hierMapPendente[nome]; });
+  return hierMap;
+}
+// tenta mandar pro Supabase tudo que ainda está pendente — chamada sempre que uma sessão de
+// escrita válida aparece (login bem-sucedido, sessão que estava expirada voltou a funcionar).
+// Em lotes de 500 (igual upsertHierToSupabase), pra não fazer uma chamada por pessoa quando um
+// upload de arquivo inteiro ficou pendente.
+async function tentarSincronizarHierPendente(){
+  const nomes = Object.keys(STATE.hierMapPendente);
+  if (!nomes.length) return;
+  if (!(await hasSupabaseWriteSession())) return;
+  let sincronizados = 0;
+  for (let i = 0; i < nomes.length; i += 500) {
+    const lote = nomes.slice(i, i + 500);
+    const novos = lote.map(nome => ({ nome, ga: STATE.hierMapPendente[nome].ga, go: STATE.hierMapPendente[nome].go || STATE.hierMapPendente[nome].ga }));
+    try {
+      const { error } = await withTimeout(sb.rpc('upsert_infracoes_roster', { novos }), 20000, 'gravar hierarquia pendente');
+      if (error) throw error;
+      lote.forEach(nome => { delete STATE.hierMapPendente[nome]; sincronizados++; });
+      saveHierPendenteToStorage();
+    } catch (e) {
+      console.error('Não deu pra sincronizar ' + lote.length + ' hierarquia(s) pendente(s) agora.', e);
+    }
+  }
+  if (sincronizados) {
+    if (!Object.keys(STATE.hierMapPendente).length) { STATE.pendingSync = null; }
+    recomputeAndRender();
+    showToast(sincronizados + ' hierarquia(s) definida(s) no painel finalmente sincronizada(s).');
+  }
 }
 function loadJustificativasFromStorage(){
   try {
@@ -1390,6 +1459,10 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
       const go = e.go || e.ga;
       if (STATE.hierMap[e.nome]) updated++; else added++;
       STATE.hierMap[e.nome] = { ga: e.ga, go };
+      // marca já de cara, antes de tentar sincronizar — mesma proteção do editor inline: se a
+      // sincronização falhar (ou nem for tentada), essas entradas não somem na próxima leitura
+      // do servidor, e continuam tentando sincronizar sozinhas depois.
+      marcarHierPendente(e.nome, e.ga, go);
     });
     STATE.usingDefault = false;
     saveToStorage();
@@ -1404,20 +1477,21 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
         await recordSyncTimestamp('hierarquia', file.name);
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
+        parsed.entries.forEach(e => limparHierPendente(e.nome));
         recomputeAndRender();
         showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"' + sufixoFidelidade);
       } catch(syncErr) {
         console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
         recomputeAndRender();
-        showToast('Hierarquia compatibilizada, mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.' + sufixoFidelidade);
+        showToast('Hierarquia compatibilizada e protegida neste navegador — vai continuar tentando sincronizar sozinha (nenhuma atualização vai apagá-la).' + sufixoFidelidade);
       }
     } else {
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
       AUTH.supabaseSessionOk = false;
       updateRoleBadge();
       recomputeAndRender();
-      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações).' + sufixoFidelidade);
+      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva e protegida neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações).' + sufixoFidelidade);
     }
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
@@ -1428,10 +1502,10 @@ function resetData(){
   // compartilhados de todo mundo a partir de uma ação de um único dispositivo. O painel não
   // deve mostrar nenhum dado de exemplo/planilha embutida — só reporta quando existe uma
   // Base anexada de verdade (localmente ou sincronizada), então "limpar" volta pro vazio.
-  try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
+  try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); localStorage.removeItem(STORAGE_HIER_PENDENTE); } catch(e) {}
   // justificativas NÃO são apagadas aqui — são anotações do GA, independentes da Base/Hierarquia
   // anexada, e "limpar dados locais" é especificamente sobre essas duas.
-  STATE = { raw: [], hierMap: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -2474,31 +2548,40 @@ document.getElementById('he-save').addEventListener('click', async () => {
   STATE.hierMap[nome] = { ga, go: go || ga };
   STATE.usingDefault = false;
   saveToStorage();
+  // marca como pendente ANTES de qualquer tentativa de sincronizar — assim, definido aqui no
+  // painel, fica protegido de ser apagado por uma leitura do servidor mesmo se a página for
+  // fechada no meio da tentativa de sincronização abaixo (só sai de pendente com sucesso
+  // confirmado, nunca antes).
+  marcarHierPendente(nome, ga, go);
   closeHierEditor();
   recomputeAndRender();
   if (await hasSupabaseWriteSession()) {
     try {
       await withRetry(() => upsertSingleHierEntryToSupabase(nome, ga, go || ga), 3, 2000);
       STATE.pendingSync = null;
+      limparHierPendente(nome);
       showToast('Hierarquia de ' + nome + ' definida e sincronizada.');
     } catch(syncErr) {
       console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: null };
       renderSyncTimestamp();
-      showToast('Hierarquia de ' + nome + ' salva só neste navegador — não deu pra sincronizar agora. Tente editar de novo daqui a pouco.');
+      showToast('Hierarquia de ' + nome + ' salva neste navegador — vai continuar tentando sincronizar sozinha (fica protegida até lá, nenhuma atualização vai apagá-la).');
     }
   } else {
     // Usuário Padrão pode editar hierarquia sem estar logado — nesse caso é esperado que fique
     // só local, não é uma falha de sincronização. Já pra quem é Admin neste navegador, cair
     // aqui só acontece com a sessão do Supabase expirada (ver checkSupabaseSessionForBadge).
+    // Em ambos os casos, a entrada continua marcada como pendente e protegida: sincroniza
+    // sozinha assim que alguém entrar como Admin com uma sessão válida (ver
+    // tentarSincronizarHierPendente, chamada depois de cada login bem-sucedido).
     if (isAdmin()) {
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: null };
       renderSyncTimestamp();
       AUTH.supabaseSessionOk = false;
       updateRoleBadge();
-      showToast('Hierarquia de ' + nome + ' salva só neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações.');
+      showToast('Hierarquia de ' + nome + ' salva neste navegador — sua sessão de sincronização expirou. Fica protegida (nenhuma atualização vai apagá-la); entre com a senha de novo em Configurações pra sincronizar.');
     } else {
-      showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
+      showToast('Hierarquia de ' + nome + ' definida e salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
     }
   }
 });
@@ -2663,6 +2746,9 @@ async function checkSupabaseSessionForBadge(){
   if (!isAdmin()) { AUTH.supabaseSessionOk = null; updateRoleBadge(); return; }
   AUTH.supabaseSessionOk = await hasSupabaseWriteSession();
   updateRoleBadge();
+  // sessão de escrita disponível de novo: aproveita e manda pro servidor qualquer hierarquia
+  // definida aqui no painel que ficou esperando (ver marcarHierPendente).
+  if (AUTH.supabaseSessionOk) tentarSincronizarHierPendente();
 }
 
 function renderSettingsPanel(){
