@@ -116,6 +116,29 @@
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   @media (max-width:480px){ .cycle-select{ flex-basis:100%; } }
+  /* filtro Período (data inicial/final) — mesmo visual "pill" dos <select> de ciclo/semana ao
+     lado, só que com dois <input type=date> + Aplicar/Limpar dentro do mesmo grupo. */
+  .periodo-filter{
+    display:flex; align-items:center; gap:6px; flex:1 1 340px; min-width:0;
+    background:var(--surface-raised); border:1px solid var(--border); border-radius:999px;
+    padding:4px 8px; flex-wrap:wrap;
+  }
+  .periodo-label{ font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.03em; flex:none; padding-left:6px; }
+  .periodo-filter input[type="date"]{
+    font-family:var(--mono); font-size:12px; color:var(--text-primary); background:var(--surface);
+    border:1px solid var(--border); border-radius:999px; padding:5px 8px; min-width:0; flex:1 1 128px;
+  }
+  .periodo-filter input[type="date"]:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .periodo-sep{ font-size:11px; color:var(--text-muted); flex:none; }
+  .periodo-btn{
+    font-family:var(--sans); font-size:11.5px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface); border:1px solid var(--border); border-radius:999px;
+    padding:6px 12px; cursor:pointer; flex:none; white-space:nowrap;
+  }
+  .periodo-btn:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+  .periodo-btn.primary{ background:var(--s1); border-color:var(--s1); color:#fff; }
+  .periodo-btn.primary:hover{ color:#fff; opacity:.9; }
+  @media (max-width:640px){ .periodo-filter{ flex-basis:100%; } }
   .theme-toggle{
     display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; flex:none;
     border-radius:999px; border:1px solid var(--border); background:var(--surface-raised); color:var(--text-secondary);
@@ -346,9 +369,14 @@
      que sobrar depois das outras — cresce sozinha pra preencher a tabela. */
   .ga-table{ width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
   .ga-table th{ text-align:left; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted); font-weight:600; padding:10px 8px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ga-table th.num-col, .ga-table td.num-col{ text-align:right; }
+  .ga-table th.num-col, .ga-table td.num-col{ text-align:center; }
+  /* célula vermelha quando aquele tipo de infração (ou o Total) é maior que zero nessa linha —
+     mesma linguagem visual do badge "reincidente" (fundo tingido + texto na cor --critical). */
+  .ga-table td.num-col.has-infra{ background:var(--critical-tint); color:var(--critical); font-weight:700; border-radius:6px; }
   .ga-table td{ padding:6px 8px; border-top:1px solid var(--grid); vertical-align:middle; }
-  .ga-table td.name{ font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ga-table td.name{ font-weight:500; }
+  .colab-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .colab-dates{ margin-top:2px; font-family:var(--mono); font-size:10px; font-weight:400; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
 
   /* coluna Justificativa (FCA) — textarea compacta que cresce sozinha até um teto, sem
@@ -517,6 +545,14 @@
     <div class="filter-row">
       <select class="cycle-select" id="cycle-select" title="Filtrar por ciclo (mês)"></select>
       <select class="cycle-select" id="week-select" title="Filtrar por semana"></select>
+      <div class="periodo-filter" id="periodo-filter">
+        <span class="periodo-label">Período</span>
+        <input type="date" id="periodo-inicio" aria-label="Data inicial do período">
+        <span class="periodo-sep">até</span>
+        <input type="date" id="periodo-fim" aria-label="Data final do período">
+        <button type="button" class="periodo-btn primary" id="periodo-aplicar">Aplicar</button>
+        <button type="button" class="periodo-btn" id="periodo-limpar" hidden>Limpar</button>
+      </div>
     </div>
     <div class="source-note" id="source-note"></div>
     <div class="header-sync-row">
@@ -1158,7 +1194,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, justificativas: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+let STATE = { raw: [], hierMap: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1370,7 +1406,7 @@ function resetData(){
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
   // justificativas NÃO são apagadas aqui — são anotações do GA, independentes da Base/Hierarquia
   // anexada, e "limpar dados locais" é especificamente sobre essas duas.
-  STATE = { raw: [], hierMap: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+  STATE = { raw: [], hierMap: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -1427,6 +1463,27 @@ function goColorFor(go){
 }
 
 function currentPeriod(enriched, ciclos, semanas){
+  if (STATE.filterMode === 'periodo' && STATE.periodoInicio && STATE.periodoFim) {
+    if (STATE.periodoInicio > STATE.periodoFim) {
+      // datas invertidas (pode acontecer se os dados mudaram e o estado salvo ficou velho) —
+      // mesmo tratamento do "semana não existe mais": volta pro ciclo em vez de travar.
+      STATE.filterMode = 'ciclo';
+    } else {
+      const ini = STATE.periodoInicio, fim = STATE.periodoFim;
+      const rows = enriched.filter(r => r.data >= ini && r.data <= fim);
+      // "período anterior" pra comparação de reincidência/variação: mesma quantidade de dias,
+      // imediatamente antes do início — não existe um "período anterior" óbvio pra um intervalo
+      // arbitrário, então uso o intervalo de mesmo tamanho colado antes dele.
+      const iniD = parseISODate(ini), fimD = parseISODate(fim);
+      const dias = Math.round((fimD - iniD) / 86400000) + 1;
+      const antFimD = new Date(iniD); antFimD.setDate(antFimD.getDate() - 1);
+      const antIniD = new Date(antFimD); antIniD.setDate(antIniD.getDate() - (dias - 1));
+      const antIni = isoKey(antIniD), antFim = isoKey(antFimD);
+      const antRows = enriched.filter(r => r.data >= antIni && r.data <= antFim);
+      const label = fmtDMY(iniD) + ' a ' + fmtDMY(fimD);
+      return { type: 'periodo', key: ini + '_' + fim, label, rows, antRows, temAnterior: antRows.length > 0 };
+    }
+  }
   if (STATE.filterMode === 'semana' && STATE.semanaSel) {
     if (!semanas.some(s => s.key === STATE.semanaSel)) {
       // a semana selecionada não existe mais nos dados atuais (ex.: nova Base anexada com um
@@ -1467,6 +1524,16 @@ function deriveAll(){
   const porColab = groupSum(periodRows, r => r.nome);
   const porColabAnt = groupSum(periodAntRows, r => r.nome);
 
+  // datas exatas (dentro do período selecionado) em que cada colaborador teve alguma
+  // infração — pra mostrar embaixo do nome no bloco de GA, não é só "esteve na base",
+  // é especificamente o(s) dia(s) com >7 dias/interjornada/>2h extras.
+  const datasPorColab = new Map();
+  periodRows.forEach(r => {
+    if (r.total <= 0) return;
+    if (!datasPorColab.has(r.nome)) datasPorColab.set(r.nome, new Set());
+    datasPorColab.get(r.nome).add(r.data);
+  });
+
   const roster = Object.keys(STATE.hierMap);
   const nomesComDados = new Set([...roster, ...periodRows.map(r=>r.nome)]);
 
@@ -1474,10 +1541,12 @@ function deriveAll(){
     const h = STATE.hierMap[nome] || {};
     const c = porColab.get(nome) || {d7:0, interj:0, hex:0, total:0};
     const ant = porColabAnt.get(nome);
+    const datas = [...(datasPorColab.get(nome) || [])].sort();
     return {
       nome, ga: h.ga || 'SEM HIERARQUIA', go: h.go || h.ga || 'SEM HIERARQUIA',
       d7:c.d7, interj:c.interj, hex:c.hex, total:c.total,
-      reinc: !!(ant && ant.total > 0 && c.total > 0)
+      reinc: !!(ant && ant.total > 0 && c.total > 0),
+      datas,
     };
   });
 
@@ -1680,7 +1749,32 @@ function renderCycleSelect(d){
     }
     recomputeAndRender();
   };
+
+  // datas do filtro Período: mantém o que foi digitado visível mesmo fora do modo período
+  // (só reaplicar exige clicar em Aplicar de novo); "Limpar" só aparece quando é o filtro ativo.
+  document.getElementById('periodo-inicio').value = STATE.periodoInicio || '';
+  document.getElementById('periodo-fim').value = STATE.periodoFim || '';
+  document.getElementById('periodo-limpar').hidden = d.periodType !== 'periodo';
 }
+document.getElementById('periodo-aplicar').addEventListener('click', () => {
+  const ini = document.getElementById('periodo-inicio').value;
+  const fim = document.getElementById('periodo-fim').value;
+  if (!ini || !fim) { showToast('Escolha a data inicial e a data final do período.'); return; }
+  if (ini > fim) { showToast('A data inicial precisa ser antes (ou igual) da data final.'); return; }
+  STATE.filterMode = 'periodo';
+  STATE.periodoInicio = ini;
+  STATE.periodoFim = fim;
+  recomputeAndRender();
+});
+document.getElementById('periodo-limpar').addEventListener('click', () => {
+  STATE.filterMode = 'ciclo';
+  STATE.periodoInicio = null;
+  STATE.periodoFim = null;
+  document.getElementById('periodo-inicio').value = '';
+  document.getElementById('periodo-fim').value = '';
+  recomputeAndRender();
+});
+
 function recomputeAndRenderKeepingCiclo(key){
   // "TODOS" não é um ciclo real de agregação por 15-14; tratamos como o ciclo mais recente + aviso,
   // já que a agregação por GO/GA/semana já cobre o dataset completo nas seções de semana.
@@ -2392,6 +2486,10 @@ function renderHierarchy(d){
         '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Infrações</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.reincidentes+'</span><span class="l">Reincid.</span></div>' +
         '<div class="ga-stat total"><span class="n num">'+fmt(block.total)+'</span><span class="l">Total</span></div>' +
+        '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
+          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
+          'Excel' +
+        '</button>' +
         '<button type="button" class="copy-img-btn" title="Copiar bloco como imagem">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="8" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M6 3V2a1 1 0 011-1h5a1 1 0 011 1v9a1 1 0 01-1 1h-1" stroke="currentColor" stroke-width="1.3"/></svg>' +
           'Copiar' +
@@ -2399,8 +2497,10 @@ function renderHierarchy(d){
       '</div>';
     details.appendChild(summary);
 
-    const copyBtn = summary.querySelector('.copy-img-btn');
+    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn)');
     copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(details, copyBtn, block.ga); });
+    const exportGaBtn = summary.querySelector('.ga-export-btn');
+    exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportGaBlockToExcel(block, d); });
 
     const body = document.createElement('div');
     body.className = 'ga-body';
@@ -2417,12 +2517,21 @@ function renderHierarchy(d){
         const tr = document.createElement('tr');
         const justKey = justificativaKey(c.nome, d.periodType, d.periodKey);
         const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
+        // datas das infrações desse colaborador dentro do período em exibição, embaixo do
+        // nome — mostra só as primeiras (a mais provável de ser lida) e o resto no title.
+        const MAX_DATAS_VISIVEIS = 4;
+        const datasFmt = (c.datas || []).map(iso => fmtDM(parseISODate(iso)));
+        const datasLabel = datasFmt.length
+          ? datasFmt.slice(0, MAX_DATAS_VISIVEIS).join(', ') + (datasFmt.length > MAX_DATAS_VISIVEIS ? ' +' + (datasFmt.length - MAX_DATAS_VISIVEIS) : '')
+          : '';
         tr.innerHTML =
-          '<td class="name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</td>' +
-          '<td class="num-col num">'+fmt(c.d7)+'</td>' +
-          '<td class="num-col num">'+fmt(c.interj)+'</td>' +
-          '<td class="num-col num">'+fmt(c.hex)+'</td>' +
-          '<td class="num-col">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
+          '<td class="name"><div class="colab-name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</div>' +
+          (datasLabel ? '<div class="colab-dates" title="'+esc(datasFmt.join(', '))+'">'+esc(datasLabel)+'</div>' : '') +
+          '</td>' +
+          '<td class="num-col num'+(c.d7>0?' has-infra':'')+'">'+fmt(c.d7)+'</td>' +
+          '<td class="num-col num'+(c.interj>0?' has-infra':'')+'">'+fmt(c.interj)+'</td>' +
+          '<td class="num-col num'+(c.hex>0?' has-infra':'')+'">'+fmt(c.hex)+'</td>' +
+          '<td class="num-col'+(c.total>0?' has-infra':'')+'">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
           '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>' +
           '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
         tbody.appendChild(tr);
@@ -2631,16 +2740,46 @@ document.getElementById('settings-overlay').addEventListener('click', evt => {
 function nomeArquivoSeguro(s){
   return String(s || '').replace(/[\\/:*?"<>|]/g, '-').trim();
 }
-function baixarPlanilha(wb, nomeBase){
-  if (typeof XLSX === 'undefined' || !XLSX || typeof XLSX.writeFile !== 'function') {
+function xlsxDisponivel(){
+  // checado ANTES de qualquer XLSX.utils.*, não só no writeFile final — se o CDN foi bloqueado
+  // XLSX nem existe como global, e chamar XLSX.utils.book_new() direto quebra com um erro
+  // de script (ReferenceError) em vez do toast explicativo de sempre.
+  if (typeof XLSX === 'undefined' || !XLSX || typeof XLSX.utils === 'undefined' || typeof XLSX.writeFile !== 'function') {
     showToast('A biblioteca de planilhas ainda não carregou — aguarde alguns segundos e tente de novo.');
-    return;
+    return false;
   }
+  return true;
+}
+function baixarPlanilha(wb, nomeBase){
+  if (!xlsxDisponivel()) return;
   XLSX.writeFile(wb, nomeArquivoSeguro(nomeBase) + '.xlsx');
+}
+// linhas de um bloco de GA (ou de vários, um de cada vez) pra planilha — usada tanto pelo
+// Excel do bloco inteiro "Colaboradores por hierarquia" quanto pelo Excel de cada GA sozinho,
+// pra nunca ter duas versões da mesma tabela divergindo.
+function linhasColaboradoresParaExport(block, d){
+  if (!block.colaboradores.length) {
+    return [{ GO: block.go, GA: block.ga, Colaborador: '(nenhum colaborador com infração neste ciclo)', 'Data(s) da infração': '', '>7 dias': '', Interjornada: '', '>2h extras': '', Total: '', Reincidente: '', 'Justificativa (FCA)': '' }];
+  }
+  return block.colaboradores.map(c => ({
+    GO: block.go, GA: block.ga, Colaborador: c.nome,
+    'Data(s) da infração': (c.datas || []).map(iso => fmtDMY(parseISODate(iso))).join(', '),
+    '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
+    Reincidente: c.reinc ? 'Sim' : 'Não',
+    'Justificativa (FCA)': (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '',
+  }));
+}
+function exportGaBlockToExcel(block, d){
+  if (!d) { showToast('Nenhum dado carregado pra exportar.'); return; }
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasColaboradoresParaExport(block, d)), 'Colaboradores'.slice(0, 31));
+  baixarPlanilha(wb, 'colaboradores-' + nomeArquivoSeguro(block.ga) + '-' + nomeArquivoSeguro(d.cicloAtualLabel));
 }
 function exportSectionToExcel(exportId){
   const d = STATE.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
+  if (!xlsxDisponivel()) return;
   const wb = XLSX.utils.book_new();
   const cicloTag = nomeArquivoSeguro(d.cicloAtualLabel);
   let nomeBase = 'painel-infracoes';
@@ -2709,18 +2848,7 @@ function exportSectionToExcel(exportId){
       break;
     case 'hier': {
       const rows = [];
-      d.hierBlocks.forEach(b => {
-        if (b.colaboradores.length) {
-          b.colaboradores.forEach(c => rows.push({
-            GO: b.go, GA: b.ga, Colaborador: c.nome,
-            '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
-            Reincidente: c.reinc ? 'Sim' : 'Não',
-            'Justificativa (FCA)': (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '',
-          }));
-        } else {
-          rows.push({ GO: b.go, GA: b.ga, Colaborador: '(nenhum colaborador com infração neste ciclo)', '>7 dias': '', Interjornada: '', '>2h extras': '', Total: '', Reincidente: '', 'Justificativa (FCA)': '' });
-        }
-      });
+      d.hierBlocks.forEach(b => rows.push(...linhasColaboradoresParaExport(b, d)));
       addSheet(rows, 'Colaboradores por hierarquia');
       nomeBase = 'colaboradores-por-hierarquia-' + cicloTag;
       break;
