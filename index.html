@@ -22,8 +22,11 @@
 
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
     /* cores dos 3 tipos de infração (>7 dias / interjornada / >2h extras) — fixas por tipo,
-       separadas da paleta de marca (--s1/s2/s3) que também é usada em botões, links etc. */
-    --type-d7: #dc2626; --type-interj: #eab308; --type-hex: #c2410c;
+       separadas da paleta de marca (--s1/s2/s3) que também é usada em botões, links etc.
+       vermelho/amarelo/verde a pedido; o verde é puxado pro lado do ciano (não é o mesmo
+       tom do --good) porque verde puro ao lado do vermelho fica quase idêntico pra quem
+       tem daltonismo vermelho-verde — validado com o script de paleta do skill de dataviz. */
+    --type-d7: #dc2626; --type-interj: #ca8a04; --type-hex: #0d9488;
     --good:     #0ca30c;
     --warning:  #fab219;
     --serious:  #ec835a;
@@ -43,7 +46,7 @@
       --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
       --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-      --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#ea580c;
+      --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#0d9488;
       --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
       --critical-tint: rgba(230,103,103,0.14);
       --good-tint:     rgba(12,163,12,0.12);
@@ -57,7 +60,7 @@
     --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
-    --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#ea580c;
+    --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#0d9488;
     --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
     --critical-tint: rgba(230,103,103,0.14);
     --good-tint:     rgba(12,163,12,0.12);
@@ -290,6 +293,21 @@
   .hier-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .hier-toolbar button{ font-family:var(--sans); font-size:11.5px; font-weight:600; color:var(--text-secondary); background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:6px 11px; cursor:pointer; }
   .hier-toolbar button:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+
+  /* liga/desliga do bloco de Verificação — distinto do chevron de recolher: aqui o bloco
+     some de vez (só fica o título + este botão), não é reaberto sozinho ao trocar de ciclo. */
+  .verif-power-btn{
+    font-family:var(--sans); font-size:11.5px; font-weight:600; color:var(--text-secondary);
+    background:var(--surface); border:1px solid var(--border); border-radius:999px;
+    padding:5px 12px 5px 10px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  }
+  .verif-power-btn:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+  .verif-power-btn::before{
+    content:''; width:7px; height:7px; border-radius:50%; background:var(--good); flex:none;
+  }
+  .verif-power-btn[aria-pressed="false"]{ color:var(--text-muted); }
+  .verif-power-btn[aria-pressed="false"]::before{ background:var(--text-muted); }
+  .verif-off-note{ color:var(--text-muted); font-size:13px; }
   .hier-blocks{ display:flex; flex-direction:column; gap:10px; }
   .ga-block{ background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .ga-block > summary{ list-style:none; cursor:pointer; padding:13px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:space-between; }
@@ -576,14 +594,6 @@
 
   <section>
     <div class="section-head">
-      <h2>Verificação · Base de dados x Hierarquia</h2>
-      <span class="hint">confere se todo colaborador da base de ponto tem GA/GO definidos</span>
-    </div>
-    <div class="card" id="verif-body"></div>
-  </section>
-
-  <section>
-    <div class="section-head">
       <h2>Colaboradores por hierarquia</h2>
       <span class="hint" id="hier-total-hint"></span>
     </div>
@@ -592,6 +602,15 @@
       <button type="button" id="hier-collapse">Recolher todos</button>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Verificação · Base de dados x Hierarquia</h2>
+      <span class="hint">confere se todo colaborador da base de ponto tem GA/GO definidos</span>
+      <button type="button" class="verif-power-btn" id="verif-power-btn" aria-pressed="true">Ativada</button>
+    </div>
+    <div class="card" id="verif-body"></div>
   </section>
 
   <footer>
@@ -816,6 +835,25 @@ function authRemoveUser(username){
 
 const STORAGE_RAW = 'painelInfracoes.raw.v1';
 const STORAGE_HIER = 'painelInfracoes.hier.v1';
+// liga/desliga do bloco "Verificação · Base de dados x Hierarquia" — preferência de tela,
+// por navegador, igual ao tema claro/escuro (não é um dado compartilhado, então não sincroniza
+// pelo Supabase).
+const VERIF_KEY = 'painelInfracoes.verifOn.v1';
+function verifEnabled(){
+  try { return localStorage.getItem(VERIF_KEY) !== '0'; } catch(e) { return true; }
+}
+function applyVerifButtonState(){
+  const btn = document.getElementById('verif-power-btn');
+  if (!btn) return;
+  const on = verifEnabled();
+  btn.setAttribute('aria-pressed', String(on));
+  btn.textContent = on ? 'Ativada' : 'Desativada';
+}
+function setVerifEnabled(on){
+  try { localStorage.setItem(VERIF_KEY, on ? '1' : '0'); } catch(e) {}
+  applyVerifButtonState();
+  renderVerification();
+}
 
 /* ---------------- Supabase: sincroniza os dados entre todos os dispositivos ----------------
    Leitura é pública (qualquer um vê os mesmos dados); escrita exige um usuário autenticado
@@ -1141,34 +1179,54 @@ function toHHMMCell(v){
   if (v instanceof Date) return pad2(v.getHours())+':'+pad2(v.getMinutes());
   return null;
 }
+// normaliza texto vindo da planilha: colapsa espaços duplos/tabs e tira sobra nas pontas.
+// existe porque um espaço a mais no NOME (comum em cola de Excel) já é o bastante pra quebrar
+// o casamento com a Hierarquia — a pessoa aparece como "sem GA/GO" sem nada estar de fato errado.
+function normText(v){
+  return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : v;
+}
 async function parseBaseFile(file){
   const wb = await readWorkbook(file);
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json(sheet, {defval:null});
-  const rows = json.map(row => ({
+  const totalLidas = json.length;
+  const validas = json.map(row => ({
     data: toISODateCell(row['DATAREFERENCIA']),
-    funcid: row['FUNCID'],
-    nome: row['NOME'],
-    funcao: row['FUNCAO'],
-    ccusto: row['CODCCUSTO'],
-    bu: row['BU'],
-    subbu: row['SUB BU'],
+    funcid: normText(row['FUNCID']),
+    nome: normText(row['NOME']),
+    funcao: normText(row['FUNCAO']),
+    ccusto: normText(row['CODCCUSTO']),
+    bu: normText(row['BU']),
+    subbu: normText(row['SUB BU']),
     entrada: toHHMMCell(row['PRIMEIRA_ENTRADA']),
     saida: toHHMMCell(row['ULTIMA_SAIDA']),
     d7: Number(row['>7 DIAS TRAB']) || 0,
     interj: Number(row['INTERJORNADA']) || 0,
     hex: Number(row['> 2 HORAS EXTRAS']) || 0,
   })).filter(r => r.nome && r.data);
-  if (!rows.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (DATAREFERENCIA, NOME, >7 DIAS TRAB, INTERJORNADA, > 2 HORAS EXTRAS...).');
-  return rows;
+  if (!validas.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (DATAREFERENCIA, NOME, >7 DIAS TRAB, INTERJORNADA, > 2 HORAS EXTRAS...).');
+  // mesma pessoa + mesmo dia duas vezes na planilha (comum quando a base vem de uma
+  // exportação reprocessada) — mantém só a última ocorrência, igual a chave única do Supabase
+  // (data,funcid), pra nunca contar a mesma infração duas vezes na análise.
+  const porChave = new Map();
+  validas.forEach(r => porChave.set(r.data + '|' + r.funcid, r));
+  const rows = [...porChave.values()];
+  return { rows, totalLidas, descartadas: totalLidas - validas.length, duplicadas: validas.length - rows.length };
 }
 async function parseHierFile(file){
   const wb = await readWorkbook(file);
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json(sheet, {defval:null});
-  const entries = json.map(row => ({ go: row['GO'], ga: row['GA'], nome: row['NOME'] })).filter(r => r.nome && r.ga);
-  if (!entries.length) throw new Error('Nenhum vínculo GO/GA/NOME encontrado — confira os cabeçalhos das colunas.');
-  return entries;
+  const totalLidas = json.length;
+  const validas = json.map(row => ({ go: normText(row['GO']), ga: normText(row['GA']), nome: normText(row['NOME']) })).filter(r => r.nome && r.ga);
+  if (!validas.length) throw new Error('Nenhum vínculo GO/GA/NOME encontrado — confira os cabeçalhos das colunas.');
+  // mesmo colaborador aparecendo mais de uma vez na planilha — fica só o último vínculo,
+  // senão a contagem de "atualizado/novo" no aviso final ficaria inflada e a análise passaria
+  // a mostrar um GA que nem é o vigente pra essa pessoa.
+  const porNome = new Map();
+  validas.forEach(r => porNome.set(r.nome, r));
+  const entries = [...porNome.values()];
+  return { entries, totalLidas, descartadas: totalLidas - validas.length, duplicadas: validas.length - entries.length };
 }
 
 document.getElementById('file-base').addEventListener('change', async evt => {
@@ -1177,10 +1235,18 @@ document.getElementById('file-base').addEventListener('change', async evt => {
   if (!file) return;
   if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
   try {
-    STATE.raw = await parseBaseFile(file);
+    const parsed = await parseBaseFile(file);
+    STATE.raw = parsed.rows;
     STATE.usingDefault = false;
     saveToStorage();
     recomputeAndRender();
+    // avisa quando a planilha trouxe algo que não entrou na análise (linha sem nome/data,
+    // ou a mesma pessoa+dia repetida) — pra nunca sincronizar um número sem o usuário saber
+    // que ele é diferente da contagem de linhas da planilha original.
+    const ressalvas = [];
+    if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem nome/data ignorada(s)');
+    if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' linha(s) duplicada(s) (mesma pessoa e dia) unificada(s)');
+    const sufixoFidelidade = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
     if (await hasSupabaseWriteSession()) {
       try {
         await withRetry(() => upsertBaseToSupabase(STATE.raw, STATE.hierMap), 3, 2000);
@@ -1188,17 +1254,17 @@ document.getElementById('file-base').addEventListener('change', async evt => {
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
         recomputeAndRender();
-        showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"');
+        showToast('Base importada e sincronizada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '"' + sufixoFidelidade);
       } catch(syncErr) {
         console.error('Base salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'base', arquivo: file.name };
         recomputeAndRender();
-        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.');
+        showToast('Base importada: ' + STATE.raw.length + ' registro(s), mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.' + sufixoFidelidade);
       }
     } else {
       STATE.pendingSync = { tipo: 'base', arquivo: file.name };
       recomputeAndRender();
-      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).');
+      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).' + sufixoFidelidade);
     }
     // atualiza a data/hora exibida dentro da caixa "Importar dados", se ela estiver aberta agora
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
@@ -1211,9 +1277,9 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
   if (!file) return;
   if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
   try {
-    const entries = await parseHierFile(file);
+    const parsed = await parseHierFile(file);
     let updated = 0, added = 0;
-    entries.forEach(e => {
+    parsed.entries.forEach(e => {
       const go = e.go || e.ga;
       if (STATE.hierMap[e.nome]) updated++; else added++;
       STATE.hierMap[e.nome] = { ga: e.ga, go };
@@ -1221,6 +1287,10 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     STATE.usingDefault = false;
     saveToStorage();
     recomputeAndRender();
+    const ressalvas = [];
+    if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem nome/GA ignorada(s)');
+    if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' colaborador(es) repetido(s) na planilha (ficou o último vínculo)');
+    const sufixoFidelidade = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
     if (await hasSupabaseWriteSession()) {
       try {
         await withRetry(() => upsertHierToSupabase(STATE.hierMap), 3, 2000);
@@ -1228,17 +1298,17 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
         recomputeAndRender();
-        showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"');
+        showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"' + sufixoFidelidade);
       } catch(syncErr) {
         console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
         recomputeAndRender();
-        showToast('Hierarquia compatibilizada, mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.');
+        showToast('Hierarquia compatibilizada, mas não deu pra sincronizar agora — salva só neste navegador. Anexe de novo pra tentar sincronizar outra vez.' + sufixoFidelidade);
       }
     } else {
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
       recomputeAndRender();
-      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).');
+      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).' + sufixoFidelidade);
     }
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
@@ -2120,9 +2190,18 @@ function computeVerification(){
   return { semHierarquia, naHierarquiaSemDados, totalBase: nomesNaBase.size, totalHier: Object.keys(STATE.hierMap).length };
 }
 function renderVerification(){
-  const v = computeVerification();
   const el = document.getElementById('verif-body');
   clear(el);
+  if (!verifEnabled()) {
+    // desligado: nem calcula (poupa a varredura de toda a base a cada troca de ciclo/filtro
+    // pra quem não usa esse bloco), só deixa o título + o botão pra religar visíveis.
+    const off = document.createElement('p');
+    off.className = 'verif-off-note';
+    off.textContent = 'Verificação desativada — clique em "Desativada" acima para reativar.';
+    el.appendChild(off);
+    return;
+  }
+  const v = computeVerification();
   const summary = document.createElement('p');
   summary.className = 'verif-summary';
   summary.textContent = fmt(v.totalBase) + ' colaborador(es) na base de dados · ' + fmt(v.totalHier) + ' na hierarquia · ' +
@@ -2557,11 +2636,17 @@ window.addEventListener('storage', evt => {
   } else if (evt.key === THEME_KEY) {
     document.documentElement.setAttribute('data-theme', evt.newValue || (systemPrefersDark() ? 'dark' : 'light'));
     recomputeAndRender();
+  } else if (evt.key === VERIF_KEY) {
+    applyVerifButtonState();
+    renderVerification();
   }
 });
 
+document.getElementById('verif-power-btn').addEventListener('click', () => setVerifEnabled(!verifEnabled()));
+
 (async function boot(){
   enhanceSections();
+  applyVerifButtonState();
   tryLoadFromStorage();
   await loadAuth();
   updateRoleBadge();
