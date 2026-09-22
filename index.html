@@ -238,6 +238,11 @@
   .bars{ display:flex; flex-direction:column; gap:24px; }
   .bar-item{ display:grid; grid-template-columns:190px 1fr 46px; align-items:center; gap:10px; }
   @media (max-width:560px){ .bar-item{ grid-template-columns:104px 1fr 38px; gap:6px; } .bar-item .bname{ font-size:11px; } .bar-item .btotal{ font-size:11.5px; } }
+  /* barras dos painéis auxiliares mostram valor em R$ (bem mais largo que a contagem de
+     infrações de Infrações, que sempre coube nos 46px fixos) — última coluna vira auto em
+     vez de largura fixa, senão "R$ 20.784,11" ficava cortado na borda. */
+  .bar-item.wide-total{ grid-template-columns:190px 1fr auto; }
+  @media (max-width:560px){ .bar-item.wide-total{ grid-template-columns:104px 1fr auto; } }
   .bar-item .bname{ font-size:12px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   button.bname-link{
     background:none; border:none; padding:0; margin:0; cursor:pointer; text-align:left; font-family:var(--sans);
@@ -306,6 +311,10 @@
   /* ---------- extra dashboards grid ---------- */
   .dash-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
   @media (max-width:900px){ .dash-grid{ grid-template-columns:1fr; } }
+  /* mesma ideia do dash-grid, só que com 2 colunas — usada pelos gráficos por GO/GA dos
+     painéis auxiliares (Banco de Horas/DSR/Feriados), lado a lado no bloco "de cima". */
+  .dash-grid-2{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media (max-width:760px){ .dash-grid-2{ grid-template-columns:1fr; } }
   .dash-card h3{ font-size:12.5px; font-weight:600; margin-bottom:12px; color:var(--text-secondary); }
   .mini-bars{ display:flex; flex-direction:column; gap:8px; }
   .mini-bar-item{ display:grid; grid-template-columns:1fr 32px; align-items:center; gap:8px; }
@@ -361,6 +370,17 @@
   .verif-power-btn[aria-pressed="false"]::before{ background:var(--text-muted); }
   .verif-off-note{ color:var(--text-muted); font-size:13px; }
   .hier-blocks{ display:flex; flex-direction:column; gap:10px; }
+  /* nível GO dos painéis auxiliares — envolve os .ga-block do GO (que reaproveitam o mesmo
+     visual usado em "Colaboradores por hierarquia" de Infrações), só com um cabeçalho mais
+     forte pra deixar claro que aquilo ali é o total compilado de TODOS os GAs abaixo dele. */
+  .go-block{ background:var(--surface-raised); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:10px; }
+  .go-block > summary{ list-style:none; cursor:pointer; padding:14px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:space-between; background:var(--surface); }
+  .go-block > summary::-webkit-details-marker{ display:none; }
+  .go-block > summary .chevron{ width:16px; height:16px; flex:none; color:var(--text-muted); transition:transform .15s; display:inline-flex; align-items:center; justify-content:center; }
+  .go-block[open] > summary .chevron{ transform:rotate(90deg); }
+  .go-head-main{ display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 220px; }
+  .go-head-main .go-name{ font-size:14.5px; font-weight:700; }
+  .go-body{ padding:12px 14px 14px; }
   .ga-block{ background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .ga-block > summary{ list-style:none; cursor:pointer; padding:13px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:space-between; }
   .ga-block > summary::-webkit-details-marker{ display:none; }
@@ -719,7 +739,7 @@
   </div>
 
   <div id="tab-bh" class="tab-panel">
-    <section data-export="bh-tabela">
+    <section data-export="bh-kpi">
       <div class="section-head">
         <h2>Banco de Horas</h2>
         <span class="hint" id="bh-hint"></span>
@@ -731,36 +751,46 @@
       <div class="source-note" id="bh-source-note"></div>
       <input type="file" id="file-bh" accept=".xlsx" hidden>
       <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="bh-ciclo-select" title="Filtrar por ciclo (Limite Comp.)"></select>
+        <select class="cycle-select" id="bh-cycle-select" title="Filtrar por ciclo (mês)"></select>
+        <select class="cycle-select" id="bh-week-select" title="Filtrar por semana"></select>
+        <div class="periodo-filter" id="bh-periodo-filter">
+          <span class="periodo-label">Período</span>
+          <input type="date" id="bh-periodo-inicio" aria-label="Data inicial do período">
+          <span class="periodo-sep">até</span>
+          <input type="date" id="bh-periodo-fim" aria-label="Data final do período">
+          <button type="button" class="periodo-btn primary" id="bh-periodo-aplicar">Aplicar</button>
+          <button type="button" class="periodo-btn" id="bh-periodo-limpar" hidden>Limpar</button>
+        </div>
       </div>
       <div class="kpi-grid" id="bh-kpi-grid" style="margin-top:14px;"></div>
-      <div class="card table-scroll" style="margin-top:16px;">
-        <table>
-          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th class="num-col">Horas</th><th class="num-col">Valor</th><th class="num-col">Dias</th></tr></thead>
-          <tbody id="bh-rows"></tbody>
-        </table>
-      </div>
     </section>
 
-    <section data-export="bh-go">
+    <section data-export="bh-graficos">
       <div class="section-head">
-        <h2>Banco de Horas por GO (Gestor Operacional)</h2>
+        <h2>Banco de Horas por GO e GA</h2>
         <span class="hint" id="bh-go-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="bh-go-bars"></div></div>
+      <div class="dash-grid-2">
+        <div class="card dash-card"><h3>Por GO (Gestor Operacional)</h3><div class="bars" id="bh-go-bars"></div></div>
+        <div class="card dash-card"><h3>Por GA (Gestor de Área)</h3><div class="bars" id="bh-ga-bars"></div></div>
+      </div>
     </section>
 
-    <section data-export="bh-ga">
+    <section data-export="bh-hierarquia">
       <div class="section-head">
-        <h2>Banco de Horas por GA (Gestor de Área)</h2>
-        <span class="hint" id="bh-ga-hint"></span>
+        <h2>Banco de Horas por hierarquia</h2>
+        <span class="hint" id="bh-hier-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="bh-ga-bars"></div></div>
+      <div class="hier-toolbar">
+        <button type="button" id="bh-hier-expand">Expandir todos</button>
+        <button type="button" id="bh-hier-collapse">Recolher todos</button>
+      </div>
+      <div class="hier-blocks" id="bh-go-blocks"></div>
     </section>
   </div>
 
   <div id="tab-dsr" class="tab-panel">
-    <section data-export="dsr-tabela">
+    <section data-export="dsr-kpi">
       <div class="section-head">
         <h2>DSR</h2>
         <span class="hint" id="dsr-hint"></span>
@@ -772,36 +802,46 @@
       <div class="source-note" id="dsr-source-note"></div>
       <input type="file" id="file-dsr" accept=".xlsx" hidden>
       <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="dsr-ciclo-select" title="Filtrar por ciclo"></select>
+        <select class="cycle-select" id="dsr-cycle-select" title="Filtrar por ciclo (mês)"></select>
+        <select class="cycle-select" id="dsr-week-select" title="Filtrar por semana"></select>
+        <div class="periodo-filter" id="dsr-periodo-filter">
+          <span class="periodo-label">Período</span>
+          <input type="date" id="dsr-periodo-inicio" aria-label="Data inicial do período">
+          <span class="periodo-sep">até</span>
+          <input type="date" id="dsr-periodo-fim" aria-label="Data final do período">
+          <button type="button" class="periodo-btn primary" id="dsr-periodo-aplicar">Aplicar</button>
+          <button type="button" class="periodo-btn" id="dsr-periodo-limpar" hidden>Limpar</button>
+        </div>
       </div>
       <div class="kpi-grid" id="dsr-kpi-grid" style="margin-top:14px;"></div>
-      <div class="card table-scroll" style="margin-top:16px;">
-        <table>
-          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th class="num-col">Ocorrências</th><th class="num-col">Horas</th><th class="num-col">Valor</th></tr></thead>
-          <tbody id="dsr-rows"></tbody>
-        </table>
-      </div>
     </section>
 
-    <section data-export="dsr-go">
+    <section data-export="dsr-graficos">
       <div class="section-head">
-        <h2>DSR por GO (Gestor Operacional)</h2>
+        <h2>DSR por GO e GA</h2>
         <span class="hint" id="dsr-go-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="dsr-go-bars"></div></div>
+      <div class="dash-grid-2">
+        <div class="card dash-card"><h3>Por GO (Gestor Operacional)</h3><div class="bars" id="dsr-go-bars"></div></div>
+        <div class="card dash-card"><h3>Por GA (Gestor de Área)</h3><div class="bars" id="dsr-ga-bars"></div></div>
+      </div>
     </section>
 
-    <section data-export="dsr-ga">
+    <section data-export="dsr-hierarquia">
       <div class="section-head">
-        <h2>DSR por GA (Gestor de Área)</h2>
-        <span class="hint" id="dsr-ga-hint"></span>
+        <h2>DSR por hierarquia</h2>
+        <span class="hint" id="dsr-hier-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="dsr-ga-bars"></div></div>
+      <div class="hier-toolbar">
+        <button type="button" id="dsr-hier-expand">Expandir todos</button>
+        <button type="button" id="dsr-hier-collapse">Recolher todos</button>
+      </div>
+      <div class="hier-blocks" id="dsr-go-blocks"></div>
     </section>
   </div>
 
   <div id="tab-feriado" class="tab-panel">
-    <section data-export="feriado-tabela">
+    <section data-export="feriado-kpi">
       <div class="section-head">
         <h2>Feriados</h2>
         <span class="hint" id="feriado-hint"></span>
@@ -813,31 +853,41 @@
       <div class="source-note" id="feriado-source-note"></div>
       <input type="file" id="file-feriado" accept=".xlsx" hidden>
       <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="feriado-ciclo-select" title="Filtrar por ciclo"></select>
+        <select class="cycle-select" id="feriado-cycle-select" title="Filtrar por ciclo (mês)"></select>
+        <select class="cycle-select" id="feriado-week-select" title="Filtrar por semana"></select>
+        <div class="periodo-filter" id="feriado-periodo-filter">
+          <span class="periodo-label">Período</span>
+          <input type="date" id="feriado-periodo-inicio" aria-label="Data inicial do período">
+          <span class="periodo-sep">até</span>
+          <input type="date" id="feriado-periodo-fim" aria-label="Data final do período">
+          <button type="button" class="periodo-btn primary" id="feriado-periodo-aplicar">Aplicar</button>
+          <button type="button" class="periodo-btn" id="feriado-periodo-limpar" hidden>Limpar</button>
+        </div>
       </div>
       <div class="kpi-grid" id="feriado-kpi-grid" style="margin-top:14px;"></div>
-      <div class="card table-scroll" style="margin-top:16px;">
-        <table>
-          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th>Tipo</th><th class="num-col">Ocorrências</th><th class="num-col">Horas</th><th class="num-col">Valor</th></tr></thead>
-          <tbody id="feriado-rows"></tbody>
-        </table>
-      </div>
     </section>
 
-    <section data-export="feriado-go">
+    <section data-export="feriado-graficos">
       <div class="section-head">
-        <h2>Feriados por GO (Gestor Operacional)</h2>
+        <h2>Feriados por GO e GA</h2>
         <span class="hint" id="feriado-go-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="feriado-go-bars"></div></div>
+      <div class="dash-grid-2">
+        <div class="card dash-card"><h3>Por GO (Gestor Operacional)</h3><div class="bars" id="feriado-go-bars"></div></div>
+        <div class="card dash-card"><h3>Por GA (Gestor de Área)</h3><div class="bars" id="feriado-ga-bars"></div></div>
+      </div>
     </section>
 
-    <section data-export="feriado-ga">
+    <section data-export="feriado-hierarquia">
       <div class="section-head">
-        <h2>Feriados por GA (Gestor de Área)</h2>
-        <span class="hint" id="feriado-ga-hint"></span>
+        <h2>Feriados por hierarquia</h2>
+        <span class="hint" id="feriado-hier-hint"></span>
       </div>
-      <div class="card"><div class="bars" id="feriado-ga-bars"></div></div>
+      <div class="hier-toolbar">
+        <button type="button" id="feriado-hier-expand">Expandir todos</button>
+        <button type="button" id="feriado-hier-collapse">Recolher todos</button>
+      </div>
+      <div class="hier-blocks" id="feriado-go-blocks"></div>
     </section>
   </div>
 
@@ -3122,15 +3172,15 @@ function exportSectionToExcel(exportId){
   // painéis auxiliares (Banco de Horas/DSR/Feriados) têm seu próprio STATE_* e lastDerived,
   // separado do STATE.lastDerived do painel de Infrações — desvia pra eles antes de qualquer
   // coisa Infrações-específica abaixo.
-  if (exportId === 'bh-tabela') return exportAuxToExcel(STATE_BH, 'bh', 'Banco de Horas');
-  if (exportId === 'dsr-tabela') return exportAuxToExcel(STATE_DSR, 'dsr', 'DSR');
-  if (exportId === 'feriado-tabela') return exportAuxToExcel(STATE_FERIADO, 'feriado', 'Feriados');
-  if (exportId === 'bh-go') return exportAuxPorCampo(STATE_BH, 'go', 'bh');
-  if (exportId === 'bh-ga') return exportAuxPorCampo(STATE_BH, 'ga', 'bh');
-  if (exportId === 'dsr-go') return exportAuxPorCampo(STATE_DSR, 'go', 'dsr');
-  if (exportId === 'dsr-ga') return exportAuxPorCampo(STATE_DSR, 'ga', 'dsr');
-  if (exportId === 'feriado-go') return exportAuxPorCampo(STATE_FERIADO, 'go', 'feriado');
-  if (exportId === 'feriado-ga') return exportAuxPorCampo(STATE_FERIADO, 'ga', 'feriado');
+  if (exportId === 'bh-kpi') return exportAuxKpi(STATE_BH, 'bh');
+  if (exportId === 'bh-graficos') return exportAuxGraficos(STATE_BH, 'bh');
+  if (exportId === 'bh-hierarquia') return exportAuxHierarquia(STATE_BH, BH_OPTS, 'bh');
+  if (exportId === 'dsr-kpi') return exportAuxKpi(STATE_DSR, 'dsr');
+  if (exportId === 'dsr-graficos') return exportAuxGraficos(STATE_DSR, 'dsr');
+  if (exportId === 'dsr-hierarquia') return exportAuxHierarquia(STATE_DSR, DSR_OPTS, 'dsr');
+  if (exportId === 'feriado-kpi') return exportAuxKpi(STATE_FERIADO, 'feriado');
+  if (exportId === 'feriado-graficos') return exportAuxGraficos(STATE_FERIADO, 'feriado');
+  if (exportId === 'feriado-hierarquia') return exportAuxHierarquia(STATE_FERIADO, FERIADO_OPTS, 'feriado');
 
   const d = STATE.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
@@ -3542,7 +3592,7 @@ function fmtHorasDecimais(dec){
 const STORAGE_BH = 'painelInfracoes.bh.v1';
 const STORAGE_DSR = 'painelInfracoes.dsr.v1';
 const STORAGE_FERIADO = 'painelInfracoes.feriado.v1';
-function novoEstadoAux(){ return { raw: [], cicloSel: null, usingSupabase: false, lastSync: null, pendingSync: null, lastDerived: null }; }
+function novoEstadoAux(){ return { raw: [], cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingSupabase: false, lastSync: null, pendingSync: null, lastDerived: null }; }
 let STATE_BH = novoEstadoAux();
 let STATE_DSR = novoEstadoAux();
 let STATE_FERIADO = novoEstadoAux();
@@ -3629,26 +3679,140 @@ async function upsertAuxToSupabase(rpc, rows){
   }
 }
 
-/* -------- deriva (ciclo selecionado + agregação por colaborador) -------- */
-function derivarAux(estado, camposLinha){
-  // camposLinha(r) -> { cicloDate, valores: {chave:numero, ...} } — cada tema informa como
-  // tirar a data de referência (pra achar o ciclo) e quais números somar por linha.
-  const enriquecidas = estado.raw.map(r => {
+/* -------- deriva (filtro Ciclo/Semana/Período — mesmo mecanismo de Infrações, só que operando
+   no STATE_* de cada painel auxiliar em vez do STATE global) -------- */
+// camposLinha(r) -> { refDate } — cada tema informa qual campo da linha é a data de referência
+// (LIMITE COMP. no Banco de Horas, DATA em DSR/Feriados) pra achar ciclo/semana e filtrar período.
+function enrichAuxRows(raw, camposLinha){
+  const out = [];
+  raw.forEach(r => {
     const info = camposLinha(r);
-    const c = cicloOf(info.cicloDate);
+    const c = cicloOf(info.refDate);
+    const w = weekOf(info.refDate);
+    if (!c || !w) return;
     const h = STATE.hierMap[r.nome] || {};
-    return Object.assign({}, r, info, {
-      cicloKey: c ? c.key : null, cicloLabel: c ? c.label : null,
+    out.push(Object.assign({}, r, info, {
       ga: h.ga || 'SEM HIERARQUIA', go: h.go || h.ga || 'SEM HIERARQUIA',
-    });
-  }).filter(r => r.cicloKey);
-  const ciclos = [...new Map(enriquecidas.map(r => [r.cicloKey, r.cicloLabel])).entries()]
-    .sort((a,b) => b[0].localeCompare(a[0])).map(([key,label]) => ({key,label}));
-  if (!ciclos.length) return null;
+      cicloKey: c.key, cicloLabel: c.label, weekKey: w.key, weekLabel: w.label, weekShortLabel: w.shortLabel,
+    }));
+  });
+  return out;
+}
+function distinctCiclosAux(rows){
+  const map = new Map();
+  rows.forEach(r => { if (!map.has(r.cicloKey)) map.set(r.cicloKey, r.cicloLabel); });
+  return [...map.entries()].sort((a,b) => b[0].localeCompare(a[0])).map(([key,label]) => ({key,label}));
+}
+function distinctSemanasAux(rows){
+  const map = new Map();
+  rows.forEach(r => { if (!map.has(r.weekKey)) map.set(r.weekKey, { label:r.weekLabel, shortLabel:r.weekShortLabel }); });
+  return [...map.entries()].sort((a,b) => a[0].localeCompare(b[0])).map(([key,v]) => ({key, label:v.label, shortLabel:v.shortLabel}));
+}
+function currentPeriodAux(estado, enriched, ciclos, semanas){
+  if (estado.filterMode === 'periodo' && estado.periodoInicio && estado.periodoFim) {
+    if (estado.periodoInicio > estado.periodoFim) {
+      estado.filterMode = 'ciclo';
+    } else {
+      const ini = estado.periodoInicio, fim = estado.periodoFim;
+      const rows = enriched.filter(r => r.refDate >= ini && r.refDate <= fim);
+      const label = fmtDMY(parseISODate(ini)) + ' a ' + fmtDMY(parseISODate(fim));
+      return { type:'periodo', key: ini+'_'+fim, label, rows };
+    }
+  }
+  if (estado.filterMode === 'semana' && estado.semanaSel) {
+    if (!semanas.some(s => s.key === estado.semanaSel)) {
+      estado.filterMode = 'ciclo';
+      estado.semanaSel = null;
+    } else {
+      const atual = semanas.find(s => s.key === estado.semanaSel);
+      const rows = enriched.filter(r => r.weekKey === atual.key);
+      return { type:'semana', key:atual.key, label:atual.label, rows };
+    }
+  }
+  if (estado.cicloSel === 'TODOS') return { type:'ciclo', key:'TODOS', label:'Todos os ciclos', rows: enriched };
   if (!estado.cicloSel || !ciclos.some(c => c.key === estado.cicloSel)) estado.cicloSel = ciclos[0].key;
-  const rows = enriquecidas.filter(r => r.cicloKey === estado.cicloSel);
-  const cicloAtual = ciclos.find(c => c.key === estado.cicloSel);
-  return { ciclos, cicloSel: estado.cicloSel, cicloLabel: cicloAtual.label, rows };
+  const atual = ciclos.find(c => c.key === estado.cicloSel);
+  const rows = enriched.filter(r => r.cicloKey === atual.key);
+  return { type:'ciclo', key:atual.key, label:atual.label, rows };
+}
+function derivarAux(estado, camposLinha){
+  const enriched = enrichAuxRows(estado.raw, camposLinha);
+  const ciclos = distinctCiclosAux(enriched);
+  if (!ciclos.length) return null;
+  const semanas = distinctSemanasAux(enriched);
+  const period = currentPeriodAux(estado, enriched, ciclos, semanas);
+  return { ciclos, semanas, periodType: period.type, periodKey: period.key, periodLabel: period.label, rows: period.rows };
+}
+// mesmo filtro Ciclo/Semana/Período (com o mesmo <select>/<input type=date> visual) usado no
+// cabeçalho de Infrações — só que um jogo de campos por painel auxiliar (prefixo bh-/dsr-/feriado-)
+// e guardado no STATE_* daquele painel, não no STATE global.
+function renderAuxFilterRow(prefix, estado, d, onChange){
+  const cycleSel = document.getElementById(prefix+'-cycle-select');
+  const weekSel = document.getElementById(prefix+'-week-select');
+  clear(cycleSel); clear(weekSel);
+  const optAll = document.createElement('option');
+  optAll.value = 'TODOS'; optAll.textContent = 'TODOS OS CICLOS';
+  if (d.periodType === 'ciclo' && d.periodKey === 'TODOS') optAll.selected = true;
+  cycleSel.appendChild(optAll);
+  d.ciclos.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.key; o.textContent = c.label;
+    if (d.periodType === 'ciclo' && c.key === d.periodKey) o.selected = true;
+    cycleSel.appendChild(o);
+  });
+  cycleSel.onchange = () => { estado.filterMode = 'ciclo'; estado.cicloSel = cycleSel.value; onChange(); };
+
+  const optNone = document.createElement('option');
+  optNone.value = ''; optNone.textContent = 'Todas as semanas';
+  weekSel.appendChild(optNone);
+  [...d.semanas].reverse().forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.key; o.textContent = s.label;
+    if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
+    weekSel.appendChild(o);
+  });
+  weekSel.onchange = () => {
+    if (!weekSel.value) { estado.filterMode = 'ciclo'; estado.semanaSel = null; }
+    else { estado.filterMode = 'semana'; estado.semanaSel = weekSel.value; }
+    onChange();
+  };
+
+  document.getElementById(prefix+'-periodo-inicio').value = estado.periodoInicio || '';
+  document.getElementById(prefix+'-periodo-fim').value = estado.periodoFim || '';
+  document.getElementById(prefix+'-periodo-limpar').hidden = d.periodType !== 'periodo';
+}
+// os botões Aplicar/Limpar do filtro Período são fixos no HTML (não recriados a cada render) —
+// wireAuxPeriodoButtons() os conecta uma única vez, no boot.
+function wireAuxPeriodoButtons(prefix, estado, renderFn){
+  document.getElementById(prefix+'-periodo-aplicar').addEventListener('click', () => {
+    const ini = document.getElementById(prefix+'-periodo-inicio').value;
+    const fim = document.getElementById(prefix+'-periodo-fim').value;
+    if (!ini || !fim) { showToast('Escolha a data inicial e a data final do período.'); return; }
+    if (ini > fim) { showToast('A data inicial precisa ser antes (ou igual) da data final.'); return; }
+    estado.filterMode = 'periodo'; estado.periodoInicio = ini; estado.periodoFim = fim;
+    renderFn();
+  });
+  document.getElementById(prefix+'-periodo-limpar').addEventListener('click', () => {
+    estado.filterMode = 'ciclo'; estado.periodoInicio = null; estado.periodoFim = null;
+    document.getElementById(prefix+'-periodo-inicio').value = '';
+    document.getElementById(prefix+'-periodo-fim').value = '';
+    renderFn();
+  });
+}
+// listas de datas/horários por colaborador (mesma ideia do "colab-dates" de Infrações: mostra
+// só as primeiras ocorrências, com "+N" pro resto, pra não estourar a célula).
+const MAX_DETALHES_VISIVEIS = 4;
+function datasLimiteLabel(p){
+  const datas = [...new Set((p.detalhes||[]).map(d => d.limiteComp).filter(Boolean))].sort();
+  if (!datas.length) return '—';
+  const fmtd = datas.map(iso => fmtDMY(parseISODate(iso)));
+  return fmtd.slice(0, MAX_DETALHES_VISIVEIS).join(', ') + (fmtd.length > MAX_DETALHES_VISIVEIS ? ' +' + (fmtd.length-MAX_DETALHES_VISIVEIS) : '');
+}
+function datasHorariosLabel(p){
+  const linhas = (p.detalhes||[]).slice().sort((a,b) => (a.data||'').localeCompare(b.data||''))
+    .map(d => fmtDM(parseISODate(d.data)) + ' ' + (d.horaInicio||'--:--') + '–' + (d.horaFim||'--:--'));
+  if (!linhas.length) return '—';
+  return linhas.slice(0, MAX_DETALHES_VISIVEIS).join(', ') + (linhas.length > MAX_DETALHES_VISIVEIS ? ' +' + (linhas.length-MAX_DETALHES_VISIVEIS) : '');
 }
 
 /* -------- gráficos por GO/GA (painéis auxiliares) --------
@@ -3669,7 +3833,7 @@ function renderAuxBars(containerId, rows, corVar, fmtFn){
   const max = Math.max(...rows.map(r => Math.abs(r.valor)), 1);
   rows.forEach(r => {
     const item = document.createElement('div');
-    item.className = 'bar-item';
+    item.className = 'bar-item wide-total';
     const w = Math.abs(r.valor)/max*100;
     item.innerHTML =
       '<span class="bname" title="'+esc(r.nome)+'">'+esc(r.nome)+'</span>' +
@@ -3688,25 +3852,156 @@ function renderAuxBars(containerId, rows, corVar, fmtFn){
     el.appendChild(item);
   });
 }
-function exportAuxPorCampo(estado, campo, tema){
+function exportAuxGraficos(estado, tema){
   const d = estado.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
   if (!xlsxDisponivel()) return;
   const wb = XLSX.utils.book_new();
-  const dados = campo === 'go' ? d.porGo : d.porGa;
-  const rows = dados.map(x => ({ [campo.toUpperCase()]: x.nome, Total: x.valor }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), ('Por '+campo.toUpperCase()).slice(0,31));
-  baixarPlanilha(wb, tema + '-por-' + campo + '-' + nomeArquivoSeguro(d.cicloLabel));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.porGo.map(x => ({ GO:x.nome, Total:x.valor }))), 'Por GO');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.porGa.map(x => ({ GA:x.nome, Total:x.valor }))), 'Por GA');
+  baixarPlanilha(wb, tema + '-por-go-ga-' + nomeArquivoSeguro(d.periodLabel));
+}
+function exportAuxKpi(estado, campo){
+  const d = estado.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  const rows = campo === 'bh'
+    ? [
+        { Indicador:'Total em horas', Valor: fmtHorasDecimais(d.totalHoras) },
+        { Indicador:'Total em valor', Valor: d.totalVlr },
+        { Indicador:'Total em dias', Valor: Math.round(d.totalDias*10)/10 },
+        { Indicador:'Colaboradores', Valor: d.pessoas.length },
+      ]
+    : [
+        { Indicador:'Ocorrências', Valor: d.totalOcorrencias },
+        { Indicador:'Total em horas', Valor: Math.round(d.totalHoras*100)/100 },
+        { Indicador:'Total em valor', Valor: d.totalValor },
+        { Indicador:'Colaboradores', Valor: d.pessoas.length },
+      ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Indicadores');
+  baixarPlanilha(wb, 'indicadores-' + campo + '-' + nomeArquivoSeguro(d.periodLabel));
+}
+
+/* -------- hierarquia GO > GA > colaboradores (painéis auxiliares) --------
+   Mesmo espírito do bloco "Colaboradores por hierarquia" de Infrações, só que com mais um
+   nível: um bloco por GO (recolhível, compila o total de TODOS os GAs abaixo dele) contendo
+   os blocos de GA (recolhíveis, cada um lista todos os colaboradores daquela GA). */
+function buildGoGaBlocks(pessoas){
+  const porGo = new Map();
+  pessoas.forEach(p => {
+    if (!porGo.has(p.go)) porGo.set(p.go, new Map());
+    const gasMap = porGo.get(p.go);
+    if (!gasMap.has(p.ga)) gasMap.set(p.ga, []);
+    gasMap.get(p.ga).push(p);
+  });
+  return [...porGo.entries()].map(([go, gasMap]) => ({
+    go,
+    gas: [...gasMap.entries()].map(([ga, pessoasGa]) => ({ ga, go, pessoas: pessoasGa })),
+  }));
+}
+// opts: { columns:[{label,num}], statsFor(pessoas)=>[{n,l}], sortValue(p)=>number, cellsFor(p)=>htmlTds }
+function renderAuxGoGaBlocks(containerId, blocks, opts){
+  const wrap = document.getElementById(containerId);
+  clear(wrap);
+  if (!blocks.length) {
+    wrap.innerHTML = '<p style="font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0;">Sem dados no período selecionado.</p>';
+    return;
+  }
+  const contagemGo = b => b.gas.reduce((s,g)=>s+g.pessoas.length,0);
+  [...blocks].sort((a,b) => contagemGo(b)-contagemGo(a)).forEach(goBlock => {
+    const todasPessoasGo = goBlock.gas.flatMap(g => g.pessoas);
+    const details = document.createElement('details');
+    details.className = 'go-block';
+    details.open = true;
+    const statsGo = opts.statsFor(todasPessoasGo);
+    const summary = document.createElement('summary');
+    summary.innerHTML =
+      '<div class="go-head-main">' +
+        '<svg class="chevron" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+        '<span class="go-name">'+esc(goBlock.go)+'</span>' +
+      '</div>' +
+      '<div class="ga-head-stats">' + statsGo.map(s => '<div class="ga-stat"><span class="n num">'+esc(String(s.n))+'</span><span class="l">'+esc(s.l)+'</span></div>').join('') + '</div>';
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'go-body';
+    const gaWrap = document.createElement('div');
+    gaWrap.className = 'hier-blocks';
+    [...goBlock.gas].sort((a,b) => b.pessoas.length-a.pessoas.length).forEach(gaBlock => {
+      const gaDetails = document.createElement('details');
+      gaDetails.className = 'ga-block';
+      gaDetails.open = true;
+      const statsGa = opts.statsFor(gaBlock.pessoas);
+      const gaSummary = document.createElement('summary');
+      gaSummary.innerHTML =
+        '<div class="ga-head-main">' +
+          '<svg class="chevron" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          '<div class="ga-head-text"><div class="ga-name">'+esc(gaBlock.ga)+'</div><div class="go-line">GO: '+esc(gaBlock.go)+'</div></div>' +
+        '</div>' +
+        '<div class="ga-head-stats">' + statsGa.map(s => '<div class="ga-stat"><span class="n num">'+esc(String(s.n))+'</span><span class="l">'+esc(s.l)+'</span></div>').join('') + '</div>';
+      gaDetails.appendChild(gaSummary);
+
+      const gaBody = document.createElement('div');
+      gaBody.className = 'ga-body';
+      const table = document.createElement('table');
+      table.className = 'ga-table';
+      table.innerHTML = '<thead><tr><th>Colaborador</th>' + opts.columns.map(c => '<th'+(c.num?' class="num-col"':'')+'>'+esc(c.label)+'</th>').join('') + '</tr></thead><tbody></tbody>';
+      const tbody = table.querySelector('tbody');
+      [...gaBlock.pessoas].sort((a,b) => opts.sortValue(b)-opts.sortValue(a)).forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td class="name">'+esc(p.nome)+'</td>' + opts.cellsFor(p);
+        tbody.appendChild(tr);
+      });
+      gaBody.appendChild(table);
+      gaDetails.appendChild(gaBody);
+      gaWrap.appendChild(gaDetails);
+    });
+    body.appendChild(gaWrap);
+    details.appendChild(body);
+    wrap.appendChild(details);
+  });
+}
+function wireHierToolbar(prefix, containerId){
+  const expandBtn = document.getElementById(prefix+'-hier-expand');
+  const collapseBtn = document.getElementById(prefix+'-hier-collapse');
+  if (expandBtn) expandBtn.onclick = () => document.querySelectorAll('#'+containerId+' details').forEach(x => x.open = true);
+  if (collapseBtn) collapseBtn.onclick = () => document.querySelectorAll('#'+containerId+' details').forEach(x => x.open = false);
+}
+function exportAuxHierarquia(estado, opts, tema){
+  const d = estado.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  const rows = [];
+  d.goGaBlocks.forEach(goBlock => goBlock.gas.forEach(gaBlock => gaBlock.pessoas.forEach(p => rows.push(opts.exportRow(p, gaBlock.go, gaBlock.ga)))));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Colaboradores');
+  baixarPlanilha(wb, tema + '-hierarquia-' + nomeArquivoSeguro(d.periodLabel));
 }
 
 /* -------- Banco de Horas -------- */
+const BH_OPTS = {
+  columns: [ {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Dias', num:true}, {label:'Data Limite'} ],
+  statsFor: pessoas => [
+    { n: pessoas.length, l:'Colaboradores' },
+    { n: fmtHorasDecimais(pessoas.reduce((a,p)=>a+p.horasDec,0)), l:'Horas' },
+    { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.vlr,0)), l:'Valor' },
+  ],
+  sortValue: p => p.vlr,
+  cellsFor: p =>
+    '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
+    '<td class="num-col num">'+esc(fmtMoeda(p.vlr))+'</td>'+
+    '<td class="num-col num">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
+    '<td>'+esc(datasLimiteLabel(p))+'</td>',
+  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p) }),
+};
 function deriveBH(){
-  const d = derivarAux(STATE_BH, r => ({ cicloDate: r.limiteComp, valores:null }));
+  const d = derivarAux(STATE_BH, r => ({ refDate: r.limiteComp }));
   if (!d) return null;
   const porPessoa = new Map();
   d.rows.forEach(r => {
-    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, horasDec:0, vlr:0, dias:0 });
-    const p = porPessoa.get(r.nome); p.horasDec += r.horasDec; p.vlr += r.vlr; p.dias += r.dias;
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, horasDec:0, vlr:0, dias:0, detalhes:[] });
+    const p = porPessoa.get(r.nome); p.horasDec += r.horasDec; p.vlr += r.vlr; p.dias += r.dias; p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.vlr - a.vlr);
   const totalHoras = pessoas.reduce((a,p)=>a+p.horasDec,0);
@@ -3714,28 +4009,28 @@ function deriveBH(){
   const totalDias = pessoas.reduce((a,p)=>a+p.dias,0);
   const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.vlr);
   const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.vlr);
-  return { ciclos: d.ciclos, cicloSel: d.cicloSel, cicloLabel: d.cicloLabel, pessoas, totalHoras, totalVlr, totalDias, porGo, porGa };
+  const goGaBlocks = buildGoGaBlocks(pessoas);
+  return { ciclos:d.ciclos, semanas:d.semanas, periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel, pessoas, totalHoras, totalVlr, totalDias, porGo, porGa, goGaBlocks };
 }
 function renderBH(){
   const d = deriveBH();
   STATE_BH.lastDerived = d;
   const kpiEl = document.getElementById('bh-kpi-grid');
-  const rowsEl = document.getElementById('bh-rows');
-  const selEl = document.getElementById('bh-ciclo-select');
-  clear(kpiEl); clear(rowsEl); clear(selEl);
+  clear(kpiEl);
   document.getElementById('bh-source-note').textContent = !STATE_BH.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_BH.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
+    clear(document.getElementById('bh-cycle-select')); clear(document.getElementById('bh-week-select'));
     renderAuxBars('bh-go-bars', [], 'var(--s1)', fmtMoeda);
     renderAuxBars('bh-ga-bars', [], 'var(--s1)', fmtMoeda);
     document.getElementById('bh-go-hint').textContent = '';
-    document.getElementById('bh-ga-hint').textContent = '';
+    renderAuxGoGaBlocks('bh-go-blocks', [], BH_OPTS);
+    document.getElementById('bh-hier-hint').textContent = '';
     return;
   }
-  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
-  selEl.onchange = () => { STATE_BH.cicloSel = selEl.value; renderBH(); };
-  document.getElementById('bh-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  renderAuxFilterRow('bh', STATE_BH, d, renderBH);
+  document.getElementById('bh-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Total em horas', fmtHorasDecimais(d.totalHoras)], ['Total em valor', fmtMoeda(d.totalVlr)], ['Total em dias', fmt(Math.round(d.totalDias*10)/10)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
       const tile = document.createElement('div'); tile.className='kpi';
@@ -3744,15 +4039,10 @@ function renderBH(){
     });
   renderAuxBars('bh-go-bars', d.porGo, 'var(--s1)', fmtMoeda);
   renderAuxBars('bh-ga-bars', d.porGa, 'var(--s1)', fmtMoeda);
-  document.getElementById('bh-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
-  document.getElementById('bh-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
-  d.pessoas.forEach(p => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
-      '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
-      '<td class="num-col num">'+esc(fmtMoeda(p.vlr))+'</td><td class="num-col num">'+fmt(Math.round(p.dias*10)/10)+'</td>';
-    rowsEl.appendChild(tr);
-  });
+  document.getElementById('bh-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
+  renderAuxGoGaBlocks('bh-go-blocks', d.goGaBlocks, BH_OPTS);
+  document.getElementById('bh-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
+  wireHierToolbar('bh', 'bh-go-blocks');
 }
 document.getElementById('bh-attach-btn').addEventListener('click', () => {
   if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
@@ -3790,40 +4080,55 @@ document.getElementById('file-bh').addEventListener('change', async evt => {
 });
 
 /* -------- DSR -------- */
+const DSR_OPTS = {
+  columns: [ {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'} ],
+  statsFor: pessoas => [
+    { n: pessoas.length, l:'Colaboradores' },
+    { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
+    { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.valor,0)), l:'Valor' },
+  ],
+  sortValue: p => p.valor,
+  cellsFor: p =>
+    '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+    '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+    '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>'+
+    '<td>'+esc(datasHorariosLabel(p))+'</td>',
+  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p) }),
+};
 function deriveDSR(){
-  const d = derivarAux(STATE_DSR, r => ({ cicloDate: r.data, valores:null }));
+  const d = derivarAux(STATE_DSR, r => ({ refDate: r.data }));
   if (!d) return null;
   const porPessoa = new Map();
   d.rows.forEach(r => {
-    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, ocorrencias:0, horas:0, valor:0 });
-    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor;
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, ocorrencias:0, horas:0, valor:0, detalhes:[] });
+    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
   const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
   const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
-  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas, porGo, porGa,
+  const goGaBlocks = buildGoGaBlocks(pessoas);
+  return { ciclos:d.ciclos, semanas:d.semanas, periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel, pessoas, porGo, porGa, goGaBlocks,
     totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
 }
 function renderDSR(){
   const d = deriveDSR();
   STATE_DSR.lastDerived = d;
   const kpiEl = document.getElementById('dsr-kpi-grid');
-  const rowsEl = document.getElementById('dsr-rows');
-  const selEl = document.getElementById('dsr-ciclo-select');
-  clear(kpiEl); clear(rowsEl); clear(selEl);
+  clear(kpiEl);
   document.getElementById('dsr-source-note').textContent = !STATE_DSR.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_DSR.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
+    clear(document.getElementById('dsr-cycle-select')); clear(document.getElementById('dsr-week-select'));
     renderAuxBars('dsr-go-bars', [], 'var(--s2)', fmtMoeda);
     renderAuxBars('dsr-ga-bars', [], 'var(--s2)', fmtMoeda);
     document.getElementById('dsr-go-hint').textContent = '';
-    document.getElementById('dsr-ga-hint').textContent = '';
+    renderAuxGoGaBlocks('dsr-go-blocks', [], DSR_OPTS);
+    document.getElementById('dsr-hier-hint').textContent = '';
     return;
   }
-  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
-  selEl.onchange = () => { STATE_DSR.cicloSel = selEl.value; renderDSR(); };
-  document.getElementById('dsr-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  renderAuxFilterRow('dsr', STATE_DSR, d, renderDSR);
+  document.getElementById('dsr-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
       const tile = document.createElement('div'); tile.className='kpi';
@@ -3832,16 +4137,10 @@ function renderDSR(){
     });
   renderAuxBars('dsr-go-bars', d.porGo, 'var(--s2)', fmtMoeda);
   renderAuxBars('dsr-ga-bars', d.porGa, 'var(--s2)', fmtMoeda);
-  document.getElementById('dsr-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
-  document.getElementById('dsr-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
-  d.pessoas.forEach(p => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
-      '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
-      '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
-      '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>';
-    rowsEl.appendChild(tr);
-  });
+  document.getElementById('dsr-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
+  renderAuxGoGaBlocks('dsr-go-blocks', d.goGaBlocks, DSR_OPTS);
+  document.getElementById('dsr-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
+  wireHierToolbar('dsr', 'dsr-go-blocks');
 }
 document.getElementById('dsr-attach-btn').addEventListener('click', () => {
   if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
@@ -3879,40 +4178,56 @@ document.getElementById('file-dsr').addEventListener('change', async evt => {
 });
 
 /* -------- Feriados -------- */
+const FERIADO_OPTS = {
+  columns: [ {label:'Tipo'}, {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'} ],
+  statsFor: pessoas => [
+    { n: pessoas.length, l:'Colaboradores' },
+    { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
+    { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.valor,0)), l:'Valor' },
+  ],
+  sortValue: p => p.valor,
+  cellsFor: p =>
+    '<td>'+esc([...p.tipos].join(', '))+'</td>'+
+    '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+    '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+    '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>'+
+    '<td>'+esc(datasHorariosLabel(p))+'</td>',
+  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p) }),
+};
 function deriveFeriado(){
-  const d = derivarAux(STATE_FERIADO, r => ({ cicloDate: r.data, valores:null }));
+  const d = derivarAux(STATE_FERIADO, r => ({ refDate: r.data }));
   if (!d) return null;
   const porPessoa = new Map();
   d.rows.forEach(r => {
-    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, tipos:new Set(), ocorrencias:0, horas:0, valor:0 });
-    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; if (r.tipoFeriado) p.tipos.add(r.tipoFeriado);
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, tipos:new Set(), ocorrencias:0, horas:0, valor:0, detalhes:[] });
+    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; if (r.tipoFeriado) p.tipos.add(r.tipoFeriado); p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
   const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
   const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
-  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas, porGo, porGa,
+  const goGaBlocks = buildGoGaBlocks(pessoas);
+  return { ciclos:d.ciclos, semanas:d.semanas, periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel, pessoas, porGo, porGa, goGaBlocks,
     totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
 }
 function renderFeriado(){
   const d = deriveFeriado();
   STATE_FERIADO.lastDerived = d;
   const kpiEl = document.getElementById('feriado-kpi-grid');
-  const rowsEl = document.getElementById('feriado-rows');
-  const selEl = document.getElementById('feriado-ciclo-select');
-  clear(kpiEl); clear(rowsEl); clear(selEl);
+  clear(kpiEl);
   document.getElementById('feriado-source-note').textContent = !STATE_FERIADO.raw.length
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_FERIADO.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
+    clear(document.getElementById('feriado-cycle-select')); clear(document.getElementById('feriado-week-select'));
     renderAuxBars('feriado-go-bars', [], 'var(--s3)', fmtMoeda);
     renderAuxBars('feriado-ga-bars', [], 'var(--s3)', fmtMoeda);
     document.getElementById('feriado-go-hint').textContent = '';
-    document.getElementById('feriado-ga-hint').textContent = '';
+    renderAuxGoGaBlocks('feriado-go-blocks', [], FERIADO_OPTS);
+    document.getElementById('feriado-hier-hint').textContent = '';
     return;
   }
-  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
-  selEl.onchange = () => { STATE_FERIADO.cicloSel = selEl.value; renderFeriado(); };
-  document.getElementById('feriado-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  renderAuxFilterRow('feriado', STATE_FERIADO, d, renderFeriado);
+  document.getElementById('feriado-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
       const tile = document.createElement('div'); tile.className='kpi';
@@ -3921,16 +4236,10 @@ function renderFeriado(){
     });
   renderAuxBars('feriado-go-bars', d.porGo, 'var(--s3)', fmtMoeda);
   renderAuxBars('feriado-ga-bars', d.porGa, 'var(--s3)', fmtMoeda);
-  document.getElementById('feriado-go-hint').textContent = d.porGo.length + ' GO(s) no ciclo';
-  document.getElementById('feriado-ga-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
-  d.pessoas.forEach(p => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td><td>'+esc([...p.tipos].join(', '))+'</td>'+
-      '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
-      '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
-      '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>';
-    rowsEl.appendChild(tr);
-  });
+  document.getElementById('feriado-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
+  renderAuxGoGaBlocks('feriado-go-blocks', d.goGaBlocks, FERIADO_OPTS);
+  document.getElementById('feriado-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
+  wireHierToolbar('feriado', 'feriado-go-blocks');
 }
 document.getElementById('feriado-attach-btn').addEventListener('click', () => {
   if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
@@ -3989,22 +4298,6 @@ async function loadAuxPaineis(){
   renderBH(); renderDSR(); renderFeriado();
 }
 
-function exportAuxToExcel(estado, tema, nomeTitulo){
-  const d = estado.lastDerived;
-  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
-  if (!xlsxDisponivel()) return;
-  const wb = XLSX.utils.book_new();
-  let rows;
-  if (tema === 'bh') {
-    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10 }));
-  } else if (tema === 'feriado') {
-    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor }));
-  } else {
-    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor }));
-  }
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), nomeTitulo.slice(0, 31));
-  baixarPlanilha(wb, tema + '-' + nomeArquivoSeguro(d.cicloLabel));
-}
 
 function enhanceSections(){
   // ".wrap > .tab-panel > section" pega os blocos dos painéis auxiliares (Banco de Horas, DSR,
@@ -4147,6 +4440,9 @@ document.getElementById('role-badge').addEventListener('click', () => {
   applyVerifButtonState();
   tryLoadFromStorage();
   carregarAuxDoStorage();
+  wireAuxPeriodoButtons('bh', STATE_BH, renderBH);
+  wireAuxPeriodoButtons('dsr', STATE_DSR, renderDSR);
+  wireAuxPeriodoButtons('feriado', STATE_FERIADO, renderFeriado);
   await loadAuth();
   updateRoleBadge();
   recomputeAndRender();
