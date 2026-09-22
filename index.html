@@ -5,6 +5,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js"></script>
 <style>
   :root{
     --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -97,7 +98,7 @@
   h1{ font-size:clamp(20px, 5.5vw, 26px); font-weight:700; letter-spacing:-.01em; }
   .subtitle{ color:var(--text-secondary); font-size:13.5px; margin-top:4px; }
 
-  .header-actions{ display:flex; align-items:center; gap:8px; flex:none; }
+  .header-actions{ display:flex; align-items:center; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end; }
   .settings-btn{
     display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--text-secondary);
     background:var(--surface-raised); border:1px solid var(--border); border-radius:999px; padding:8px 14px 8px 12px;
@@ -535,6 +536,10 @@
         <button type="button" class="theme-toggle" id="theme-toggle" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
           <svg class="icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1M12.7 12.7l-1.1-1.1M4.4 4.4L3.3 3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           <svg class="icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13.5 9.5A5.8 5.8 0 116.5 2.5a4.6 4.6 0 007 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="settings-btn" id="apresentacao-btn" title="Gerar apresentação em PowerPoint com os dados do filtro atual" aria-label="Gerar apresentação">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="9" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M6.5 14h3M8 11.5V14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Apresentação
         </button>
         <button type="button" class="settings-btn" id="settings-btn" title="Configurações" aria-label="Configurações">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 10.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4z" stroke="currentColor" stroke-width="1.4"/><path d="M13 8.6v-1.2l-1.5-.3a4.6 4.6 0 00-.5-1.2l.9-1.3-.9-.9-1.3.9a4.6 4.6 0 00-1.2-.5L8.2 3h-1.2l-.3 1.5a4.6 4.6 0 00-1.2.5l-1.3-.9-.9.9.9 1.3a4.6 4.6 0 00-.5 1.2L2.2 7.4v1.2l1.5.3c.1.4.3.8.5 1.2l-.9 1.3.9.9 1.3-.9c.4.2.8.4 1.2.5l.3 1.5h1.2l.3-1.5c.4-.1.8-.3 1.2-.5l1.3.9.9-.9-.9-1.3c.2-.4.4-.8.5-1.2l1.5-.3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
@@ -2869,6 +2874,272 @@ function exportSectionToExcel(exportId){
   }
   baixarPlanilha(wb, nomeBase);
 }
+
+/* ---------------- apresentação PowerPoint ----------------
+   Gerada 100% no navegador (pptxgenjs via CDN, mesmo esquema do xlsx/html2canvas/supabase-js),
+   sempre com os dados do filtro selecionado no momento do clique (STATE.lastDerived) — igual
+   ao Excel por bloco, nunca um instantâneo fixo.
+
+   Replica a identidade visual do modelo em D:\infrações\apresentação ppt (navy + verde +
+   "alloha FIBRA", tabela "Período/Gestor" por GA com a coluna Total colorida). NÃO inclui os
+   slides do modelo que dependem de dados que este painel não tem — custo/orçamento (Sobreaviso,
+   HE, DSR em R$), Banco de Horas, Feriados e o roteiro de "Plano de Redução" são conteúdo
+   estratégico/financeiro alheio à base de ponto importada aqui; inventar números pra preencher
+   esses slides seria pior do que não ter o slide. */
+const PPT_NAVY = '0B3D63';
+const PPT_NAVY_DARK = '072843';
+const PPT_GREEN = '027431';
+const PPT_GREEN_LIGHT = '6FCF8F';
+const PPT_MINT = 'E8F7E5';
+const PPT_RED = 'C0504D';
+const PPT_RED_LIGHT = 'F6DEDC';
+const PPT_ROW_BG = 'EAF0F6';
+const PPT_TEXT_MUTED = '6B6B6B';
+
+function regiaoDaBase(){
+  // usa o próprio campo Sub BU da planilha importada pro rótulo de região do slide de título —
+  // nunca um texto fixo tipo "R7.1 Nordeste" que poderia estar errado pra outra base anexada.
+  const subbus = [...new Set((STATE.raw||[]).map(r=>r.subbu).filter(Boolean))];
+  if (subbus.length === 1) return subbus[0];
+  if (subbus.length > 1) return subbus.length + ' regiões (Sub BU) na base carregada';
+  return '';
+}
+function corCelulaTotalPPT(total){
+  // mesma linguagem do modelo: total alto chama atenção (vermelho), total baixo mas ainda
+  // existente é "resultado bom" (verde) — diferente da regra do painel na tela (que é sempre
+  // vermelho > 0), porque aqui estou replicando o modelo de referência, não a tela.
+  if (total >= 2) return { fill: PPT_RED_LIGHT, texto: PPT_RED };
+  if (total === 1) return { fill: PPT_MINT, texto: PPT_GREEN };
+  return null;
+}
+function pptCabecalho(s, titulo, subtitulo, regiaoTxt){
+  s.addText((regiaoTxt || 'OPERAÇÕES').toUpperCase(), { x:0.5, y:0.32, w:9, h:0.32, fontFace:'Arial', fontSize:11, bold:true, color:PPT_NAVY, charSpacing:1, isTextBox:true, margin:0 });
+  s.addText([{ text:'alloha ', options:{ color:PPT_NAVY, bold:true } }, { text:'FIBRA', options:{ color:PPT_GREEN, bold:true, charSpacing:1 } }],
+    { x:10.2, y:0.28, w:2.6, h:0.4, align:'right', fontFace:'Arial', fontSize:15, isTextBox:true, margin:0 });
+  s.addText(titulo, { x:0.5, y:0.72, w:12.3, h:0.55, fontFace:'Cambria', fontSize:23, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+  if (subtitulo) s.addText(subtitulo, { x:0.5, y:1.24, w:12.3, h:0.4, fontFace:'Arial', fontSize:12, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+}
+function pptRodape(s, texto){
+  s.addText(texto, { x:0.5, y:7.12, w:12.3, h:0.3, fontFace:'Arial', fontSize:9, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+}
+function pptTabelaColaboradoresGA(block){
+  const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
+  const rows = [[
+    { text:'Colaborador', options: Object.assign({}, headerOpts, { align:'left' }) },
+    { text:'>7 dias', options: Object.assign({}, headerOpts, { align:'center' }) },
+    { text:'Interjornada', options: Object.assign({}, headerOpts, { align:'center' }) },
+    { text:'>2h extras', options: Object.assign({}, headerOpts, { align:'center' }) },
+    { text:'Total', options: Object.assign({}, headerOpts, { align:'center' }) },
+  ]];
+  let sD7=0, sInt=0, sHex=0, sTot=0;
+  block.colaboradores.forEach(c => {
+    sD7+=c.d7; sInt+=c.interj; sHex+=c.hex; sTot+=c.total;
+    const cor = corCelulaTotalPPT(c.total);
+    const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:10.5, valign:'middle' };
+    rows.push([
+      { text:c.nome, options: Object.assign({}, cel, { align:'left' }) },
+      { text:String(c.d7), options: Object.assign({}, cel, { align:'center' }) },
+      { text:String(c.interj), options: Object.assign({}, cel, { align:'center' }) },
+      { text:String(c.hex), options: Object.assign({}, cel, { align:'center' }) },
+      { text:String(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
+    ]);
+  });
+  const totalOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY_DARK }, fontFace:'Arial', fontSize:11, valign:'middle' };
+  rows.push([
+    { text:'Total Geral', options: Object.assign({}, totalOpts, { align:'left' }) },
+    { text:String(sD7), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:String(sInt), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:String(sHex), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:String(sTot), options: Object.assign({}, totalOpts, { align:'center' }) },
+  ]);
+  return rows;
+}
+
+// monta o objeto pres (sem tocar em DOM/download) — separado assim pra dar pra testar em
+// Node direto, chamando essa função com um `d` de teste e conferindo o conteúdo gerado.
+function buildApresentacaoPres(d){
+  const pres = new PptxGenJS();
+  pres.layout = 'LAYOUT_WIDE'; // 13.33" x 7.5"
+  pres.author = 'Painel Infrações de Ponto';
+  pres.title = 'Infrações — ' + d.cicloAtualLabel;
+  const regiaoTxt = regiaoDaBase();
+  const eyebrow = regiaoTxt ? ('OPERAÇÕES · ' + regiaoTxt) : 'OPERAÇÕES';
+  const rodapeTxt = 'Gerado automaticamente pelo Painel Infrações de Ponto em ' + fmtDMY(new Date()) + ' · dados do período: ' + d.cicloAtualLabel;
+
+  // --- slide 1: título ---
+  {
+    const s = pres.addSlide();
+    s.background = { color: PPT_NAVY };
+    s.addText('alloha', { x:0.6, y:0.5, w:5, h:0.6, fontFace:'Arial', fontSize:28, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+    s.addText('F I B R A', { x:0.6, y:0.98, w:5, h:0.4, fontFace:'Arial', fontSize:13, bold:true, color:PPT_GREEN_LIGHT, charSpacing:3, isTextBox:true, margin:0 });
+    if (regiaoTxt) s.addText(regiaoTxt.toUpperCase(), { x:0.6, y:2.7, w:12, h:0.45, fontFace:'Arial', fontSize:15, bold:true, color:'9FC6E0', charSpacing:1, isTextBox:true, margin:0 });
+    s.addText('Infrações de Ponto', { x:0.6, y:3.15, w:12, h:1.1, fontFace:'Cambria', fontSize:40, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+    s.addText('>7 dias trabalhados  ·  Interjornada  ·  >2 horas extras', { x:0.6, y:4.25, w:12, h:0.5, fontFace:'Arial', fontSize:16, color:'CADCFC', isTextBox:true, margin:0 });
+    s.addText(d.cicloAtualLabel, { x:0.6, y:6.75, w:12, h:0.4, fontFace:'Arial', fontSize:12, color:'7C93B0', isTextBox:true, margin:0 });
+  }
+
+  // --- slide 2: indicadores do período ---
+  {
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Indicadores do período', 'Recalculado a partir da Base anexada · ' + d.cicloAtualLabel, eyebrow);
+    const tiles = [
+      ['Total de infrações', fmt(d.total)],
+      ['Ciclo/semana anterior', d.temAnterior ? fmt(d.totalAnterior) : '—'],
+      ['Variação', d.temAnterior ? (d.variacaoAbs>0?'+':'')+fmt(d.variacaoAbs) : '—'],
+      ['Tipo mais recorrente', d.tipoRecorrente],
+      ['% do efetivo com infração', Math.round(d.pctEfetivo*10)/10 + '%'],
+      ['Média por colaborador afetado', (Math.round(d.mediaAfetado*10)/10).toString().replace('.', ',')],
+    ];
+    const colW = 3.98, gap = 0.2, startX = 0.5, y0 = 2.0, rowH = 2.1;
+    tiles.forEach((t, i) => {
+      const col = i % 3, row = Math.floor(i/3);
+      const x = startX + col*(colW+gap), y = y0 + row*(rowH+0.25);
+      s.addShape('roundRect', { x, y, w:colW, h:rowH, rectRadius:0.08, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
+      s.addText(String(t[1]), { x:x+0.2, y:y+0.25, w:colW-0.4, h:1.05, fontFace:'Cambria', fontSize:32, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      s.addText(t[0].toUpperCase(), { x:x+0.2, y:y+1.35, w:colW-0.4, h:0.55, fontFace:'Arial', fontSize:10.5, bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
+    });
+    pptRodape(s, rodapeTxt);
+  }
+
+  // --- slide 3: infrações por GO ---
+  if (d.porGo && d.porGo.length) {
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Infrações por GO (Gestor Operacional)', 'Soma dos GOs = total do período selecionado', eyebrow);
+    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
+    const rows = [[
+      { text:'GO', options: Object.assign({}, headerOpts, { align:'left' }) },
+      { text:'>7 dias', options: Object.assign({}, headerOpts, { align:'center' }) },
+      { text:'Interjornada', options: Object.assign({}, headerOpts, { align:'center' }) },
+      { text:'>2h extras', options: Object.assign({}, headerOpts, { align:'center' }) },
+      { text:'Total', options: Object.assign({}, headerOpts, { align:'center' }) },
+    ]];
+    d.porGo.forEach(g => {
+      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:11, valign:'middle' };
+      rows.push([
+        { text:g.nome, options: Object.assign({}, cel, { align:'left', bold:true }) },
+        { text:fmt(g.d7), options: Object.assign({}, cel, { align:'center' }) },
+        { text:fmt(g.interj), options: Object.assign({}, cel, { align:'center' }) },
+        { text:fmt(g.hex), options: Object.assign({}, cel, { align:'center' }) },
+        { text:fmt(g.total), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
+      ]);
+    });
+    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[5.5,2.2,2.2,2.2,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
+    pptRodape(s, rodapeTxt);
+  }
+
+  // --- slide 4: infrações por semana ---
+  if (d.semanas && d.semanas.length) {
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Infrações por semana', 'Todas as semanas presentes nos dados carregados', eyebrow);
+    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
+    const rows = [[
+      { text:'Semana', options: Object.assign({}, headerOpts, { align:'left' }) },
+      { text:'Total de infrações', options: headerOpts },
+    ]];
+    d.semanas.forEach(sem => {
+      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:11, valign:'middle' };
+      rows.push([
+        { text:sem.label, options: Object.assign({}, cel, { align:'left' }) },
+        { text:fmt(sem.total), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
+      ]);
+    });
+    s.addTable(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
+    pptRodape(s, rodapeTxt);
+  }
+
+  // --- um slide por GA: "Período: X / Gestor: Y" (o coração do modelo original) ---
+  (d.hierBlocks || []).filter(b => b.colaboradores.length).forEach(block => {
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel, 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
+    s.addText([
+      { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
+      { text:'   ·   GO: ', options:{ bold:true, color:PPT_NAVY } }, { text:(block.go||'—'), options:{ color:PPT_NAVY } },
+    ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
+    s.addTable(pptTabelaColaboradoresGA(block), { x:0.5, y:2.05, w:12.3, colW:[5.5,2.2,2.2,2.2,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
+    pptRodape(s, rodapeTxt);
+  });
+
+  // --- ranking: maior redução de infrações ---
+  if (d.rankGa && d.rankGa.length) {
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Ranking · maior redução de infrações', (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
+    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
+    const rows = [[
+      { text:'GA', options: Object.assign({}, headerOpts, { align:'left' }) },
+      { text:'Semana anterior', options: headerOpts },
+      { text:'Semana atual', options: headerOpts },
+      { text:'Variação', options: headerOpts },
+    ]];
+    d.rankGa.slice(0, 20).forEach(r => {
+      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:10.5, valign:'middle' };
+      const melhorou = r.temAnterior && r.delta > 0;
+      const piorou = r.temAnterior && r.delta < 0;
+      rows.push([
+        { text:r.ga, options: Object.assign({}, cel, { align:'left' }) },
+        { text:r.temAnterior?fmt(r.anterior):'—', options: Object.assign({}, cel, { align:'center' }) },
+        { text:fmt(r.atual), options: Object.assign({}, cel, { align:'center' }) },
+        { text: r.temAnterior ? (melhorou ? '▼ '+fmt(r.delta)+' a menos' : piorou ? '▲ '+fmt(Math.abs(r.delta))+' a mais' : 'igual') : '—',
+          options: Object.assign({}, cel, { align:'center', bold:true, color: melhorou ? PPT_GREEN : piorou ? PPT_RED : PPT_TEXT_MUTED }) },
+      ]);
+    });
+    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[5.5,2.27,2.27,2.26], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
+    pptRodape(s, rodapeTxt);
+  }
+
+  // --- Parabéns, gestores de área! (melhores resultados do período, ainda com infração > 0) ---
+  {
+    const destaques = (d.porGa||[]).filter(g=>g.total>0).sort((a,b)=>a.total-b.total).slice(0,4);
+    if (destaques.length) {
+      const s = pres.addSlide();
+      pptCabecalho(s, 'Parabéns, gestores de área!', 'Menor quantitativo de infrações no período selecionado', eyebrow);
+      s.addText('Confira os gestores que se destacaram:', { x:0.5, y:1.7, w:12.3, h:0.4, fontFace:'Arial', fontSize:14, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      const n = destaques.length, cardW = (12.3 - (n-1)*0.3)/n, x0 = 0.5, y0 = 2.35, cardH = 3.1;
+      destaques.forEach((g, i) => {
+        const x = x0 + i*(cardW+0.3);
+        s.addShape('roundRect', { x, y:y0, w:cardW, h:0.9, rectRadius:0.06, fill:{ color:PPT_NAVY }, line:{ type:'none' } });
+        s.addText(g.nome, { x:x+0.15, y:y0, w:cardW-0.3, h:0.9, align:'center', valign:'middle', fontFace:'Arial', fontSize:12.5, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+        s.addShape('roundRect', { x, y:y0+0.9, w:cardW, h:cardH-0.9, rectRadius:0.06, fill:{ color:PPT_MINT }, line:{ type:'none' } });
+        s.addText(String(g.total), { x:x+0.15, y:y0+1.05, w:cardW-0.3, h:1.0, align:'center', fontFace:'Cambria', fontSize:48, bold:true, color:PPT_GREEN, isTextBox:true, margin:0 });
+        s.addText(g.total===1?'INFRAÇÃO':'INFRAÇÕES', { x:x+0.15, y:y0+2.05, w:cardW-0.3, h:0.4, align:'center', fontFace:'Arial', fontSize:11, bold:true, color:PPT_GREEN, charSpacing:0.5, isTextBox:true, margin:0 });
+      });
+      s.addText('Disciplina e comprometimento fazem a diferença. Esse resultado é reflexo do excelente trabalho de vocês!', { x:0.5, y:6.0, w:9, h:0.7, fontFace:'Arial', fontSize:12, italic:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      pptRodape(s, rodapeTxt);
+    }
+  }
+
+  // --- slide final ---
+  {
+    const s = pres.addSlide();
+    s.background = { color: PPT_NAVY };
+    s.addText('alloha', { x:0, y:3.0, w:13.33, h:0.7, align:'center', fontFace:'Arial', fontSize:32, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+    s.addText('F I B R A', { x:0, y:3.62, w:13.33, h:0.4, align:'center', fontFace:'Arial', fontSize:14, bold:true, color:PPT_GREEN_LIGHT, charSpacing:3, isTextBox:true, margin:0 });
+    s.addText('Obrigado!', { x:0, y:4.3, w:13.33, h:0.8, align:'center', fontFace:'Cambria', fontSize:34, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+  }
+
+  return pres;
+}
+
+function nomeArquivoApresentacao(d){
+  return 'apresentacao-infracoes-' + nomeArquivoSeguro(d.cicloAtualLabel);
+}
+async function gerarApresentacaoPPT(){
+  const d = STATE.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra gerar a apresentação — anexe uma Base primeiro.'); return; }
+  if (typeof PptxGenJS === 'undefined') { showToast('A biblioteca de apresentações ainda não carregou — aguarde alguns segundos e tente de novo.'); return; }
+  const btn = document.getElementById('apresentacao-btn');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  try {
+    const pres = buildApresentacaoPres(d);
+    await pres.writeFile({ fileName: nomeArquivoApresentacao(d) + '.pptx' });
+    showToast('Apresentação gerada: ' + d.cicloAtualLabel + '.');
+  } catch (e) {
+    console.error('Falha ao gerar a apresentação em PowerPoint.', e);
+    showToast('Não foi possível gerar a apresentação — detalhes no console (F12).');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
+}
+document.getElementById('apresentacao-btn').addEventListener('click', gerarApresentacaoPPT);
 
 function enhanceSections(){
   document.querySelectorAll('.wrap > section').forEach(section => {
