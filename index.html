@@ -94,6 +94,12 @@
     border-radius:999px; background:var(--surface); border:1px solid var(--border); color:var(--text-secondary);
   }
   .role-badge.is-admin{ background:var(--good-tint); color:var(--good); border-color:transparent; }
+  /* admin local (localStorage) mas sem sessão de escrita válida no Supabase — acontece quando a
+     senha não é redigitada há muito tempo (token expira) e some sozinha a chance de sincronizar,
+     sem nenhum aviso até a pessoa tentar anexar algo e a sincronização falhar "sem motivo". */
+  .role-badge.needs-relogin{ background:var(--warning-tint); color:#8a5a00; border-color:transparent; cursor:pointer; }
+  :root[data-theme="dark"] .role-badge.needs-relogin{ color:#ffce6b; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .role-badge.needs-relogin{ color:#ffce6b; } }
   .title-row{ display:flex; flex-wrap:wrap; align-items:baseline; gap:12px 20px; justify-content:space-between; }
   h1{ font-size:clamp(20px, 5.5vw, 26px); font-weight:700; letter-spacing:-.01em; }
   .subtitle{ color:var(--text-secondary); font-size:13.5px; margin-top:4px; }
@@ -801,7 +807,14 @@ const THEME_KEY = 'painelInfracoes.theme.v1';
    essa limitação fundamental de uma página 100% estática, sem servidor. */
 const AUTH_USERS_KEY = 'painelInfracoes.auth.users.v1';
 const AUTH_SESSION_KEY = 'painelInfracoes.auth.session.v1';
-const AUTH = { users: [], currentUser: null };
+// supabaseSessionOk: null = ainda não checou · true/false = resultado da última checagem.
+// Existe porque "Administrador neste navegador" (AUTH.currentUser, restaurado do localStorage
+// sozinho ao reabrir a página) e "sessão de escrita válida no Supabase" (exige senha digitada
+// de novo, o token expira) são duas coisas DIFERENTES — sem essa distinção visível, a pessoa se
+// via "como Administrador" e mesmo assim toda sincronização falhava, sem nenhuma pista do
+// motivo (era literalmente o que o usuário reportou: "erro ao anexar a base, dados não sobem
+// e não sincronizam").
+const AUTH = { users: [], currentUser: null, supabaseSessionOk: null };
 
 async function sha256Hex(text){
   const enc = new TextEncoder().encode(text);
@@ -1352,8 +1365,13 @@ document.getElementById('file-base').addEventListener('change', async evt => {
       }
     } else {
       STATE.pendingSync = { tipo: 'base', arquivo: file.name };
+      AUTH.supabaseSessionOk = false;
+      updateRoleBadge();
       recomputeAndRender();
-      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).' + sufixoFidelidade);
+      // chega aqui só quando já é Admin neste navegador mas a sessão de escrita no Supabase
+      // não está mais válida (senha não redigitada há muito tempo, token expirou) — mensagem
+      // específica pra esse caso, não "entre como Administrador" pra quem já se vê como um.
+      showToast('Base importada: ' + STATE.raw.length + ' registro(s) de "' + file.name + '" (salva só neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações).' + sufixoFidelidade);
     }
     // atualiza a data/hora exibida dentro da caixa "Importar dados", se ela estiver aberta agora
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
@@ -1396,8 +1414,10 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
       }
     } else {
       STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
+      AUTH.supabaseSessionOk = false;
+      updateRoleBadge();
       recomputeAndRender();
-      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — entre como Administrador em Configurações pra sincronizar).' + sufixoFidelidade);
+      showToast('Hierarquia compatibilizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '" (salva só neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações).' + sufixoFidelidade);
     }
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
@@ -2450,9 +2470,17 @@ document.getElementById('he-save').addEventListener('click', async () => {
     }
   } else {
     // Usuário Padrão pode editar hierarquia sem estar logado — nesse caso é esperado que fique
-    // só local, não é uma falha de sincronização.
-    if (isAdmin()) { STATE.pendingSync = { tipo: 'hierarquia', arquivo: null }; renderSyncTimestamp(); }
-    showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
+    // só local, não é uma falha de sincronização. Já pra quem é Admin neste navegador, cair
+    // aqui só acontece com a sessão do Supabase expirada (ver checkSupabaseSessionForBadge).
+    if (isAdmin()) {
+      STATE.pendingSync = { tipo: 'hierarquia', arquivo: null };
+      renderSyncTimestamp();
+      AUTH.supabaseSessionOk = false;
+      updateRoleBadge();
+      showToast('Hierarquia de ' + nome + ' salva só neste navegador — sua sessão de sincronização expirou, entre com a senha de novo em Configurações.');
+    } else {
+      showToast('Hierarquia de ' + nome + ' definida e salva neste navegador.');
+    }
   }
 });
 document.body.addEventListener('click', evt => {
@@ -2590,12 +2618,32 @@ hierBlocksContainer.addEventListener('focusout', evt => {
 function updateRoleBadge(){
   const badge = document.getElementById('role-badge');
   if (isAdmin()) {
-    badge.textContent = 'Administrador: ' + AUTH.currentUser;
-    badge.classList.add('is-admin');
+    if (AUTH.supabaseSessionOk === false) {
+      // admin só neste navegador (localStorage), sem sessão válida no Supabase — sincronização
+      // não vai funcionar até entrar de novo com a senha. Avisa ANTES de tentar anexar algo,
+      // em vez da pessoa só descobrir depois de um upload "falhar sem motivo".
+      badge.textContent = '⚠ Sincronização expirada — clique para entrar de novo';
+      badge.classList.remove('is-admin');
+      badge.classList.add('needs-relogin');
+      badge.title = 'Você está como Administrador só neste navegador; a sessão de sincronização com o Supabase expirou. Clique pra abrir Configurações e digitar a senha de novo.';
+    } else {
+      badge.textContent = 'Administrador: ' + AUTH.currentUser;
+      badge.classList.add('is-admin');
+      badge.classList.remove('needs-relogin');
+      badge.title = '';
+    }
   } else {
     badge.textContent = 'Usuário Padrão';
-    badge.classList.remove('is-admin');
+    badge.classList.remove('is-admin', 'needs-relogin');
+    badge.title = '';
   }
+}
+// checa (com timeout — não pode travar o boot) se o Admin local também tem uma sessão de
+// escrita válida no Supabase, e atualiza o aviso no badge. Chamada no boot e depois de login.
+async function checkSupabaseSessionForBadge(){
+  if (!isAdmin()) { AUTH.supabaseSessionOk = null; updateRoleBadge(); return; }
+  AUTH.supabaseSessionOk = await hasSupabaseWriteSession();
+  updateRoleBadge();
 }
 
 function renderSettingsPanel(){
@@ -2631,6 +2679,7 @@ function renderSettingsPanel(){
         renderSettingsPanel();
         recomputeAndRender();
         showToast('Entrou como administrador: ' + AUTH.currentUser + '.');
+        checkSupabaseSessionForBadge(); // authLogin() acabou de tentar renovar a sessão no Supabase com a senha atual
       } else {
         errEl.textContent = 'Usuário ou senha incorretos.';
       }
@@ -2647,6 +2696,7 @@ function renderSettingsPanel(){
   body.appendChild(welcome);
   welcome.querySelector('#logout-btn').addEventListener('click', () => {
     authLogout();
+    AUTH.supabaseSessionOk = null;
     updateRoleBadge();
     renderSettingsPanel();
     recomputeAndRender();
@@ -3273,6 +3323,14 @@ window.addEventListener('storage', evt => {
 
 document.getElementById('verif-power-btn').addEventListener('click', () => setVerifEnabled(!verifEnabled()));
 
+// clica no badge "⚠ Sincronização expirada" -> abre Configurações direto (a correção é sempre
+// a mesma: digitar a senha de novo), em vez da pessoa ter que descobrir sozinha aonde ir.
+document.getElementById('role-badge').addEventListener('click', () => {
+  if (!document.getElementById('role-badge').classList.contains('needs-relogin')) return;
+  renderSettingsPanel();
+  document.getElementById('settings-overlay').classList.add('show');
+});
+
 (async function boot(){
   enhanceSections();
   applyVerifButtonState();
@@ -3280,6 +3338,10 @@ document.getElementById('verif-power-btn').addEventListener('click', () => setVe
   await loadAuth();
   updateRoleBadge();
   recomputeAndRender();
+  // checa se o Admin local (restaurado do localStorage, sem senha) também tem uma sessão de
+  // escrita válida no Supabase — sem isto, alguém ficava "como Administrador" na tela mas toda
+  // sincronização falhava, sem nenhum aviso do motivo.
+  checkSupabaseSessionForBadge();
   // Supabase é a fonte "oficial" quando disponível — se conectar, sobrepõe o que veio do
   // localStorage/padrão pra que todo mundo, em qualquer dispositivo, veja os mesmos dados;
   // se falhar (offline, etc.), o painel já está de pé com o que carregou acima. Renderiza de
