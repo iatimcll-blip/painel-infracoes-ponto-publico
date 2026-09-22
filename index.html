@@ -79,7 +79,10 @@
   @media (max-width:480px){ body{ padding-inline:14px; padding-block:18px 32px; } }
   h1,h2,h3{ text-wrap:balance; margin:0; }
   .num{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
-  .wrap{ max-width:1180px; margin-inline:auto; display:flex; flex-direction:column; gap:28px; min-width:0; }
+  /* painel ocupa 100% da largura disponível em qualquer tela (era travado em 1180px, sobrando
+     faixas vazias enormes nas laterais em monitor grande) — o respiro nas bordas continua vindo
+     só do padding-inline do body acima, que já se ajusta por tamanho de tela. */
+  .wrap{ width:100%; display:flex; flex-direction:column; gap:28px; min-width:0; }
 
   /* ---------- header ---------- */
   header{ display:flex; flex-direction:column; gap:10px; }
@@ -169,11 +172,15 @@
   section.collapsed .section-toggle .chevron{ transform:rotate(-90deg); }
   section.collapsed .section-body{ display:none; }
   .section-copy-btn{ flex:none; margin-left:4px; }
+  .section-export-btn{ flex:none; margin-left:4px; }
 
   /* ---------- KPI tiles ---------- */
   .kpi-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   @media (max-width:900px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
   @media (max-width:480px){ .kpi-grid{ grid-template-columns:1fr; } }
+  /* painel sem largura máxima agora ocupa monitor grande de verdade — em vez de 4 colunas
+     esticadas com um buraco de sobra (são 6 indicadores), preenche a linha inteira. */
+  @media (min-width:1600px){ .kpi-grid{ grid-template-columns:repeat(6,1fr); } }
   .kpi{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:6px; min-width:0; }
   .kpi .label{ font-size:11px; color:var(--text-muted); letter-spacing:.02em; }
   .kpi .value{ font-size:24px; font-weight:600; line-height:1.1; }
@@ -504,12 +511,12 @@
   <input type="file" id="file-base" accept=".xlsx" hidden>
   <input type="file" id="file-hier" accept=".xlsx" hidden>
 
-  <section>
+  <section data-export="kpi">
     <div class="section-head"><h2 id="kpi-section-title">Indicadores do ciclo selecionado</h2></div>
     <div class="kpi-grid" id="kpi-grid"></div>
   </section>
 
-  <section>
+  <section data-export="ano">
     <div class="section-head">
       <h2>Infrações no ano</h2>
       <span class="hint">volume do ano inteiro — não muda com os filtros de ciclo/semana acima</span>
@@ -517,7 +524,7 @@
     <div class="card"><div id="dash-ano"></div></div>
   </section>
 
-  <section>
+  <section data-export="go">
     <div class="section-head">
       <h2>Infrações por GO (Gestor Operacional)</h2>
       <span class="hint">soma dos GOs = total do ciclo</span>
@@ -532,7 +539,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-export="ga">
     <div class="section-head">
       <h2>Infrações por GA (Gestor de Área)</h2>
       <span class="hint" id="ga-count-hint"></span>
@@ -540,7 +547,7 @@
     <div class="card"><div class="bars" id="ga-bars"></div></div>
   </section>
 
-  <section>
+  <section data-export="rank">
     <div class="section-head">
       <h2>Ranking · maior redução de infrações (semana anterior x semana atual)</h2>
       <span class="hint" id="week-range-hint"></span>
@@ -557,7 +564,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-export="weekly">
     <div class="section-head">
       <h2>Infrações por semana</h2>
       <span class="hint">todas as semanas presentes nos dados carregados, com linha de tendência</span>
@@ -567,7 +574,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-export="dashboards">
     <div class="section-head">
       <h2>Dashboards adicionais</h2>
       <span class="hint" id="dash-period-hint"></span>
@@ -579,7 +586,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-export="top">
     <div class="section-head">
       <h2 id="top-section-title">Top colaboradores por infrações no ciclo</h2>
       <span class="hint" id="afetados-hint"></span>
@@ -592,7 +599,7 @@
     </div>
   </section>
 
-  <section>
+  <section data-export="hier">
     <div class="section-head">
       <h2>Colaboradores por hierarquia</h2>
       <span class="hint" id="hier-total-hint"></span>
@@ -604,7 +611,7 @@
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
 
-  <section>
+  <section data-export="verif">
     <div class="section-head">
       <h2>Verificação · Base de dados x Hierarquia</h2>
       <span class="hint">confere se todo colaborador da base de ponto tem GA/GO definidos</span>
@@ -1122,7 +1129,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false };
+let STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1320,7 +1327,7 @@ function resetData(){
   // deve mostrar nenhum dado de exemplo/planilha embutida — só reporta quando existe uma
   // Base anexada de verdade (localmente ou sincronizada), então "limpar" volta pro vazio.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false };
+  STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -1550,14 +1557,19 @@ function recomputeAndRender(){
     showToast('Erro ao processar os dados carregados — os dados podem não seguir o modelo esperado. Detalhes no console (F12).');
     sourceNote.textContent = 'Falha ao processar os dados importados. Tente "limpar dados locais" e reimporte.';
     clearAllSections();
+    STATE.lastDerived = null;
     return;
   }
   if (!d) {
     sourceNote.textContent = 'Nenhuma Base anexada ainda — entre em Configurações para anexar uma.';
     document.getElementById('sync-timestamp').textContent = '';
     clearAllSections();
+    STATE.lastDerived = null;
     return;
   }
+  // guarda o último cálculo pra os botões "Exportar Excel" de cada bloco lerem os mesmos
+  // números exibidos na tela, sem precisar recalcular tudo de novo a cada exportação.
+  STATE.lastDerived = d;
   sourceNote.textContent = (STATE.usingSupabase && !STATE.readSyncFailed)
     ? 'Dados sincronizados — mesma informação em qualquer dispositivo que abrir este painel.'
     : (STATE.usingDefault
@@ -2531,6 +2543,123 @@ document.getElementById('settings-overlay').addEventListener('click', evt => {
   if (evt.target.id === 'settings-overlay') document.getElementById('settings-overlay').classList.remove('show');
 });
 
+/* ---------------- exportar bloco como planilha (.xlsx) ----------------
+   Ao lado do "Copiar" (que tira um print do bloco), este baixa os NÚMEROS por trás dele —
+   os mesmos que estão na tela no momento do clique, lidos de STATE.lastDerived (o resultado
+   de deriveAll() do render mais recente), pra nunca divergir do que a pessoa está vendo. */
+function nomeArquivoSeguro(s){
+  return String(s || '').replace(/[\\/:*?"<>|]/g, '-').trim();
+}
+function baixarPlanilha(wb, nomeBase){
+  if (typeof XLSX === 'undefined' || !XLSX || typeof XLSX.writeFile !== 'function') {
+    showToast('A biblioteca de planilhas ainda não carregou — aguarde alguns segundos e tente de novo.');
+    return;
+  }
+  XLSX.writeFile(wb, nomeArquivoSeguro(nomeBase) + '.xlsx');
+}
+function exportSectionToExcel(exportId){
+  const d = STATE.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
+  const wb = XLSX.utils.book_new();
+  const cicloTag = nomeArquivoSeguro(d.cicloAtualLabel);
+  let nomeBase = 'painel-infracoes';
+
+  function addSheet(rows, sheetName){
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), sheetName.slice(0, 31)); // limite do Excel pro nome da aba
+  }
+
+  switch (exportId) {
+    case 'kpi':
+      addSheet([
+        { Indicador: 'Total de infrações', Valor: d.total },
+        { Indicador: 'Ciclo anterior', Valor: d.totalAnterior },
+        { Indicador: 'Variação vs. ciclo anterior', Valor: d.variacaoAbs },
+        { Indicador: 'Tipo mais recorrente', Valor: d.tipoRecorrente },
+        { Indicador: '% do efetivo com infração', Valor: Math.round(d.pctEfetivo * 10) / 10 },
+        { Indicador: 'Colaboradores afetados', Valor: d.afetadosCount },
+        { Indicador: 'Efetivo total (hierarquia)', Valor: d.roster },
+        { Indicador: 'Média por colaborador afetado', Valor: Math.round(d.mediaAfetado * 10) / 10 },
+      ], 'Indicadores');
+      nomeBase = 'indicadores-' + cicloTag;
+      break;
+    case 'ano': {
+      const months = computeAnoStacked();
+      addSheet(months.map(m => ({ Mês: m.label, '>7 dias': m.d7, Interjornada: m.interj, '>2h extras': m.hex, Total: m.total })), 'Infrações no ano');
+      nomeBase = 'infracoes-no-ano';
+      break;
+    }
+    case 'go':
+      addSheet(d.porGo.map(g => ({ GO: g.nome, '>7 dias': g.d7, Interjornada: g.interj, '>2h extras': g.hex, Total: g.total })), 'Por GO');
+      nomeBase = 'infracoes-por-go-' + cicloTag;
+      break;
+    case 'ga':
+      addSheet(d.porGa.map(g => ({
+        GA: g.nome, GO: g.go, Equipe: g.equipe, Afetados: g.afetados, Reincidentes: g.reincidentes,
+        '>7 dias': g.d7, Interjornada: g.interj, '>2h extras': g.hex, Total: g.total,
+      })), 'Por GA');
+      nomeBase = 'infracoes-por-ga-' + cicloTag;
+      break;
+    case 'rank':
+      addSheet(d.rankGa.map(r => ({
+        GA: r.ga,
+        'Semana anterior': r.temAnterior ? r.anterior : null,
+        'Semana atual': r.atual,
+        'Variação (positivo = redução)': r.temAnterior ? r.delta : null,
+      })), 'Ranking');
+      nomeBase = 'ranking-reducao';
+      break;
+    case 'weekly':
+      addSheet(d.semanas.map(s => ({ Semana: s.label, Total: s.total })), 'Por semana');
+      nomeBase = 'infracoes-por-semana';
+      break;
+    case 'dashboards':
+      addSheet(d.weekdayOrdered.map(x => ({ 'Dia da semana': x.label, Total: x.total })), 'Por dia da semana');
+      addSheet(d.porFuncao.map(x => ({ Função: x.key, Total: x.total })), 'Por função');
+      addSheet(d.porSubbu.map(x => ({ 'Sub BU': x.key, Total: x.total })), 'Por Sub BU');
+      nomeBase = 'dashboards-adicionais-' + cicloTag;
+      break;
+    case 'top':
+      addSheet(d.topColaboradores.map(c => ({
+        Colaborador: c.nome, GA: c.ga, GO: c.go,
+        '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
+        Reincidente: c.reinc ? 'Sim' : 'Não',
+      })), 'Top colaboradores');
+      nomeBase = 'top-colaboradores-' + cicloTag;
+      break;
+    case 'hier': {
+      const rows = [];
+      d.hierBlocks.forEach(b => {
+        if (b.colaboradores.length) {
+          b.colaboradores.forEach(c => rows.push({
+            GO: b.go, GA: b.ga, Colaborador: c.nome,
+            '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
+            Reincidente: c.reinc ? 'Sim' : 'Não',
+          }));
+        } else {
+          rows.push({ GO: b.go, GA: b.ga, Colaborador: '(nenhum colaborador com infração neste ciclo)', '>7 dias': '', Interjornada: '', '>2h extras': '', Total: '', Reincidente: '' });
+        }
+      });
+      addSheet(rows, 'Colaboradores por hierarquia');
+      nomeBase = 'colaboradores-por-hierarquia-' + cicloTag;
+      break;
+    }
+    case 'verif': {
+      const v = computeVerification();
+      const rows = [];
+      v.semHierarquia.forEach(n => rows.push({ Colaborador: n, Situação: 'Sem hierarquia definida (está na base, não está na Hierarquia)' }));
+      v.naHierarquiaSemDados.forEach(n => rows.push({ Colaborador: n, Situação: 'Na Hierarquia, sem registros no período carregado' }));
+      if (!rows.length) rows.push({ Colaborador: '', Situação: 'Nenhuma inconsistência — todos os colaboradores da base têm GA/GO definidos.' });
+      addSheet(rows, 'Verificação');
+      nomeBase = 'verificacao-base-x-hierarquia';
+      break;
+    }
+    default:
+      showToast('Não sei exportar esse bloco.');
+      return;
+  }
+  baixarPlanilha(wb, nomeBase);
+}
+
 function enhanceSections(){
   document.querySelectorAll('.wrap > section').forEach(section => {
     const head = section.querySelector(':scope > .section-head');
@@ -2553,8 +2682,20 @@ function enhanceSections(){
     copyBtn.title = 'Copiar bloco como imagem';
     copyBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="8" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M6 3V2a1 1 0 011-1h5a1 1 0 011 1v9a1 1 0 01-1 1h-1" stroke="currentColor" stroke-width="1.3"/></svg> Copiar';
 
+    // exportar os dados desse bloco (não a imagem — os números por trás dele) como .xlsx,
+    // do lado do "Copiar". Só blocos que declaram data-export têm de onde tirar linha/coluna.
+    let exportBtn = null;
+    if (section.dataset.export) {
+      exportBtn = document.createElement('button');
+      exportBtn.type = 'button';
+      exportBtn.className = 'copy-img-btn section-export-btn';
+      exportBtn.title = 'Exportar dados do bloco para Excel';
+      exportBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg> Excel';
+    }
+
     head.appendChild(toggleBtn);
     head.appendChild(mainWrap);
+    if (exportBtn) head.appendChild(exportBtn);
     head.appendChild(copyBtn);
     head.classList.add('collapsible-head');
 
@@ -2596,6 +2737,7 @@ function enhanceSections(){
 
     const h2 = mainWrap.querySelector('h2');
     copyBtn.addEventListener('click', () => copyElementAsImage(section, copyBtn, h2 ? h2.textContent : 'bloco'));
+    if (exportBtn) exportBtn.addEventListener('click', () => exportSectionToExcel(section.dataset.export));
   });
 }
 
