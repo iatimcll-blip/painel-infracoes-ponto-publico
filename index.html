@@ -22,6 +22,10 @@
     --border:         rgba(11,11,11,0.10);
 
     --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    /* azul claro usado no título de cada bloco de GA (Infrações e painéis auxiliares) —
+       mais claro/vivo que --s1 de propósito, pra funcionar como um destaque de título,
+       não como cor de botão/link. */
+    --light-blue: #1f9ee0;
     /* cores dos 3 tipos de infração (>7 dias / interjornada / >2h extras) — fixas por tipo,
        separadas da paleta de marca (--s1/s2/s3) que também é usada em botões, links etc.
        vermelho/amarelo/verde a pedido; o verde é puxado pro lado do ciano (não é o mesmo
@@ -47,6 +51,7 @@
       --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
       --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --light-blue: #5ec8f5;
       --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#0d9488;
       --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
       --critical-tint: rgba(230,103,103,0.14);
@@ -61,6 +66,7 @@
     --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.12);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --light-blue: #5ec8f5;
     --type-d7:#ef4444; --type-interj:#facc15; --type-hex:#0d9488;
     --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
     --critical-tint: rgba(230,103,103,0.14);
@@ -389,8 +395,8 @@
   .ga-head-main{ display:flex; align-items:center; gap:10px; min-width:0; flex:1 1 260px; }
   .ga-head-main .go-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
   .ga-head-text{ min-width:0; }
-  .ga-head-text .ga-name{ font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ga-head-text .go-line{ font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ga-head-text .ga-name{ font-size:14px; font-weight:700; color:var(--light-blue); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ga-head-text .go-line{ font-size:11.5px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .ga-head-stats{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end; }
   .ga-stat{ text-align:right; }
   .ga-stat .n{ font-size:14px; font-weight:600; display:block; }
@@ -420,14 +426,15 @@
   .colab-dates{ margin-top:2px; font-family:var(--mono); font-size:10px; font-weight:400; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
 
-  /* coluna Justificativa (FCA) — textarea compacta que cresce sozinha até um teto, sem
-     quebrar a altura da linha à toa; some assim que o GA sai do campo (fica só o texto
-     salvo), e o "salvou" é um flash discreto no fundo da célula, sem um toast por linha. */
-  .just-col{ min-width:220px; }
+  /* coluna Justificativa (FCA) — cresce sozinha (autoGrowTextarea) até um teto bem mais alto
+     que as outras colunas, de propósito: é onde o GA escreve o relato do caso, não uma nota
+     de uma linha só. Some assim que o GA sai do campo (fica só o texto salvo), e o "salvou" é
+     um flash discreto no fundo da célula, sem um toast por linha. */
+  .just-col{ min-width:320px; }
   .just-input{
-    width:100%; min-height:30px; max-height:140px; resize:vertical; overflow:hidden;
-    font-family:var(--sans); font-size:12px; color:var(--text-primary); background:var(--page);
-    border:1px solid var(--border); border-radius:6px; padding:6px 8px; line-height:1.4;
+    width:100%; min-height:88px; max-height:320px; resize:vertical; overflow:hidden;
+    font-family:var(--sans); font-size:12.5px; color:var(--text-primary); background:var(--page);
+    border:1px solid var(--border); border-radius:6px; padding:8px 10px; line-height:1.5;
   }
   .just-input:focus{ outline:2px solid var(--s1); outline-offset:1px; border-color:var(--s1); }
   .just-input::placeholder{ color:var(--text-muted); }
@@ -2903,7 +2910,7 @@ function renderHierarchy(d){
           '<td class="num-col num'+(c.hex>0?' has-infra':'')+'">'+fmt(c.hex)+'</td>' +
           '<td class="num-col">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
           '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>' +
-          '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
+          '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
         tbody.appendChild(tr);
       });
       body.appendChild(table);
@@ -3965,7 +3972,14 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
       gaBody.className = 'ga-body';
       const table = document.createElement('table');
       table.className = 'ga-table';
-      table.innerHTML = '<thead><tr><th>Colaborador</th>' + opts.columns.map(c => '<th'+(c.num?' class="num-col"':(c.just?' class="just-col"':''))+'>'+esc(c.label)+'</th>').join('') + '</tr></thead><tbody></tbody>';
+      // colgroup com largura fixa por coluna (mesma técnica de Infrações) — sem isso
+      // table-layout:fixed divide o espaço em partes iguais, e a Justificativa (bem mais
+      // larga agora) ficava espremida do mesmo jeito que Horas/Valor. Só a Justificativa
+      // fica sem width no <col>: cresce sozinha pra preencher o resto da tabela.
+      const colGroupHtml = '<colgroup><col style="width:'+(opts.nameWidth||190)+'px">' +
+        opts.columns.map(c => c.width ? '<col style="width:'+c.width+'px">' : '<col>').join('') +
+        '</colgroup>';
+      table.innerHTML = colGroupHtml + '<thead><tr><th>Colaborador</th>' + opts.columns.map(c => '<th'+(c.num?' class="num-col"':(c.just?' class="just-col"':''))+'>'+esc(c.label)+'</th>').join('') + '</tr></thead><tbody></tbody>';
       const tbody = table.querySelector('tbody');
       [...gaBlock.pessoas].sort((a,b) => opts.sortValue(b)-opts.sortValue(a)).forEach(p => {
         const tr = document.createElement('tr');
@@ -4035,7 +4049,8 @@ function exportAuxGaBlockToExcel(gaBlock, opts, ctx){
 
 /* -------- Banco de Horas -------- */
 const BH_OPTS = {
-  columns: [ {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Dias', num:true}, {label:'Data Limite'}, {label:'Justificativa (FCA)', just:true} ],
+  nameWidth: 190,
+  columns: [ {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100}, {label:'Dias', num:true, width:64}, {label:'Data Limite', width:110}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: fmtHorasDecimais(pessoas.reduce((a,p)=>a+p.horasDec,0)), l:'Horas' },
@@ -4049,7 +4064,7 @@ const BH_OPTS = {
       '<td class="num-col num'+(p.vlr<0?' has-infra':'')+'">'+esc(fmtMoeda(p.vlr))+'</td>'+
       '<td class="num-col num'+(p.dias<0?' has-infra':'')+'">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
       '<td>'+esc(datasLimiteLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -4140,7 +4155,8 @@ document.getElementById('file-bh').addEventListener('change', async evt => {
 
 /* -------- DSR -------- */
 const DSR_OPTS = {
-  columns: [ {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'}, {label:'Justificativa (FCA)', just:true} ],
+  nameWidth: 190,
+  columns: [ {label:'Ocorrências', num:true, width:100}, {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100}, {label:'Data / Horário', width:160}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4154,7 +4170,7 @@ const DSR_OPTS = {
       '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -4243,7 +4259,8 @@ document.getElementById('file-dsr').addEventListener('change', async evt => {
 
 /* -------- Feriados -------- */
 const FERIADO_OPTS = {
-  columns: [ {label:'Tipo'}, {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'}, {label:'Justificativa (FCA)', just:true} ],
+  nameWidth: 170,
+  columns: [ {label:'Tipo', width:130}, {label:'Ocorrências', num:true, width:95}, {label:'Horas', num:true, width:70}, {label:'Valor', num:true, width:95}, {label:'Data / Horário', width:150}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4258,7 +4275,7 @@ const FERIADO_OPTS = {
       '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
