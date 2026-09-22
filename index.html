@@ -279,7 +279,7 @@
   tbody td.name{ font-weight:500; }
   tbody td.muted{ color:var(--text-secondary); }
   .rank{ font-family:var(--mono); color:var(--text-muted); width:22px; display:inline-block; }
-  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:999px; font-family:var(--mono); }
+  .badge{ display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:999px; font-family:var(--mono); white-space:nowrap; }
   .badge.reinc{ background:var(--critical-tint); color:var(--critical); }
   .badge.ok{ background:var(--good-tint); color:var(--good); }
   .table-scroll{ overflow-x:auto; }
@@ -298,6 +298,7 @@
 
   /* ---------- hierarchy blocks ---------- */
   .hier-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .just-sync-hint{ font-size:11.5px; color:var(--text-muted); font-style:italic; }
   .hier-toolbar button{ font-family:var(--sans); font-size:11.5px; font-weight:600; color:var(--text-secondary); background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:6px 11px; cursor:pointer; }
   .hier-toolbar button:hover{ color:var(--text-primary); border-color:var(--text-muted); }
 
@@ -338,12 +339,31 @@
   .copy-img-btn:hover{ color:var(--text-primary); border-color:var(--text-muted); }
   .copy-img-btn.copying{ opacity:.6; pointer-events:none; }
   .ga-body{ border-top:1px solid var(--grid); padding:4px 16px 14px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  .ga-table{ width:100%; border-collapse:collapse; font-size:12px; }
-  .ga-table th{ text-align:left; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted); font-weight:600; padding:10px 8px 6px; }
+  /* table-layout:fixed + <colgroup> = larguras previsíveis por coluna (sem isso o navegador
+     "adivinha" a largura pelo conteúdo, e a Colaborador/Justificativa ficavam ora espremidas,
+     ora enormes, dependendo do nome/texto mais longo da tabela). Justificativa não tem width
+     no <col> dela de propósito: em table-layout:fixed a coluna sem width fica com o espaço
+     que sobrar depois das outras — cresce sozinha pra preencher a tabela. */
+  .ga-table{ width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+  .ga-table th{ text-align:left; font-size:10px; letter-spacing:.03em; text-transform:uppercase; color:var(--text-muted); font-weight:600; padding:10px 8px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-table th.num-col, .ga-table td.num-col{ text-align:right; }
   .ga-table td{ padding:6px 8px; border-top:1px solid var(--grid); vertical-align:middle; }
-  .ga-table td.name{ font-weight:500; }
+  .ga-table td.name{ font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
+
+  /* coluna Justificativa (FCA) — textarea compacta que cresce sozinha até um teto, sem
+     quebrar a altura da linha à toa; some assim que o GA sai do campo (fica só o texto
+     salvo), e o "salvou" é um flash discreto no fundo da célula, sem um toast por linha. */
+  .just-col{ min-width:220px; }
+  .just-input{
+    width:100%; min-height:30px; max-height:140px; resize:vertical; overflow:hidden;
+    font-family:var(--sans); font-size:12px; color:var(--text-primary); background:var(--page);
+    border:1px solid var(--border); border-radius:6px; padding:6px 8px; line-height:1.4;
+  }
+  .just-input:focus{ outline:2px solid var(--s1); outline-offset:1px; border-color:var(--s1); }
+  .just-input::placeholder{ color:var(--text-muted); }
+  td.just-col.just-saved{ animation:just-saved-flash 1.2s ease-out; }
+  @keyframes just-saved-flash{ 0%{ background:var(--good-tint); } 100%{ background:transparent; } }
 
   /* ---------- detail modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
@@ -607,6 +627,7 @@
     <div class="hier-toolbar">
       <button type="button" id="hier-expand">Expandir todos</button>
       <button type="button" id="hier-collapse">Recolher todos</button>
+      <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -842,6 +863,14 @@ function authRemoveUser(username){
 
 const STORAGE_RAW = 'painelInfracoes.raw.v1';
 const STORAGE_HIER = 'painelInfracoes.hier.v1';
+// justificativas (FCA) que o GA escreve por colaborador+período na tabela de "Colaboradores por
+// hierarquia" — por enquanto só neste navegador (não sincroniza pelo Supabase ainda; ver aviso
+// perto de renderHierarchy). Chave: nome + tipo/valor do período selecionado no momento do save,
+// pra uma justificativa de setembro não aparecer colada no ciclo de outubro.
+const STORAGE_JUST = 'painelInfracoes.justificativas.v1';
+function justificativaKey(nome, periodType, periodKey){
+  return nome + '::' + periodType + ':' + periodKey;
+}
 // liga/desliga do bloco "Verificação · Base de dados x Hierarquia" — preferência de tela,
 // por navegador, igual ao tema claro/escuro (não é um dado compartilhado, então não sincroniza
 // pelo Supabase).
@@ -1129,7 +1158,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+let STATE = { raw: [], hierMap: {}, justificativas: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1138,6 +1167,18 @@ function tryLoadFromStorage(){
     if (r) { STATE.raw = JSON.parse(r); STATE.usingDefault = false; }
     if (h) { STATE.hierMap = JSON.parse(h); STATE.usingDefault = false; }
   } catch(e) { /* ignora - segue com defaults */ }
+  loadJustificativasFromStorage();
+}
+function loadJustificativasFromStorage(){
+  try {
+    const j = localStorage.getItem(STORAGE_JUST);
+    if (j) STATE.justificativas = JSON.parse(j);
+  } catch(e) { /* ignora - segue com defaults */ }
+}
+function saveJustificativasToStorage(){
+  // salvo à parte de saveToStorage() (raw+hier) de propósito: uma textarea perdendo foco não
+  // deveria reserializar a Base inteira (pode ter milhares de linhas) a cada campo editado.
+  try { localStorage.setItem(STORAGE_JUST, JSON.stringify(STATE.justificativas)); } catch(e) {}
 }
 function saveToStorage(){
   try {
@@ -1327,7 +1368,9 @@ function resetData(){
   // deve mostrar nenhum dado de exemplo/planilha embutida — só reporta quando existe uma
   // Base anexada de verdade (localmente ou sincronizada), então "limpar" volta pro vazio.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); } catch(e) {}
-  STATE = { raw: [], hierMap: {}, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+  // justificativas NÃO são apagadas aqui — são anotações do GA, independentes da Base/Hierarquia
+  // anexada, e "limpar dados locais" é especificamente sobre essas duas.
+  STATE = { raw: [], hierMap: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -2367,20 +2410,25 @@ function renderHierarchy(d){
       const table = document.createElement('table');
       table.className = 'ga-table';
       table.innerHTML =
-        '<thead><tr><th>Colaborador</th><th class="num-col">&gt;7 dias</th><th class="num-col">Interj.</th><th class="num-col">&gt;2h extras</th><th class="num-col">Total</th><th>Reincidência</th></tr></thead><tbody></tbody>';
+        '<colgroup><col style="width:180px"><col style="width:64px"><col style="width:64px"><col style="width:92px"><col style="width:90px"><col style="width:118px"><col></colgroup>' +
+        '<thead><tr><th>Colaborador</th><th class="num-col">&gt;7 dias</th><th class="num-col">Interj.</th><th class="num-col">&gt;2h extras</th><th class="num-col">Total</th><th>Reincidência</th><th class="just-col">Justificativa (FCA)</th></tr></thead><tbody></tbody>';
       const tbody = table.querySelector('tbody');
       block.colaboradores.forEach(c => {
         const tr = document.createElement('tr');
+        const justKey = justificativaKey(c.nome, d.periodType, d.periodKey);
+        const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
         tr.innerHTML =
-          '<td class="name">'+esc(c.nome)+'</td>' +
+          '<td class="name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</td>' +
           '<td class="num-col num">'+fmt(c.d7)+'</td>' +
           '<td class="num-col num">'+fmt(c.interj)+'</td>' +
           '<td class="num-col num">'+fmt(c.hex)+'</td>' +
           '<td class="num-col">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
-          '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>';
+          '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>' +
+          '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
         tbody.appendChild(tr);
       });
       body.appendChild(table);
+      body.querySelectorAll('.just-input').forEach(autoGrowTextarea);
     }
     details.appendChild(body);
     wrap.appendChild(details);
@@ -2389,6 +2437,39 @@ function renderHierarchy(d){
   document.getElementById('hier-expand').onclick = () => wrap.querySelectorAll('details').forEach(x=>x.open=true);
   document.getElementById('hier-collapse').onclick = () => wrap.querySelectorAll('details').forEach(x=>x.open=false);
 }
+
+// cresce a textarea de Justificativa junto com o texto digitado, até o teto de max-height do
+// CSS (aí vira scroll interno) — sem isso toda linha nasceria alta ou cortaria o texto.
+function autoGrowTextarea(ta){
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+// listeners únicos (delegados no container, não recriados a cada render) pro campo de
+// Justificativa: salva quando o campo perde o foco (não a cada tecla) — hoje só neste
+// navegador, IGUAL A hierMap era antes de existir sincronismo (ver aviso em renderHierarchy).
+const hierBlocksContainer = document.getElementById('hier-blocks');
+hierBlocksContainer.addEventListener('input', evt => {
+  if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
+});
+hierBlocksContainer.addEventListener('focusout', evt => {
+  const ta = evt.target.closest && evt.target.closest('.just-input');
+  if (!ta) return;
+  const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey;
+  const key = justificativaKey(nome, periodType, periodKey);
+  const texto = ta.value.trim();
+  const antes = (STATE.justificativas[key] || {}).texto || '';
+  if (texto === antes) return; // nada mudou — não grava (e não pisca "salvo") à toa
+  if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
+  else delete STATE.justificativas[key];
+  saveJustificativasToStorage();
+  const cell = ta.closest('td');
+  if (cell) {
+    cell.classList.remove('just-saved');
+    void cell.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
+    cell.classList.add('just-saved');
+  }
+});
 
 /* ---------------- recolher/expandir + copiar em todas as seções ---------------- */
 /* ---------------- painel de configurações (login / usuários / importação) ---------------- */
@@ -2634,9 +2715,10 @@ function exportSectionToExcel(exportId){
             GO: b.go, GA: b.ga, Colaborador: c.nome,
             '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
             Reincidente: c.reinc ? 'Sim' : 'Não',
+            'Justificativa (FCA)': (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '',
           }));
         } else {
-          rows.push({ GO: b.go, GA: b.ga, Colaborador: '(nenhum colaborador com infração neste ciclo)', '>7 dias': '', Interjornada: '', '>2h extras': '', Total: '', Reincidente: '' });
+          rows.push({ GO: b.go, GA: b.ga, Colaborador: '(nenhum colaborador com infração neste ciclo)', '>7 dias': '', Interjornada: '', '>2h extras': '', Total: '', Reincidente: '', 'Justificativa (FCA)': '' });
         }
       });
       addSheet(rows, 'Colaboradores por hierarquia');
