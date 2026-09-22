@@ -784,6 +784,7 @@
       <div class="hier-toolbar">
         <button type="button" id="bh-hier-expand">Expandir todos</button>
         <button type="button" id="bh-hier-collapse">Recolher todos</button>
+        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
       </div>
       <div class="hier-blocks" id="bh-go-blocks"></div>
     </section>
@@ -835,6 +836,7 @@
       <div class="hier-toolbar">
         <button type="button" id="dsr-hier-expand">Expandir todos</button>
         <button type="button" id="dsr-hier-collapse">Recolher todos</button>
+        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
       </div>
       <div class="hier-blocks" id="dsr-go-blocks"></div>
     </section>
@@ -886,6 +888,7 @@
       <div class="hier-toolbar">
         <button type="button" id="feriado-hier-expand">Expandir todos</button>
         <button type="button" id="feriado-hier-collapse">Recolher todos</button>
+        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
       </div>
       <div class="hier-blocks" id="feriado-go-blocks"></div>
     </section>
@@ -3900,8 +3903,10 @@ function buildGoGaBlocks(pessoas){
     gas: [...gasMap.entries()].map(([ga, pessoasGa]) => ({ ga, go, pessoas: pessoasGa })),
   }));
 }
-// opts: { columns:[{label,num}], statsFor(pessoas)=>[{n,l}], sortValue(p)=>number, cellsFor(p)=>htmlTds }
-function renderAuxGoGaBlocks(containerId, blocks, opts){
+// opts: { columns:[{label,num,just}], statsFor(pessoas)=>[{n,l}], sortValue(p)=>number, cellsFor(p,ctx)=>htmlTds, exportRow(p,go,ga,ctx)=>obj }
+// ctx: { tema, periodType, periodKey, periodLabel } — repassado pro cellsFor/exportRow pra achar
+// a chave certa da Justificativa (FCA) e nomear o arquivo do Excel por bloco.
+function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
   const wrap = document.getElementById(containerId);
   clear(wrap);
   if (!blocks.length) {
@@ -3939,27 +3944,66 @@ function renderAuxGoGaBlocks(containerId, blocks, opts){
           '<svg class="chevron" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
           '<div class="ga-head-text"><div class="ga-name">'+esc(gaBlock.ga)+'</div><div class="go-line">GO: '+esc(gaBlock.go)+'</div></div>' +
         '</div>' +
-        '<div class="ga-head-stats">' + statsGa.map(s => '<div class="ga-stat"><span class="n num">'+esc(String(s.n))+'</span><span class="l">'+esc(s.l)+'</span></div>').join('') + '</div>';
+        '<div class="ga-head-stats">' + statsGa.map(s => '<div class="ga-stat"><span class="n num">'+esc(String(s.n))+'</span><span class="l">'+esc(s.l)+'</span></div>').join('') +
+          '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
+            'Excel' +
+          '</button>' +
+          '<button type="button" class="copy-img-btn" title="Copiar bloco como imagem">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="8" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M6 3V2a1 1 0 011-1h5a1 1 0 011 1v9a1 1 0 01-1 1h-1" stroke="currentColor" stroke-width="1.3"/></svg>' +
+            'Copiar' +
+          '</button>' +
+        '</div>';
       gaDetails.appendChild(gaSummary);
+
+      const copyBtn = gaSummary.querySelector('.copy-img-btn:not(.ga-export-btn)');
+      copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(gaDetails, copyBtn, gaBlock.ga); });
+      const exportGaBtn = gaSummary.querySelector('.ga-export-btn');
+      exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportAuxGaBlockToExcel(gaBlock, opts, ctx); });
 
       const gaBody = document.createElement('div');
       gaBody.className = 'ga-body';
       const table = document.createElement('table');
       table.className = 'ga-table';
-      table.innerHTML = '<thead><tr><th>Colaborador</th>' + opts.columns.map(c => '<th'+(c.num?' class="num-col"':'')+'>'+esc(c.label)+'</th>').join('') + '</tr></thead><tbody></tbody>';
+      table.innerHTML = '<thead><tr><th>Colaborador</th>' + opts.columns.map(c => '<th'+(c.num?' class="num-col"':(c.just?' class="just-col"':''))+'>'+esc(c.label)+'</th>').join('') + '</tr></thead><tbody></tbody>';
       const tbody = table.querySelector('tbody');
       [...gaBlock.pessoas].sort((a,b) => opts.sortValue(b)-opts.sortValue(a)).forEach(p => {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td class="name">'+esc(p.nome)+'</td>' + opts.cellsFor(p);
+        tr.innerHTML = '<td class="name">'+esc(p.nome)+'</td>' + opts.cellsFor(p, ctx);
         tbody.appendChild(tr);
       });
       gaBody.appendChild(table);
+      gaBody.querySelectorAll('.just-input').forEach(autoGrowTextarea);
       gaDetails.appendChild(gaBody);
       gaWrap.appendChild(gaDetails);
     });
     body.appendChild(gaWrap);
     details.appendChild(body);
     wrap.appendChild(details);
+  });
+}
+// listeners delegados (não recriados a cada render) pro campo de Justificativa dos painéis
+// auxiliares — mesmo padrão do hierBlocksContainer de Infrações: salva ao perder o foco.
+function justificativaKeyAux(tema, nome, periodType, periodKey){
+  return tema + '::' + justificativaKey(nome, periodType, periodKey);
+}
+function wireJustificativaAutosave(containerId){
+  const container = document.getElementById(containerId);
+  container.addEventListener('input', evt => {
+    if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
+  });
+  container.addEventListener('focusout', evt => {
+    const ta = evt.target.closest && evt.target.closest('.just-input');
+    if (!ta) return;
+    const key = justificativaKeyAux(ta.dataset.tema, ta.dataset.nome, ta.dataset.periodType, ta.dataset.periodKey);
+    const texto = ta.value.trim();
+    const antes = (STATE.justificativas[key] || {}).texto || '';
+    if (texto === antes) return;
+    if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
+    else delete STATE.justificativas[key];
+    saveJustificativasToStorage();
+    const cell = ta.closest('td');
+    if (cell) { cell.classList.remove('just-saved'); void cell.offsetWidth; cell.classList.add('just-saved'); }
   });
 }
 function wireHierToolbar(prefix, containerId){
@@ -3972,28 +4016,43 @@ function exportAuxHierarquia(estado, opts, tema){
   const d = estado.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
   if (!xlsxDisponivel()) return;
+  const ctx = { tema, periodType: d.periodType, periodKey: d.periodKey, periodLabel: d.periodLabel };
   const wb = XLSX.utils.book_new();
   const rows = [];
-  d.goGaBlocks.forEach(goBlock => goBlock.gas.forEach(gaBlock => gaBlock.pessoas.forEach(p => rows.push(opts.exportRow(p, gaBlock.go, gaBlock.ga)))));
+  d.goGaBlocks.forEach(goBlock => goBlock.gas.forEach(gaBlock => gaBlock.pessoas.forEach(p => rows.push(opts.exportRow(p, gaBlock.go, gaBlock.ga, ctx)))));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Colaboradores');
   baixarPlanilha(wb, tema + '-hierarquia-' + nomeArquivoSeguro(d.periodLabel));
+}
+// Excel de um único bloco de GA (botão "Excel" no cabeçalho do bloco) — mesma regra do Excel por
+// GA de Infrações (exportGaBlockToExcel), só que reaproveitando o exportRow de cada tema.
+function exportAuxGaBlockToExcel(gaBlock, opts, ctx){
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  const rows = gaBlock.pessoas.map(p => opts.exportRow(p, gaBlock.go, gaBlock.ga, ctx));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Colaboradores'.slice(0, 31));
+  baixarPlanilha(wb, 'colaboradores-' + nomeArquivoSeguro(gaBlock.ga) + '-' + nomeArquivoSeguro(ctx.periodLabel));
 }
 
 /* -------- Banco de Horas -------- */
 const BH_OPTS = {
-  columns: [ {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Dias', num:true}, {label:'Data Limite'} ],
+  columns: [ {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Dias', num:true}, {label:'Data Limite'}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: fmtHorasDecimais(pessoas.reduce((a,p)=>a+p.horasDec,0)), l:'Horas' },
     { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.vlr,0)), l:'Valor' },
   ],
   sortValue: p => p.vlr,
-  cellsFor: p =>
-    '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
-    '<td class="num-col num">'+esc(fmtMoeda(p.vlr))+'</td>'+
-    '<td class="num-col num">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
-    '<td>'+esc(datasLimiteLabel(p))+'</td>',
-  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p) }),
+  cellsFor: (p, ctx) => {
+    const justKey = justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey);
+    const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
+    return '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
+      '<td class="num-col num'+(p.vlr<0?' has-infra':'')+'">'+esc(fmtMoeda(p.vlr))+'</td>'+
+      '<td class="num-col num'+(p.dias<0?' has-infra':'')+'">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
+      '<td>'+esc(datasLimiteLabel(p))+'</td>'+
+      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+  },
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
+    'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveBH(){
   const d = derivarAux(STATE_BH, r => ({ refDate: r.limiteComp }));
@@ -4025,7 +4084,7 @@ function renderBH(){
     renderAuxBars('bh-go-bars', [], 'var(--s1)', fmtMoeda);
     renderAuxBars('bh-ga-bars', [], 'var(--s1)', fmtMoeda);
     document.getElementById('bh-go-hint').textContent = '';
-    renderAuxGoGaBlocks('bh-go-blocks', [], BH_OPTS);
+    renderAuxGoGaBlocks('bh-go-blocks', [], BH_OPTS, { tema:'bh' });
     document.getElementById('bh-hier-hint').textContent = '';
     return;
   }
@@ -4040,7 +4099,7 @@ function renderBH(){
   renderAuxBars('bh-go-bars', d.porGo, 'var(--s1)', fmtMoeda);
   renderAuxBars('bh-ga-bars', d.porGa, 'var(--s1)', fmtMoeda);
   document.getElementById('bh-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
-  renderAuxGoGaBlocks('bh-go-blocks', d.goGaBlocks, BH_OPTS);
+  renderAuxGoGaBlocks('bh-go-blocks', d.goGaBlocks, BH_OPTS, { tema:'bh', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
   document.getElementById('bh-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
   wireHierToolbar('bh', 'bh-go-blocks');
 }
@@ -4081,19 +4140,24 @@ document.getElementById('file-bh').addEventListener('change', async evt => {
 
 /* -------- DSR -------- */
 const DSR_OPTS = {
-  columns: [ {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'} ],
+  columns: [ {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
     { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.valor,0)), l:'Valor' },
   ],
   sortValue: p => p.valor,
-  cellsFor: p =>
-    '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
-    '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
-    '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>'+
-    '<td>'+esc(datasHorariosLabel(p))+'</td>',
-  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p) }),
+  cellsFor: (p, ctx) => {
+    const justKey = justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey);
+    const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
+    return '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+      '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
+      '<td>'+esc(datasHorariosLabel(p))+'</td>'+
+      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+  },
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+    'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveDSR(){
   const d = derivarAux(STATE_DSR, r => ({ refDate: r.data }));
@@ -4123,7 +4187,7 @@ function renderDSR(){
     renderAuxBars('dsr-go-bars', [], 'var(--s2)', fmtMoeda);
     renderAuxBars('dsr-ga-bars', [], 'var(--s2)', fmtMoeda);
     document.getElementById('dsr-go-hint').textContent = '';
-    renderAuxGoGaBlocks('dsr-go-blocks', [], DSR_OPTS);
+    renderAuxGoGaBlocks('dsr-go-blocks', [], DSR_OPTS, { tema:'dsr' });
     document.getElementById('dsr-hier-hint').textContent = '';
     return;
   }
@@ -4138,7 +4202,7 @@ function renderDSR(){
   renderAuxBars('dsr-go-bars', d.porGo, 'var(--s2)', fmtMoeda);
   renderAuxBars('dsr-ga-bars', d.porGa, 'var(--s2)', fmtMoeda);
   document.getElementById('dsr-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
-  renderAuxGoGaBlocks('dsr-go-blocks', d.goGaBlocks, DSR_OPTS);
+  renderAuxGoGaBlocks('dsr-go-blocks', d.goGaBlocks, DSR_OPTS, { tema:'dsr', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
   document.getElementById('dsr-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
   wireHierToolbar('dsr', 'dsr-go-blocks');
 }
@@ -4179,20 +4243,25 @@ document.getElementById('file-dsr').addEventListener('change', async evt => {
 
 /* -------- Feriados -------- */
 const FERIADO_OPTS = {
-  columns: [ {label:'Tipo'}, {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'} ],
+  columns: [ {label:'Tipo'}, {label:'Ocorrências', num:true}, {label:'Horas', num:true}, {label:'Valor', num:true}, {label:'Data / Horário'}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
     { n: fmtMoeda(pessoas.reduce((a,p)=>a+p.valor,0)), l:'Valor' },
   ],
   sortValue: p => p.valor,
-  cellsFor: p =>
-    '<td>'+esc([...p.tipos].join(', '))+'</td>'+
-    '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
-    '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
-    '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>'+
-    '<td>'+esc(datasHorariosLabel(p))+'</td>',
-  exportRow: (p, go, ga) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p) }),
+  cellsFor: (p, ctx) => {
+    const justKey = justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey);
+    const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
+    return '<td>'+esc([...p.tipos].join(', '))+'</td>'+
+      '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+      '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
+      '<td>'+esc(datasHorariosLabel(p))+'</td>'+
+      '<td class="just-col"><textarea class="just-input" rows="1" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+  },
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+    'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveFeriado(){
   const d = derivarAux(STATE_FERIADO, r => ({ refDate: r.data }));
@@ -4222,7 +4291,7 @@ function renderFeriado(){
     renderAuxBars('feriado-go-bars', [], 'var(--s3)', fmtMoeda);
     renderAuxBars('feriado-ga-bars', [], 'var(--s3)', fmtMoeda);
     document.getElementById('feriado-go-hint').textContent = '';
-    renderAuxGoGaBlocks('feriado-go-blocks', [], FERIADO_OPTS);
+    renderAuxGoGaBlocks('feriado-go-blocks', [], FERIADO_OPTS, { tema:'feriado' });
     document.getElementById('feriado-hier-hint').textContent = '';
     return;
   }
@@ -4237,7 +4306,7 @@ function renderFeriado(){
   renderAuxBars('feriado-go-bars', d.porGo, 'var(--s3)', fmtMoeda);
   renderAuxBars('feriado-ga-bars', d.porGa, 'var(--s3)', fmtMoeda);
   document.getElementById('feriado-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
-  renderAuxGoGaBlocks('feriado-go-blocks', d.goGaBlocks, FERIADO_OPTS);
+  renderAuxGoGaBlocks('feriado-go-blocks', d.goGaBlocks, FERIADO_OPTS, { tema:'feriado', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
   document.getElementById('feriado-hier-hint').textContent = d.pessoas.length + ' colaborador(es) · ' + d.goGaBlocks.length + ' GO(s)';
   wireHierToolbar('feriado', 'feriado-go-blocks');
 }
@@ -4443,6 +4512,9 @@ document.getElementById('role-badge').addEventListener('click', () => {
   wireAuxPeriodoButtons('bh', STATE_BH, renderBH);
   wireAuxPeriodoButtons('dsr', STATE_DSR, renderDSR);
   wireAuxPeriodoButtons('feriado', STATE_FERIADO, renderFeriado);
+  wireJustificativaAutosave('bh-go-blocks');
+  wireJustificativaAutosave('dsr-go-blocks');
+  wireJustificativaAutosave('feriado-go-blocks');
   await loadAuth();
   updateRoleBadge();
   recomputeAndRender();
