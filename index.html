@@ -111,6 +111,20 @@
     cursor:pointer; white-space:nowrap;
   }
   .settings-btn:hover{ color:var(--text-primary); border-color:var(--text-muted); }
+  /* ---------- abas (Infrações / Banco de Horas / DSR / Feriados) ---------- */
+  .tab-bar{ display:flex; gap:6px; flex-wrap:wrap; border-bottom:1px solid var(--border); padding-bottom:0; }
+  .tab-btn{
+    font-family:var(--sans); font-size:13px; font-weight:600; color:var(--text-muted);
+    background:none; border:none; border-bottom:2px solid transparent; padding:10px 4px; margin-bottom:-1px;
+    cursor:pointer; white-space:nowrap;
+  }
+  .tab-btn:hover{ color:var(--text-primary); }
+  .tab-btn.active{ color:var(--s1); border-bottom-color:var(--s1); }
+  .tab-panel{ display:none; flex-direction:column; gap:28px; }
+  .tab-panel.active{ display:flex; }
+  .aux-attach-btn{ margin-left:auto; }
+  .aux-attach-btn[hidden]{ display:none; }
+
   .filter-row{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
   .toolbar{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
   .cycle-select{
@@ -575,6 +589,15 @@
     </div>
   </header>
 
+  <nav class="tab-bar" id="tab-bar" role="tablist">
+    <button type="button" class="tab-btn active" data-tab="infracoes" role="tab" aria-selected="true">Infrações</button>
+    <button type="button" class="tab-btn" data-tab="bh" role="tab" aria-selected="false">Banco de Horas</button>
+    <button type="button" class="tab-btn" data-tab="dsr" role="tab" aria-selected="false">DSR</button>
+    <button type="button" class="tab-btn" data-tab="feriado" role="tab" aria-selected="false">Feriados</button>
+  </nav>
+
+  <div id="tab-infracoes" class="tab-panel active">
+
   <input type="file" id="file-base" accept=".xlsx" hidden>
   <input type="file" id="file-hier" accept=".xlsx" hidden>
 
@@ -692,6 +715,83 @@
     <span>Fonte: dados de ponto + hierarquia importados no navegador (nenhum arquivo é enviado a servidores)</span>
     <span>Ciclo em exibição — <span class="num" id="footer-cycle"></span></span>
   </footer>
+
+  </div>
+
+  <div id="tab-bh" class="tab-panel">
+    <section data-export="bh-tabela">
+      <div class="section-head">
+        <h2>Banco de Horas</h2>
+        <span class="hint" id="bh-hint"></span>
+        <button type="button" class="settings-btn aux-attach-btn" id="bh-attach-btn" title="Anexar planilha de Banco de Horas (só Administrador)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Anexar
+        </button>
+      </div>
+      <div class="source-note" id="bh-source-note"></div>
+      <input type="file" id="file-bh" accept=".xlsx" hidden>
+      <div class="filter-row" style="margin-top:10px;">
+        <select class="cycle-select" id="bh-ciclo-select" title="Filtrar por ciclo (Limite Comp.)"></select>
+      </div>
+      <div class="kpi-grid" id="bh-kpi-grid" style="margin-top:14px;"></div>
+      <div class="card table-scroll" style="margin-top:16px;">
+        <table>
+          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th class="num-col">Horas</th><th class="num-col">Valor</th><th class="num-col">Dias</th></tr></thead>
+          <tbody id="bh-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="tab-dsr" class="tab-panel">
+    <section data-export="dsr-tabela">
+      <div class="section-head">
+        <h2>DSR</h2>
+        <span class="hint" id="dsr-hint"></span>
+        <button type="button" class="settings-btn aux-attach-btn" id="dsr-attach-btn" title="Anexar planilha de DSR (só Administrador)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Anexar
+        </button>
+      </div>
+      <div class="source-note" id="dsr-source-note"></div>
+      <input type="file" id="file-dsr" accept=".xlsx" hidden>
+      <div class="filter-row" style="margin-top:10px;">
+        <select class="cycle-select" id="dsr-ciclo-select" title="Filtrar por ciclo"></select>
+      </div>
+      <div class="kpi-grid" id="dsr-kpi-grid" style="margin-top:14px;"></div>
+      <div class="card table-scroll" style="margin-top:16px;">
+        <table>
+          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th class="num-col">Ocorrências</th><th class="num-col">Horas</th><th class="num-col">Valor</th></tr></thead>
+          <tbody id="dsr-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="tab-feriado" class="tab-panel">
+    <section data-export="feriado-tabela">
+      <div class="section-head">
+        <h2>Feriados</h2>
+        <span class="hint" id="feriado-hint"></span>
+        <button type="button" class="settings-btn aux-attach-btn" id="feriado-attach-btn" title="Anexar planilha de Feriados (só Administrador)">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0-9L4.5 5.5M8 2l3.5 3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Anexar
+        </button>
+      </div>
+      <div class="source-note" id="feriado-source-note"></div>
+      <input type="file" id="file-feriado" accept=".xlsx" hidden>
+      <div class="filter-row" style="margin-top:10px;">
+        <select class="cycle-select" id="feriado-ciclo-select" title="Filtrar por ciclo"></select>
+      </div>
+      <div class="kpi-grid" id="feriado-kpi-grid" style="margin-top:14px;"></div>
+      <div class="card table-scroll" style="margin-top:16px;">
+        <table>
+          <thead><tr><th>Colaborador</th><th>GA</th><th>GO</th><th>Tipo</th><th class="num-col">Ocorrências</th><th class="num-col">Horas</th><th class="num-col">Valor</th></tr></thead>
+          <tbody id="feriado-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
 </div>
 
@@ -1341,6 +1441,40 @@ function readWorkbook(file){
     reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
     reader.readAsArrayBuffer(file);
   });
+}
+// variante "crua" (sem cellDates:true) — as planilhas de Banco de Horas/DSR/Feriados têm
+// colunas de horas PURAS (ex.: "5" = 5 horas) formatadas visualmente como hora no Excel; com
+// cellDates:true o SheetJS confunde esse número puro com uma data/hora de verdade e devolve um
+// valor absurdo. Lendo sem cellDates, todo número fica número — e pras colunas que SÃO datas/
+// horas de verdade (DATA, LIMITE COMP., hora_inicio, hora_fim), converto manualmente com
+// XLSX.SSF.parse_date_code(), que lê o serial do jeito certo sem ambiguidade.
+function readWorkbookCru(file){
+  if (typeof XLSX === 'undefined' || !XLSX || typeof XLSX.read !== 'function') {
+    return Promise.reject(new Error('A biblioteca de leitura de planilhas ainda não carregou (verifique sua conexão ou se algum bloqueador de anúncios/antivírus está bloqueando cdnjs.cloudflare.com) — aguarde alguns segundos e tente novamente.'));
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array', cellDates:false});
+        if (!wb || !wb.SheetNames || !wb.SheetNames.length) reject(new Error('O arquivo não parece ser uma planilha válida (.xlsx).'));
+        else resolve(wb);
+      }
+      catch(err) { reject(new Error('Não foi possível ler o arquivo (.xlsx inválido ou corrompido).')); }
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler o arquivo.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function serialParaISODate(v){
+  if (typeof v !== 'number') return null;
+  const dc = XLSX.SSF.parse_date_code(v);
+  return dc ? (dc.y+'-'+pad2(dc.m)+'-'+pad2(dc.d)) : null;
+}
+function serialParaHHMM(v){
+  if (typeof v !== 'number') return null;
+  const dc = XLSX.SSF.parse_date_code(v);
+  return dc ? (pad2(dc.H||0)+':'+pad2(dc.M||0)) : null;
 }
 function toISODateCell(v){
   if (v instanceof Date) return v.getFullYear()+'-'+pad2(v.getMonth()+1)+'-'+pad2(v.getDate());
@@ -2937,6 +3071,13 @@ function exportGaBlockToExcel(block, d){
   baixarPlanilha(wb, 'colaboradores-' + nomeArquivoSeguro(block.ga) + '-' + nomeArquivoSeguro(d.cicloAtualLabel));
 }
 function exportSectionToExcel(exportId){
+  // painéis auxiliares (Banco de Horas/DSR/Feriados) têm seu próprio STATE_* e lastDerived,
+  // separado do STATE.lastDerived do painel de Infrações — desvia pra eles antes de qualquer
+  // coisa Infrações-específica abaixo.
+  if (exportId === 'bh-tabela') return exportAuxToExcel(STATE_BH, 'bh', 'Banco de Horas');
+  if (exportId === 'dsr-tabela') return exportAuxToExcel(STATE_DSR, 'dsr', 'DSR');
+  if (exportId === 'feriado-tabela') return exportAuxToExcel(STATE_FERIADO, 'feriado', 'Feriados');
+
   const d = STATE.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
   if (!xlsxDisponivel()) return;
@@ -3302,8 +3443,435 @@ async function gerarApresentacaoPPT(){
 }
 document.getElementById('apresentacao-btn').addEventListener('click', gerarApresentacaoPPT);
 
+/* ---------------- abas ---------------- */
+document.getElementById('tab-bar').addEventListener('click', evt => {
+  const btn = evt.target.closest('.tab-btn');
+  if (!btn) return;
+  const alvo = btn.dataset.tab;
+  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.toggle('active', b===btn); b.setAttribute('aria-selected', String(b===btn)); });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-'+alvo));
+});
+
+/* ==========================================================================
+   Painéis auxiliares: Banco de Horas, DSR, Feriados
+   Mesmo espírito do painel de Infrações — hierarquia GO/GA compartilhada
+   (STATE.hierMap), anexar/sincronizar com Supabase, filtro por ciclo, exportar
+   Excel — começando simples: indicadores + tabela por colaborador, sem
+   gráficos por enquanto (a pedido do usuário, pra entregar rápido e crescer
+   depois se fizer falta).
+   ========================================================================== */
+function fmtMoeda(n){
+  return (n||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+}
+// "HH:MM" ou "-HH:MM" (Banco de Horas negativo = devendo) -> horas decimais, sinal preservado
+function parseHHMMSigned(v){
+  if (v == null) return 0;
+  const s = String(v).trim();
+  if (!s) return 0;
+  const neg = s.startsWith('-');
+  const partes = (neg ? s.slice(1) : s).split(':');
+  const h = Number(partes[0]), m = Number(partes[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  const total = h + m/60;
+  return neg ? -total : total;
+}
+function fmtHorasDecimais(dec){
+  const neg = dec < 0;
+  const abs = Math.abs(dec);
+  const h = Math.floor(abs + 1e-9);
+  const m = Math.round((abs - h) * 60);
+  return (neg?'-':'') + pad2(h) + ':' + pad2(m);
+}
+
+/* -------- estado + storage: independentes do painel de Infrações de propósito
+   ("limpar dados locais" ali é especificamente sobre Base+Hierarquia de ponto) -------- */
+const STORAGE_BH = 'painelInfracoes.bh.v1';
+const STORAGE_DSR = 'painelInfracoes.dsr.v1';
+const STORAGE_FERIADO = 'painelInfracoes.feriado.v1';
+function novoEstadoAux(){ return { raw: [], cicloSel: null, usingSupabase: false, lastSync: null, pendingSync: null, lastDerived: null }; }
+let STATE_BH = novoEstadoAux();
+let STATE_DSR = novoEstadoAux();
+let STATE_FERIADO = novoEstadoAux();
+function carregarAuxDoStorage(){
+  try { const r = localStorage.getItem(STORAGE_BH); if (r) STATE_BH.raw = JSON.parse(r); } catch(e) {}
+  try { const r = localStorage.getItem(STORAGE_DSR); if (r) STATE_DSR.raw = JSON.parse(r); } catch(e) {}
+  try { const r = localStorage.getItem(STORAGE_FERIADO); if (r) STATE_FERIADO.raw = JSON.parse(r); } catch(e) {}
+}
+function salvarAuxNoStorage(chave, estado){
+  try { localStorage.setItem(chave, JSON.stringify(estado.raw)); } catch(e) {}
+}
+
+/* -------- parsers -------- */
+async function parseBHFile(file){
+  // leitura crua (sem cellDates) — LIMITE COMP. é convertida manualmente com serialParaISODate;
+  // HORAS já vem como texto "HH:MM"/"-HH:MM" (célula de texto, não numérica — não afetada pela
+  // confusão de formato que atinge DSR/Feriado, mas leio cru aqui também por consistência).
+  const wb = await readWorkbookCru(file);
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { defval:null });
+  const totalLidas = json.length;
+  const validas = json.map(row => ({
+    funcid: normText(row['FUNCID']), nome: normText(row['NOME']), bu: normText(row['BU']), subbu: normText(row['SUB BU']),
+    limiteComp: serialParaISODate(row['LIMITE COMP.']),
+    horasTxt: (row['HORAS']==null?'':String(row['HORAS']).trim()),
+    horasDec: parseHHMMSigned(row['HORAS']),
+    vlr: Number(row['VLR.']) || 0, dias: Number(row['DIAS']) || 0,
+  })).filter(r => r.nome && r.funcid && r.limiteComp);
+  if (!validas.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (FUNCID, NOME, LIMITE COMP., HORAS...).');
+  const porChave = new Map();
+  validas.forEach(r => porChave.set(r.funcid+'|'+r.limiteComp, r));
+  const rows = [...porChave.values()];
+  return { rows, totalLidas, descartadas: totalLidas-validas.length, duplicadas: validas.length-rows.length };
+}
+async function parseDSRFile(file){
+  // leitura crua: HORAS/VALOR são números puros (ex.: 5 = 5 horas) formatados visualmente como
+  // hora no Excel — com cellDates:true o SheetJS confundia esse número com uma data/hora de
+  // verdade e devolvia um valor absurdo (foi um bug real, encontrado testando com o arquivo de
+  // verdade). DATA/hora_inicio/hora_fim continuam precisando da conversão, só que manual agora.
+  const wb = await readWorkbookCru(file);
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { defval:null });
+  const totalLidas = json.length;
+  const validas = json.map(row => ({
+    data: serialParaISODate(row['DATA']), tipoDia: normText(row['tipo_dia']), funcid: normText(row['funcid']), nome: normText(row['nome']),
+    gestor: normText(row['GESTOR']), bu: normText(row['BU']), subbu: normText(row['SUB BU']),
+    horaInicio: serialParaHHMM(row['hora_inicio']), horaFim: serialParaHHMM(row['hora_fim']),
+    horas: Number(row['HORAS']) || 0, valor: Number(row['VALOR']) || 0,
+  })).filter(r => r.nome && r.funcid && r.data);
+  if (!validas.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (DATA, funcid, nome, HORAS, VALOR...).');
+  const porChave = new Map();
+  validas.forEach(r => porChave.set(r.funcid+'|'+r.data+'|'+(r.horaInicio||''), r));
+  const rows = [...porChave.values()];
+  return { rows, totalLidas, descartadas: totalLidas-validas.length, duplicadas: validas.length-rows.length };
+}
+async function parseFeriadoFile(file){
+  const wb = await readWorkbookCru(file);
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { defval:null });
+  const totalLidas = json.length;
+  const validas = json.map(row => ({
+    data: serialParaISODate(row['DATA']), funcid: normText(row['funcid']), nome: normText(row['nome']),
+    gestor: normText(row['GESTOR']), bu: normText(row['BU']), subbu: normText(row['SUB BU']), tipo: normText(row['TIPO']),
+    horaInicio: serialParaHHMM(row['hora_inicio']), horaFim: serialParaHHMM(row['hora_fim']),
+    horas: Number(row['HORAS']) || 0, valor: Number(row['VALOR']) || 0, tipoFeriado: normText(row['tipo_feriado']),
+  })).filter(r => r.nome && r.funcid && r.data);
+  if (!validas.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (DATA, funcid, nome, HORAS, VALOR...).');
+  const porChave = new Map();
+  validas.forEach(r => porChave.set(r.funcid+'|'+r.data+'|'+(r.horaInicio||''), r));
+  const rows = [...porChave.values()];
+  return { rows, totalLidas, descartadas: totalLidas-validas.length, duplicadas: validas.length-rows.length };
+}
+
+/* -------- Supabase: leitura + escrita -------- */
+async function loadAuxFromSupabase(tabela, colunas){
+  if (!sb) return null;
+  try { return await fetchAllRows(tabela, colunas); }
+  catch(e) { console.error('Falha ao ler ' + tabela + ' do Supabase.', e); return null; }
+}
+async function upsertAuxToSupabase(rpc, rows){
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await withTimeout(sb.rpc(rpc, { novos: rows.slice(i, i+500) }), 20000, 'gravar ' + rpc);
+    if (error) throw error;
+  }
+}
+
+/* -------- deriva (ciclo selecionado + agregação por colaborador) -------- */
+function derivarAux(estado, camposLinha){
+  // camposLinha(r) -> { cicloDate, valores: {chave:numero, ...} } — cada tema informa como
+  // tirar a data de referência (pra achar o ciclo) e quais números somar por linha.
+  const enriquecidas = estado.raw.map(r => {
+    const info = camposLinha(r);
+    const c = cicloOf(info.cicloDate);
+    const h = STATE.hierMap[r.nome] || {};
+    return Object.assign({}, r, info, {
+      cicloKey: c ? c.key : null, cicloLabel: c ? c.label : null,
+      ga: h.ga || 'SEM HIERARQUIA', go: h.go || h.ga || 'SEM HIERARQUIA',
+    });
+  }).filter(r => r.cicloKey);
+  const ciclos = [...new Map(enriquecidas.map(r => [r.cicloKey, r.cicloLabel])).entries()]
+    .sort((a,b) => b[0].localeCompare(a[0])).map(([key,label]) => ({key,label}));
+  if (!ciclos.length) return null;
+  if (!estado.cicloSel || !ciclos.some(c => c.key === estado.cicloSel)) estado.cicloSel = ciclos[0].key;
+  const rows = enriquecidas.filter(r => r.cicloKey === estado.cicloSel);
+  const cicloAtual = ciclos.find(c => c.key === estado.cicloSel);
+  return { ciclos, cicloSel: estado.cicloSel, cicloLabel: cicloAtual.label, rows };
+}
+
+/* -------- Banco de Horas -------- */
+function deriveBH(){
+  const d = derivarAux(STATE_BH, r => ({ cicloDate: r.limiteComp, valores:null }));
+  if (!d) return null;
+  const porPessoa = new Map();
+  d.rows.forEach(r => {
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, horasDec:0, vlr:0, dias:0 });
+    const p = porPessoa.get(r.nome); p.horasDec += r.horasDec; p.vlr += r.vlr; p.dias += r.dias;
+  });
+  const pessoas = [...porPessoa.values()].sort((a,b) => b.vlr - a.vlr);
+  const totalHoras = pessoas.reduce((a,p)=>a+p.horasDec,0);
+  const totalVlr = pessoas.reduce((a,p)=>a+p.vlr,0);
+  const totalDias = pessoas.reduce((a,p)=>a+p.dias,0);
+  return { ciclos: d.ciclos, cicloSel: d.cicloSel, cicloLabel: d.cicloLabel, pessoas, totalHoras, totalVlr, totalDias };
+}
+function renderBH(){
+  const d = deriveBH();
+  STATE_BH.lastDerived = d;
+  const kpiEl = document.getElementById('bh-kpi-grid');
+  const rowsEl = document.getElementById('bh-rows');
+  const selEl = document.getElementById('bh-ciclo-select');
+  clear(kpiEl); clear(rowsEl); clear(selEl);
+  document.getElementById('bh-source-note').textContent = !STATE_BH.raw.length
+    ? 'Nenhuma planilha anexada ainda.'
+    : (STATE_BH.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
+  if (!d) return;
+  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
+  selEl.onchange = () => { STATE_BH.cicloSel = selEl.value; renderBH(); };
+  document.getElementById('bh-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  [['Total em horas', fmtHorasDecimais(d.totalHoras)], ['Total em valor', fmtMoeda(d.totalVlr)], ['Total em dias', fmt(Math.round(d.totalDias*10)/10)], ['Colaboradores', fmt(d.pessoas.length)]]
+    .forEach(([label,valor]) => {
+      const tile = document.createElement('div'); tile.className='kpi';
+      tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
+      kpiEl.appendChild(tile);
+    });
+  d.pessoas.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
+      '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
+      '<td class="num-col num">'+esc(fmtMoeda(p.vlr))+'</td><td class="num-col num">'+fmt(Math.round(p.dias*10)/10)+'</td>';
+    rowsEl.appendChild(tr);
+  });
+}
+document.getElementById('bh-attach-btn').addEventListener('click', () => {
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  document.getElementById('file-bh').click();
+});
+document.getElementById('file-bh').addEventListener('change', async evt => {
+  const file = evt.target.files[0]; evt.target.value = '';
+  if (!file) return;
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  try {
+    const parsed = await parseBHFile(file);
+    STATE_BH.raw = parsed.rows;
+    salvarAuxNoStorage(STORAGE_BH, STATE_BH);
+    renderBH();
+    const ressalvas = [];
+    if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem funcid/nome/limite ignorada(s)');
+    if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' linha(s) duplicada(s) unificada(s)');
+    const sufixo = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await withRetry(() => upsertAuxToSupabase('upsert_bh_registros', STATE_BH.raw.map(r => ({ funcid:r.funcid, nome:r.nome, bu:r.bu, subbu:r.subbu, limite_comp:r.limiteComp, horas:r.horasTxt, vlr:r.vlr, dias:r.dias, ga:(STATE.hierMap[r.nome]||{}).ga||null, go:(STATE.hierMap[r.nome]||{}).go||null }))), 3, 2000);
+        STATE_BH.usingSupabase = true; STATE_BH.pendingSync = null;
+        renderBH();
+        showToast('Banco de Horas importado e sincronizado: ' + STATE_BH.raw.length + ' registro(s).' + sufixo);
+      } catch(e) {
+        console.error('Banco de Horas salvo localmente, mas falhou ao sincronizar.', e);
+        STATE_BH.pendingSync = { arquivo: file.name };
+        showToast('Banco de Horas importado: ' + STATE_BH.raw.length + ' registro(s), mas não deu pra sincronizar agora — salvo só neste navegador.' + sufixo);
+      }
+    } else {
+      STATE_BH.pendingSync = { arquivo: file.name };
+      showToast('Banco de Horas importado: ' + STATE_BH.raw.length + ' registro(s) (salvo só neste navegador — entre como Administrador com sessão válida pra sincronizar).' + sufixo);
+    }
+  } catch(err) { showToast('Erro ao importar Banco de Horas — ' + err.message); }
+});
+
+/* -------- DSR -------- */
+function deriveDSR(){
+  const d = derivarAux(STATE_DSR, r => ({ cicloDate: r.data, valores:null }));
+  if (!d) return null;
+  const porPessoa = new Map();
+  d.rows.forEach(r => {
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, ocorrencias:0, horas:0, valor:0 });
+    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor;
+  });
+  const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
+  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas,
+    totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
+}
+function renderDSR(){
+  const d = deriveDSR();
+  STATE_DSR.lastDerived = d;
+  const kpiEl = document.getElementById('dsr-kpi-grid');
+  const rowsEl = document.getElementById('dsr-rows');
+  const selEl = document.getElementById('dsr-ciclo-select');
+  clear(kpiEl); clear(rowsEl); clear(selEl);
+  document.getElementById('dsr-source-note').textContent = !STATE_DSR.raw.length
+    ? 'Nenhuma planilha anexada ainda.'
+    : (STATE_DSR.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
+  if (!d) return;
+  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
+  selEl.onchange = () => { STATE_DSR.cicloSel = selEl.value; renderDSR(); };
+  document.getElementById('dsr-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
+    .forEach(([label,valor]) => {
+      const tile = document.createElement('div'); tile.className='kpi';
+      tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
+      kpiEl.appendChild(tile);
+    });
+  d.pessoas.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td>'+
+      '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+      '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>';
+    rowsEl.appendChild(tr);
+  });
+}
+document.getElementById('dsr-attach-btn').addEventListener('click', () => {
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  document.getElementById('file-dsr').click();
+});
+document.getElementById('file-dsr').addEventListener('change', async evt => {
+  const file = evt.target.files[0]; evt.target.value = '';
+  if (!file) return;
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  try {
+    const parsed = await parseDSRFile(file);
+    STATE_DSR.raw = parsed.rows;
+    salvarAuxNoStorage(STORAGE_DSR, STATE_DSR);
+    renderDSR();
+    const ressalvas = [];
+    if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem funcid/nome/data ignorada(s)');
+    if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' linha(s) duplicada(s) unificada(s)');
+    const sufixo = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await withRetry(() => upsertAuxToSupabase('upsert_dsr_registros', STATE_DSR.raw.map(r => ({ data:r.data, tipo_dia:r.tipoDia, funcid:r.funcid, nome:r.nome, gestor:r.gestor, bu:r.bu, subbu:r.subbu, hora_inicio:r.horaInicio, hora_fim:r.horaFim, horas:r.horas, valor:r.valor, ga:(STATE.hierMap[r.nome]||{}).ga||null, go:(STATE.hierMap[r.nome]||{}).go||null }))), 3, 2000);
+        STATE_DSR.usingSupabase = true; STATE_DSR.pendingSync = null;
+        renderDSR();
+        showToast('DSR importado e sincronizado: ' + STATE_DSR.raw.length + ' registro(s).' + sufixo);
+      } catch(e) {
+        console.error('DSR salvo localmente, mas falhou ao sincronizar.', e);
+        STATE_DSR.pendingSync = { arquivo: file.name };
+        showToast('DSR importado: ' + STATE_DSR.raw.length + ' registro(s), mas não deu pra sincronizar agora — salvo só neste navegador.' + sufixo);
+      }
+    } else {
+      STATE_DSR.pendingSync = { arquivo: file.name };
+      showToast('DSR importado: ' + STATE_DSR.raw.length + ' registro(s) (salvo só neste navegador — entre como Administrador com sessão válida pra sincronizar).' + sufixo);
+    }
+  } catch(err) { showToast('Erro ao importar DSR — ' + err.message); }
+});
+
+/* -------- Feriados -------- */
+function deriveFeriado(){
+  const d = derivarAux(STATE_FERIADO, r => ({ cicloDate: r.data, valores:null }));
+  if (!d) return null;
+  const porPessoa = new Map();
+  d.rows.forEach(r => {
+    if (!porPessoa.has(r.nome)) porPessoa.set(r.nome, { nome:r.nome, ga:r.ga, go:r.go, tipos:new Set(), ocorrencias:0, horas:0, valor:0 });
+    const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; if (r.tipoFeriado) p.tipos.add(r.tipoFeriado);
+  });
+  const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
+  return { ciclos:d.ciclos, cicloSel:d.cicloSel, cicloLabel:d.cicloLabel, pessoas,
+    totalOcorrencias: pessoas.reduce((a,p)=>a+p.ocorrencias,0), totalHoras: pessoas.reduce((a,p)=>a+p.horas,0), totalValor: pessoas.reduce((a,p)=>a+p.valor,0) };
+}
+function renderFeriado(){
+  const d = deriveFeriado();
+  STATE_FERIADO.lastDerived = d;
+  const kpiEl = document.getElementById('feriado-kpi-grid');
+  const rowsEl = document.getElementById('feriado-rows');
+  const selEl = document.getElementById('feriado-ciclo-select');
+  clear(kpiEl); clear(rowsEl); clear(selEl);
+  document.getElementById('feriado-source-note').textContent = !STATE_FERIADO.raw.length
+    ? 'Nenhuma planilha anexada ainda.'
+    : (STATE_FERIADO.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
+  if (!d) return;
+  d.ciclos.forEach(c => { const o = document.createElement('option'); o.value=c.key; o.textContent=c.label; if (c.key===d.cicloSel) o.selected=true; selEl.appendChild(o); });
+  selEl.onchange = () => { STATE_FERIADO.cicloSel = selEl.value; renderFeriado(); };
+  document.getElementById('feriado-hint').textContent = 'Ciclo: ' + d.cicloLabel;
+  [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
+    .forEach(([label,valor]) => {
+      const tile = document.createElement('div'); tile.className='kpi';
+      tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
+      kpiEl.appendChild(tile);
+    });
+  d.pessoas.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>'+esc(p.nome)+'</td><td>'+esc(p.ga)+'</td><td>'+esc(p.go)+'</td><td>'+esc([...p.tipos].join(', '))+'</td>'+
+      '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
+      '<td class="num-col num">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num">'+esc(fmtMoeda(p.valor))+'</td>';
+    rowsEl.appendChild(tr);
+  });
+}
+document.getElementById('feriado-attach-btn').addEventListener('click', () => {
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  document.getElementById('file-feriado').click();
+});
+document.getElementById('file-feriado').addEventListener('change', async evt => {
+  const file = evt.target.files[0]; evt.target.value = '';
+  if (!file) return;
+  if (!isAdmin()) { showToast('Só administradores podem importar dados — entre em Configurações.'); return; }
+  try {
+    const parsed = await parseFeriadoFile(file);
+    STATE_FERIADO.raw = parsed.rows;
+    salvarAuxNoStorage(STORAGE_FERIADO, STATE_FERIADO);
+    renderFeriado();
+    const ressalvas = [];
+    if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem funcid/nome/data ignorada(s)');
+    if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' linha(s) duplicada(s) unificada(s)');
+    const sufixo = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await withRetry(() => upsertAuxToSupabase('upsert_feriado_registros', STATE_FERIADO.raw.map(r => ({ data:r.data, funcid:r.funcid, nome:r.nome, gestor:r.gestor, bu:r.bu, subbu:r.subbu, tipo:r.tipo, hora_inicio:r.horaInicio, hora_fim:r.horaFim, horas:r.horas, valor:r.valor, tipo_feriado:r.tipoFeriado, ga:(STATE.hierMap[r.nome]||{}).ga||null, go:(STATE.hierMap[r.nome]||{}).go||null }))), 3, 2000);
+        STATE_FERIADO.usingSupabase = true; STATE_FERIADO.pendingSync = null;
+        renderFeriado();
+        showToast('Feriados importado e sincronizado: ' + STATE_FERIADO.raw.length + ' registro(s).' + sufixo);
+      } catch(e) {
+        console.error('Feriados salvo localmente, mas falhou ao sincronizar.', e);
+        STATE_FERIADO.pendingSync = { arquivo: file.name };
+        showToast('Feriados importado: ' + STATE_FERIADO.raw.length + ' registro(s), mas não deu pra sincronizar agora — salvo só neste navegador.' + sufixo);
+      }
+    } else {
+      STATE_FERIADO.pendingSync = { arquivo: file.name };
+      showToast('Feriados importado: ' + STATE_FERIADO.raw.length + ' registro(s) (salvo só neste navegador — entre como Administrador com sessão válida pra sincronizar).' + sufixo);
+    }
+  } catch(err) { showToast('Erro ao importar Feriados — ' + err.message); }
+});
+
+/* -------- carrega os 3 painéis auxiliares do Supabase (chamado no boot) -------- */
+async function loadAuxPaineis(){
+  const [bh, dsr, feriado] = await Promise.all([
+    loadAuxFromSupabase('bh_registros', 'funcid,nome,bu,subbu,limite_comp,horas,vlr,dias'),
+    loadAuxFromSupabase('dsr_registros', 'data,tipo_dia,funcid,nome,gestor,bu,subbu,hora_inicio,hora_fim,horas,valor'),
+    loadAuxFromSupabase('feriado_registros', 'data,funcid,nome,gestor,bu,subbu,tipo,hora_inicio,hora_fim,horas,valor,tipo_feriado'),
+  ]);
+  if (bh && bh.length) {
+    STATE_BH.raw = bh.map(r => ({ funcid:r.funcid, nome:r.nome, bu:r.bu, subbu:r.subbu, limiteComp:r.limite_comp, horasTxt:r.horas, horasDec:parseHHMMSigned(r.horas), vlr:r.vlr||0, dias:r.dias||0 }));
+    STATE_BH.usingSupabase = true;
+  }
+  if (dsr && dsr.length) {
+    STATE_DSR.raw = dsr.map(r => ({ data:r.data, tipoDia:r.tipo_dia, funcid:r.funcid, nome:r.nome, gestor:r.gestor, bu:r.bu, subbu:r.subbu, horaInicio:hhmm(r.hora_inicio), horaFim:hhmm(r.hora_fim), horas:r.horas||0, valor:r.valor||0 }));
+    STATE_DSR.usingSupabase = true;
+  }
+  if (feriado && feriado.length) {
+    STATE_FERIADO.raw = feriado.map(r => ({ data:r.data, funcid:r.funcid, nome:r.nome, gestor:r.gestor, bu:r.bu, subbu:r.subbu, tipo:r.tipo, horaInicio:hhmm(r.hora_inicio), horaFim:hhmm(r.hora_fim), horas:r.horas||0, valor:r.valor||0, tipoFeriado:r.tipo_feriado }));
+    STATE_FERIADO.usingSupabase = true;
+  }
+  renderBH(); renderDSR(); renderFeriado();
+}
+
+function exportAuxToExcel(estado, tema, nomeTitulo){
+  const d = estado.lastDerived;
+  if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma planilha primeiro.'); return; }
+  if (!xlsxDisponivel()) return;
+  const wb = XLSX.utils.book_new();
+  let rows;
+  if (tema === 'bh') {
+    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10 }));
+  } else if (tema === 'feriado') {
+    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor }));
+  } else {
+    rows = d.pessoas.map(p => ({ Colaborador:p.nome, GA:p.ga, GO:p.go, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor }));
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), nomeTitulo.slice(0, 31));
+  baixarPlanilha(wb, tema + '-' + nomeArquivoSeguro(d.cicloLabel));
+}
+
 function enhanceSections(){
-  document.querySelectorAll('.wrap > section').forEach(section => {
+  // ".wrap > .tab-panel > section" pega os blocos dos painéis auxiliares (Banco de Horas, DSR,
+  // Feriados) também — mesmo recolher/copiar/exportar de graça, sem duplicar a lógica.
+  document.querySelectorAll('.wrap > section, .wrap > .tab-panel > section').forEach(section => {
     const head = section.querySelector(':scope > .section-head');
     if (!head) return;
 
@@ -3440,9 +4008,11 @@ document.getElementById('role-badge').addEventListener('click', () => {
   enhanceSections();
   applyVerifButtonState();
   tryLoadFromStorage();
+  carregarAuxDoStorage();
   await loadAuth();
   updateRoleBadge();
   recomputeAndRender();
+  renderBH(); renderDSR(); renderFeriado();
   // checa se o Admin local (restaurado do localStorage, sem senha) também tem uma sessão de
   // escrita válida no Supabase — sem isto, alguém ficava "como Administrador" na tela mas toda
   // sincronização falhava, sem nenhum aviso do motivo.
@@ -3454,5 +4024,6 @@ document.getElementById('role-badge').addEventListener('click', () => {
   // o aviso de "não deu pra confirmar os dados mais recentes" quando a leitura falha.
   await loadFromSupabase();
   recomputeAndRender();
+  await loadAuxPaineis();
 })();
 </script>
