@@ -30,12 +30,15 @@
        mais claro/vivo que --s1 de propósito, pra funcionar como um destaque de título,
        não como cor de botão/link. Não é cor de gráfico/dado, por isso fica fora dos 8 slots. */
     --light-blue: #1f9ee0;
-    /* cores dos 3 tipos de infração (>7 dias / interjornada / >2h extras) — os 3 primeiros
-       slots da paleta padrão (--s1/s2/s3), o único subconjunto de 3 que passa a checagem
-       all-pairs (não só pares adjacentes) nos dois temas — ver script de paleta do skill
-       de dataviz. GO_PALETTE (embaixo, no JS) usa os slots 4–8 primeiro exatamente pra não
-       repetir essas 3 cores logo de cara nos pontinhos de GO da hierarquia. */
-    --type-d7: var(--s1); --type-interj: var(--s2); --type-hex: var(--s3);
+    /* cores dos 3 tipos de infração (>7 dias / interjornada / >2h extras) — azul + verde-água
+       (tons frios da mesma família, lado a lado) + âmbar como único destaque quente, em vez
+       do antigo azul/laranja/verde-água (dois tons quentes competindo). Combinação re-testada
+       no script de paleta do skill de dataviz (all-pairs, CVD ΔE e contraste) nos dois temas —
+       é UM dos 15 subconjuntos de 3 (de 56 possíveis) que passa. Esse trio é o padrão único
+       reaplicado em TODO gráfico de barra do painel (tipos, GO, GA); GO_PALETTE (no JS) usa os
+       slots que sobraram (--s2/s5/s6/s7/s8) pra nunca repetir essas 3 cores logo de cara nos
+       pontinhos de GO da hierarquia. */
+    --type-d7: var(--s1); --type-interj: var(--s3); --type-hex: var(--s4);
     --good:     #0ca30c;
     --warning:  #fab219;
     --serious:  #ec835a;
@@ -57,7 +60,7 @@
       --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
       --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
       --light-blue: #5ec8f5;
-      --type-d7:var(--s1); --type-interj:var(--s2); --type-hex:var(--s3);
+      --type-d7:var(--s1); --type-interj:var(--s3); --type-hex:var(--s4);
       --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
       --critical-tint: rgba(230,103,103,0.14);
       --good-tint:     rgba(12,163,12,0.12);
@@ -73,7 +76,7 @@
     --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
     --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
     --light-blue: #5ec8f5;
-    --type-d7:var(--s1); --type-interj:var(--s2); --type-hex:var(--s3);
+    --type-d7:var(--s1); --type-interj:var(--s3); --type-hex:var(--s4);
     --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#e66767;
     --critical-tint: rgba(230,103,103,0.14);
     --good-tint:     rgba(12,163,12,0.12);
@@ -1328,12 +1331,13 @@ const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFram
 const WEEKDAY_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
 const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 // cor do pontinho de cada GO na hierarquia — usa a MESMA paleta padrão de 8 slots dos gráficos
-// (--s1..--s8, ver <style>), só que começando no slot 4: os 3 primeiros (--s1/s2/s3) já são
-// usados pelos tipos de infração (>7 dias/interjornada/>2h extras) nas barras empilhadas logo
-// acima na tela, e começar depois deles evita repetir a mesma cor com dois significados
-// diferentes visíveis ao mesmo tempo. Com >8 GOs a cor recomeça do início (ver goColorFor) —
-// não deveria acontecer com esta base, mas nunca inventa uma 9ª cor fora da paleta.
-const GO_PALETTE = ['var(--s4)','var(--s5)','var(--s6)','var(--s7)','var(--s8)','var(--s1)','var(--s2)','var(--s3)'];
+// (--s1..--s8, ver <style>), começando pelos 5 slots que --type-d7/interj/hex NÃO usam
+// (--s1/s3/s4 são o trio das barras empilhadas logo acima na tela) — evita repetir a mesma cor
+// com dois significados diferentes visíveis ao mesmo tempo. Ordem (--s2,s5,s6,s7,s8) re-testada
+// no script de paleta do skill de dataviz pra não ter par adjacente abaixo do piso de contraste
+// CVD nos dois temas. Com >8 GOs a cor recomeça do início (ver goColorFor) — não deveria
+// acontecer com esta base, mas nunca inventa uma 9ª cor fora da paleta.
+const GO_PALETTE = ['var(--s2)','var(--s7)','var(--s5)','var(--s6)','var(--s8)','var(--s1)','var(--s3)','var(--s4)'];
 const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
 // GAs que são, na verdade, entradas administrativas dos próprios GOs (sem equipe operacional
 // própria abaixo deles nesta visão) - excluídas das análises "por GA" a pedido do usuário.
