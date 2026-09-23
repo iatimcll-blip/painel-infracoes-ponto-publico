@@ -757,18 +757,6 @@
       </div>
       <div class="source-note" id="bh-source-note"></div>
       <input type="file" id="file-bh" accept=".xlsx" hidden>
-      <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="bh-cycle-select" title="Filtrar por ciclo (mês)"></select>
-        <select class="cycle-select" id="bh-week-select" title="Filtrar por semana"></select>
-        <div class="periodo-filter" id="bh-periodo-filter">
-          <span class="periodo-label">Período</span>
-          <input type="date" id="bh-periodo-inicio" aria-label="Data inicial do período">
-          <span class="periodo-sep">até</span>
-          <input type="date" id="bh-periodo-fim" aria-label="Data final do período">
-          <button type="button" class="periodo-btn primary" id="bh-periodo-aplicar">Aplicar</button>
-          <button type="button" class="periodo-btn" id="bh-periodo-limpar" hidden>Limpar</button>
-        </div>
-      </div>
       <div class="kpi-grid" id="bh-kpi-grid" style="margin-top:14px;"></div>
     </section>
 
@@ -809,18 +797,6 @@
       </div>
       <div class="source-note" id="dsr-source-note"></div>
       <input type="file" id="file-dsr" accept=".xlsx" hidden>
-      <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="dsr-cycle-select" title="Filtrar por ciclo (mês)"></select>
-        <select class="cycle-select" id="dsr-week-select" title="Filtrar por semana"></select>
-        <div class="periodo-filter" id="dsr-periodo-filter">
-          <span class="periodo-label">Período</span>
-          <input type="date" id="dsr-periodo-inicio" aria-label="Data inicial do período">
-          <span class="periodo-sep">até</span>
-          <input type="date" id="dsr-periodo-fim" aria-label="Data final do período">
-          <button type="button" class="periodo-btn primary" id="dsr-periodo-aplicar">Aplicar</button>
-          <button type="button" class="periodo-btn" id="dsr-periodo-limpar" hidden>Limpar</button>
-        </div>
-      </div>
       <div class="kpi-grid" id="dsr-kpi-grid" style="margin-top:14px;"></div>
     </section>
 
@@ -861,18 +837,6 @@
       </div>
       <div class="source-note" id="feriado-source-note"></div>
       <input type="file" id="file-feriado" accept=".xlsx" hidden>
-      <div class="filter-row" style="margin-top:10px;">
-        <select class="cycle-select" id="feriado-cycle-select" title="Filtrar por ciclo (mês)"></select>
-        <select class="cycle-select" id="feriado-week-select" title="Filtrar por semana"></select>
-        <div class="periodo-filter" id="feriado-periodo-filter">
-          <span class="periodo-label">Período</span>
-          <input type="date" id="feriado-periodo-inicio" aria-label="Data inicial do período">
-          <span class="periodo-sep">até</span>
-          <input type="date" id="feriado-periodo-fim" aria-label="Data final do período">
-          <button type="button" class="periodo-btn primary" id="feriado-periodo-aplicar">Aplicar</button>
-          <button type="button" class="periodo-btn" id="feriado-periodo-limpar" hidden>Limpar</button>
-        </div>
-      </div>
       <div class="kpi-grid" id="feriado-kpi-grid" style="margin-top:14px;"></div>
     </section>
 
@@ -2047,7 +2011,18 @@ function recomputeAndRender(){
   renderSyncTimestamp();
 
   try {
-    renderCycleSelect(d);
+    if (activeTab === 'infracoes') {
+      renderTopFilterBar(d, {
+        estado: STATE,
+        render: recomputeAndRender,
+        onCycleChange: v => { STATE.filterMode = 'ciclo'; STATE.cicloSel = v; recomputeAndRenderKeepingCiclo(v); },
+        onWeekChange: v => {
+          if (!v) { STATE.filterMode = 'ciclo'; STATE.semanaSel = null; }
+          else { STATE.filterMode = 'semana'; STATE.semanaSel = v; }
+          recomputeAndRender();
+        },
+      });
+    }
     renderKpis(d);
     renderAnoChart();
     renderGoGa(d);
@@ -2068,11 +2043,23 @@ function recomputeAndRender(){
   return;
 }
 
-function renderCycleSelect(d){
+// filtro único (Ciclo/Semana/Período) no topo da página, compartilhado por todas as abas —
+// Infrações, Banco de Horas, DSR e Feriados tinham cada um sua própria cópia desses mesmos
+// controles (duplicidade visual e de código); agora só existe UM jogo de <select>/<input> no
+// cabeçalho, e cada aba mantém seu próprio estado de filtro (STATE/STATE_BH/STATE_DSR/
+// STATE_FERIADO) — renderTopFilterBar() só repinta os controles pros ciclos/semanas/seleção da
+// ABA ATIVA (ver activeTab); trocar de aba re-renderiza o painel daquela aba, que por sua vez
+// chama renderTopFilterBar() de novo com os dados certos.
+let topFilterActive = { estado: null, render: null };
+function renderTopFilterBar(d, cfg){
+  topFilterActive.estado = cfg.estado;
+  topFilterActive.render = cfg.render;
+
   const sel = document.getElementById('cycle-select');
   clear(sel);
   const optAll = document.createElement('option');
   optAll.value = 'TODOS'; optAll.textContent = 'TODOS OS CICLOS';
+  if (d.periodType === 'ciclo' && d.periodKey === 'TODOS') optAll.selected = true;
   sel.appendChild(optAll);
   d.ciclos.forEach(c => {
     const o = document.createElement('option');
@@ -2080,59 +2067,51 @@ function renderCycleSelect(d){
     if (d.periodType === 'ciclo' && c.key === d.periodKey) o.selected = true;
     sel.appendChild(o);
   });
-  sel.onchange = () => {
-    STATE.filterMode = 'ciclo';
-    STATE.cicloSel = sel.value === 'TODOS' ? 'TODOS' : sel.value;
-    recomputeAndRenderKeepingCiclo(sel.value);
-  };
+  sel.onchange = () => cfg.onCycleChange(sel.value);
 
   const weekSel = document.getElementById('week-select');
   clear(weekSel);
   const optNone = document.createElement('option');
   optNone.value = ''; optNone.textContent = 'Todas as semanas';
   weekSel.appendChild(optNone);
-  // no dropdown a semana mais recente do ano fica em primeiro (S38, S37, S36, ...) — só na
-  // lista de opções; o gráfico "Infrações por semana" continua em ordem cronológica normal.
+  // no dropdown a semana mais recente fica em primeiro (S38, S37, S36, ...) — só na lista de
+  // opções; os gráficos "por semana" continuam em ordem cronológica normal.
   [...d.semanas].reverse().forEach(s => {
     const o = document.createElement('option');
     o.value = s.key; o.textContent = s.label;
     if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
     weekSel.appendChild(o);
   });
-  weekSel.onchange = () => {
-    if (!weekSel.value) {
-      STATE.filterMode = 'ciclo';
-      STATE.semanaSel = null;
-    } else {
-      STATE.filterMode = 'semana';
-      STATE.semanaSel = weekSel.value;
-    }
-    recomputeAndRender();
-  };
+  weekSel.onchange = () => cfg.onWeekChange(weekSel.value);
 
   // datas do filtro Período: mantém o que foi digitado visível mesmo fora do modo período
   // (só reaplicar exige clicar em Aplicar de novo); "Limpar" só aparece quando é o filtro ativo.
-  document.getElementById('periodo-inicio').value = STATE.periodoInicio || '';
-  document.getElementById('periodo-fim').value = STATE.periodoFim || '';
+  document.getElementById('periodo-inicio').value = cfg.estado.periodoInicio || '';
+  document.getElementById('periodo-fim').value = cfg.estado.periodoFim || '';
   document.getElementById('periodo-limpar').hidden = d.periodType !== 'periodo';
 }
+// botões Aplicar/Limpar do filtro Período são fixos no HTML (não recriados a cada render) —
+// agem sempre sobre o estado/render da aba ativa no momento do clique (topFilterActive, mantido
+// atualizado a cada chamada de renderTopFilterBar).
 document.getElementById('periodo-aplicar').addEventListener('click', () => {
   const ini = document.getElementById('periodo-inicio').value;
   const fim = document.getElementById('periodo-fim').value;
   if (!ini || !fim) { showToast('Escolha a data inicial e a data final do período.'); return; }
   if (ini > fim) { showToast('A data inicial precisa ser antes (ou igual) da data final.'); return; }
-  STATE.filterMode = 'periodo';
-  STATE.periodoInicio = ini;
-  STATE.periodoFim = fim;
-  recomputeAndRender();
+  const estado = topFilterActive.estado;
+  estado.filterMode = 'periodo';
+  estado.periodoInicio = ini;
+  estado.periodoFim = fim;
+  topFilterActive.render();
 });
 document.getElementById('periodo-limpar').addEventListener('click', () => {
-  STATE.filterMode = 'ciclo';
-  STATE.periodoInicio = null;
-  STATE.periodoFim = null;
+  const estado = topFilterActive.estado;
+  estado.filterMode = 'ciclo';
+  estado.periodoInicio = null;
+  estado.periodoFim = null;
   document.getElementById('periodo-inicio').value = '';
   document.getElementById('periodo-fim').value = '';
-  recomputeAndRender();
+  topFilterActive.render();
 });
 
 function recomputeAndRenderKeepingCiclo(key){
@@ -3564,6 +3543,14 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   const alvo = btn.dataset.tab;
   document.querySelectorAll('.tab-btn').forEach(b => { b.classList.toggle('active', b===btn); b.setAttribute('aria-selected', String(b===btn)); });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-'+alvo));
+  activeTab = alvo;
+  // o filtro único do topo (Ciclo/Semana/Período) é compartilhado entre as abas — trocar de aba
+  // precisa repintar ele pros ciclos/semanas/seleção daquele painel específico, o que já
+  // acontece como parte normal do render de cada painel (ver renderTopFilterBar).
+  if (alvo === 'infracoes') recomputeAndRender();
+  else if (alvo === 'bh') renderBH();
+  else if (alvo === 'dsr') renderDSR();
+  else if (alvo === 'feriado') renderFeriado();
 });
 
 /* ==========================================================================
@@ -3606,6 +3593,9 @@ function novoEstadoAux(){ return { raw: [], cicloSel: null, semanaSel: null, per
 let STATE_BH = novoEstadoAux();
 let STATE_DSR = novoEstadoAux();
 let STATE_FERIADO = novoEstadoAux();
+// qual aba está visível agora — controla pra qual painel o filtro único do topo (Ciclo/Semana/
+// Período) está apontando no momento (ver renderTopFilterBar).
+let activeTab = 'infracoes';
 function carregarAuxDoStorage(){
   try { const r = localStorage.getItem(STORAGE_BH); if (r) STATE_BH.raw = JSON.parse(r); } catch(e) {}
   try { const r = localStorage.getItem(STORAGE_DSR); if (r) STATE_DSR.raw = JSON.parse(r); } catch(e) {}
@@ -3753,62 +3743,9 @@ function derivarAux(estado, camposLinha){
   const period = currentPeriodAux(estado, enriched, ciclos, semanas);
   return { ciclos, semanas, periodType: period.type, periodKey: period.key, periodLabel: period.label, rows: period.rows };
 }
-// mesmo filtro Ciclo/Semana/Período (com o mesmo <select>/<input type=date> visual) usado no
-// cabeçalho de Infrações — só que um jogo de campos por painel auxiliar (prefixo bh-/dsr-/feriado-)
-// e guardado no STATE_* daquele painel, não no STATE global.
-function renderAuxFilterRow(prefix, estado, d, onChange){
-  const cycleSel = document.getElementById(prefix+'-cycle-select');
-  const weekSel = document.getElementById(prefix+'-week-select');
-  clear(cycleSel); clear(weekSel);
-  const optAll = document.createElement('option');
-  optAll.value = 'TODOS'; optAll.textContent = 'TODOS OS CICLOS';
-  if (d.periodType === 'ciclo' && d.periodKey === 'TODOS') optAll.selected = true;
-  cycleSel.appendChild(optAll);
-  d.ciclos.forEach(c => {
-    const o = document.createElement('option');
-    o.value = c.key; o.textContent = c.label;
-    if (d.periodType === 'ciclo' && c.key === d.periodKey) o.selected = true;
-    cycleSel.appendChild(o);
-  });
-  cycleSel.onchange = () => { estado.filterMode = 'ciclo'; estado.cicloSel = cycleSel.value; onChange(); };
-
-  const optNone = document.createElement('option');
-  optNone.value = ''; optNone.textContent = 'Todas as semanas';
-  weekSel.appendChild(optNone);
-  [...d.semanas].reverse().forEach(s => {
-    const o = document.createElement('option');
-    o.value = s.key; o.textContent = s.label;
-    if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
-    weekSel.appendChild(o);
-  });
-  weekSel.onchange = () => {
-    if (!weekSel.value) { estado.filterMode = 'ciclo'; estado.semanaSel = null; }
-    else { estado.filterMode = 'semana'; estado.semanaSel = weekSel.value; }
-    onChange();
-  };
-
-  document.getElementById(prefix+'-periodo-inicio').value = estado.periodoInicio || '';
-  document.getElementById(prefix+'-periodo-fim').value = estado.periodoFim || '';
-  document.getElementById(prefix+'-periodo-limpar').hidden = d.periodType !== 'periodo';
-}
-// os botões Aplicar/Limpar do filtro Período são fixos no HTML (não recriados a cada render) —
-// wireAuxPeriodoButtons() os conecta uma única vez, no boot.
-function wireAuxPeriodoButtons(prefix, estado, renderFn){
-  document.getElementById(prefix+'-periodo-aplicar').addEventListener('click', () => {
-    const ini = document.getElementById(prefix+'-periodo-inicio').value;
-    const fim = document.getElementById(prefix+'-periodo-fim').value;
-    if (!ini || !fim) { showToast('Escolha a data inicial e a data final do período.'); return; }
-    if (ini > fim) { showToast('A data inicial precisa ser antes (ou igual) da data final.'); return; }
-    estado.filterMode = 'periodo'; estado.periodoInicio = ini; estado.periodoFim = fim;
-    renderFn();
-  });
-  document.getElementById(prefix+'-periodo-limpar').addEventListener('click', () => {
-    estado.filterMode = 'ciclo'; estado.periodoInicio = null; estado.periodoFim = null;
-    document.getElementById(prefix+'-periodo-inicio').value = '';
-    document.getElementById(prefix+'-periodo-fim').value = '';
-    renderFn();
-  });
-}
+// Ciclo/Semana/Período dos painéis auxiliares usa o mesmo filtro único do topo da página —
+// ver renderTopFilterBar, chamada por renderBH/renderDSR/renderFeriado só quando a aba
+// correspondente está ativa.
 // listas de datas/horários por colaborador (mesma ideia do "colab-dates" de Infrações: mostra
 // só as primeiras ocorrências, com "+N" pro resto, pra não estourar a célula).
 const MAX_DETALHES_VISIVEIS = 4;
@@ -4095,7 +4032,7 @@ function renderBH(){
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_BH.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
-    clear(document.getElementById('bh-cycle-select')); clear(document.getElementById('bh-week-select'));
+    if (activeTab === 'bh') { clear(document.getElementById('cycle-select')); clear(document.getElementById('week-select')); }
     renderAuxBars('bh-go-bars', [], 'var(--s1)', fmtMoeda);
     renderAuxBars('bh-ga-bars', [], 'var(--s1)', fmtMoeda);
     document.getElementById('bh-go-hint').textContent = '';
@@ -4103,7 +4040,18 @@ function renderBH(){
     document.getElementById('bh-hier-hint').textContent = '';
     return;
   }
-  renderAuxFilterRow('bh', STATE_BH, d, renderBH);
+  if (activeTab === 'bh') {
+    renderTopFilterBar(d, {
+      estado: STATE_BH,
+      render: renderBH,
+      onCycleChange: v => { STATE_BH.filterMode = 'ciclo'; STATE_BH.cicloSel = v; renderBH(); },
+      onWeekChange: v => {
+        if (!v) { STATE_BH.filterMode = 'ciclo'; STATE_BH.semanaSel = null; }
+        else { STATE_BH.filterMode = 'semana'; STATE_BH.semanaSel = v; }
+        renderBH();
+      },
+    });
+  }
   document.getElementById('bh-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Total em horas', fmtHorasDecimais(d.totalHoras)], ['Total em valor', fmtMoeda(d.totalVlr)], ['Total em dias', fmt(Math.round(d.totalDias*10)/10)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
@@ -4199,7 +4147,7 @@ function renderDSR(){
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_DSR.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
-    clear(document.getElementById('dsr-cycle-select')); clear(document.getElementById('dsr-week-select'));
+    if (activeTab === 'dsr') { clear(document.getElementById('cycle-select')); clear(document.getElementById('week-select')); }
     renderAuxBars('dsr-go-bars', [], 'var(--s2)', fmtMoeda);
     renderAuxBars('dsr-ga-bars', [], 'var(--s2)', fmtMoeda);
     document.getElementById('dsr-go-hint').textContent = '';
@@ -4207,7 +4155,18 @@ function renderDSR(){
     document.getElementById('dsr-hier-hint').textContent = '';
     return;
   }
-  renderAuxFilterRow('dsr', STATE_DSR, d, renderDSR);
+  if (activeTab === 'dsr') {
+    renderTopFilterBar(d, {
+      estado: STATE_DSR,
+      render: renderDSR,
+      onCycleChange: v => { STATE_DSR.filterMode = 'ciclo'; STATE_DSR.cicloSel = v; renderDSR(); },
+      onWeekChange: v => {
+        if (!v) { STATE_DSR.filterMode = 'ciclo'; STATE_DSR.semanaSel = null; }
+        else { STATE_DSR.filterMode = 'semana'; STATE_DSR.semanaSel = v; }
+        renderDSR();
+      },
+    });
+  }
   document.getElementById('dsr-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
@@ -4304,7 +4263,7 @@ function renderFeriado(){
     ? 'Nenhuma planilha anexada ainda.'
     : (STATE_FERIADO.usingSupabase ? 'Dados sincronizados — mesma informação em qualquer dispositivo.' : 'Exibindo dados importados neste navegador (não persiste fora deste dispositivo).');
   if (!d) {
-    clear(document.getElementById('feriado-cycle-select')); clear(document.getElementById('feriado-week-select'));
+    if (activeTab === 'feriado') { clear(document.getElementById('cycle-select')); clear(document.getElementById('week-select')); }
     renderAuxBars('feriado-go-bars', [], 'var(--s3)', fmtMoeda);
     renderAuxBars('feriado-ga-bars', [], 'var(--s3)', fmtMoeda);
     document.getElementById('feriado-go-hint').textContent = '';
@@ -4312,7 +4271,18 @@ function renderFeriado(){
     document.getElementById('feriado-hier-hint').textContent = '';
     return;
   }
-  renderAuxFilterRow('feriado', STATE_FERIADO, d, renderFeriado);
+  if (activeTab === 'feriado') {
+    renderTopFilterBar(d, {
+      estado: STATE_FERIADO,
+      render: renderFeriado,
+      onCycleChange: v => { STATE_FERIADO.filterMode = 'ciclo'; STATE_FERIADO.cicloSel = v; renderFeriado(); },
+      onWeekChange: v => {
+        if (!v) { STATE_FERIADO.filterMode = 'ciclo'; STATE_FERIADO.semanaSel = null; }
+        else { STATE_FERIADO.filterMode = 'semana'; STATE_FERIADO.semanaSel = v; }
+        renderFeriado();
+      },
+    });
+  }
   document.getElementById('feriado-hint').textContent = 'Exibindo: ' + d.periodLabel;
   [['Ocorrências', fmt(d.totalOcorrencias)], ['Total em horas', (Math.round(d.totalHoras*100)/100).toString().replace('.',',')], ['Total em valor', fmtMoeda(d.totalValor)], ['Colaboradores', fmt(d.pessoas.length)]]
     .forEach(([label,valor]) => {
@@ -4526,9 +4496,6 @@ document.getElementById('role-badge').addEventListener('click', () => {
   applyVerifButtonState();
   tryLoadFromStorage();
   carregarAuxDoStorage();
-  wireAuxPeriodoButtons('bh', STATE_BH, renderBH);
-  wireAuxPeriodoButtons('dsr', STATE_DSR, renderDSR);
-  wireAuxPeriodoButtons('feriado', STATE_FERIADO, renderFeriado);
   wireJustificativaAutosave('bh-go-blocks');
   wireJustificativaAutosave('dsr-go-blocks');
   wireJustificativaAutosave('feriado-go-blocks');
