@@ -2824,6 +2824,12 @@ function computeVerification(){
 }
 function renderVerification(){
   const el = document.getElementById('verif-body');
+  // bloco só pra Administrador — Usuário Padrão nem vê a seção existir. Some de vez (não só o
+  // conteúdo) pra não sobrar um título + botão "Ativada/Desativada" vazios pra quem não pode
+  // usar. Reavaliado a cada recomputeAndRender(), então login/logout já atualiza na hora.
+  const section = el.closest('section');
+  if (!isAdmin()) { if (section) section.style.display = 'none'; clear(el); return; }
+  if (section) section.style.display = '';
   clear(el);
   if (!verifEnabled()) {
     // desligado: nem calcula (poupa a varredura de toda a base a cada troca de ciclo/filtro
