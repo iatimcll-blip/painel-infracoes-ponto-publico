@@ -269,7 +269,7 @@
     0%{ box-shadow:0 0 0 0 var(--s1); }
     100%{ box-shadow:0 0 0 8px rgba(0,0,0,0); }
   }
-  .ga-block.go-jump-highlight{ animation:go-jump-pulse 1s ease-out 2; border-color:var(--s1); }
+  .ga-block.go-jump-highlight, .go-block.go-jump-highlight{ animation:go-jump-pulse 1s ease-out 2; border-color:var(--s1); }
   .bar-item .btotal{ font-size:12.5px; text-align:right; font-weight:600; }
   .stack-wrap{ position:relative; }
   .stack-track{ position:relative; height:16px; background:var(--grid); border-radius:4px; overflow:hidden; display:flex; }
@@ -2648,9 +2648,34 @@ function jumpToGoInHierarchy(goName){
   });
   matches[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+// mesma ideia de jumpToGoInHierarchy, só que pros 3 painéis auxiliares (Banco de Horas/DSR/
+// Feriados): a hierarquia deles tem um nível a mais (GO > GA > colaboradores, ver
+// renderAuxGoGaBlocks), então o alvo do clique é o .go-block com esse GO — abri-lo já expõe
+// todos os GAs dele por baixo (nascem abertos). containerId é o hier-blocks daquele painel
+// específico (bh-go-blocks/dsr-go-blocks/feriado-go-blocks).
+function jumpToGoInAuxHierarchy(containerId, goName){
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  const section = wrap.closest('section');
+  if (section) {
+    section.classList.remove('collapsed');
+    const toggle = section.querySelector(':scope > .section-head .section-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+  }
+  const blocks = [...wrap.querySelectorAll(':scope > .go-block')];
+  const match = blocks.find(b => b.dataset.go === goName);
+  if (!match) { showToast('Nenhum GO encontrado para ' + goName + ' neste período.'); return; }
+  match.open = true;
+  match.classList.remove('go-jump-highlight');
+  void match.offsetWidth; // reinicia a animação se clicar de novo no mesmo GO
+  match.classList.add('go-jump-highlight');
+  match.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 document.body.addEventListener('click', evt => {
   const btn = evt.target.closest('.bname-link');
-  if (btn) jumpToGoInHierarchy(btn.dataset.go);
+  if (!btn) return;
+  if (btn.dataset.target) jumpToGoInAuxHierarchy(btn.dataset.target, btn.dataset.go);
+  else jumpToGoInHierarchy(btn.dataset.go);
 });
 
 function gaCellHTML(nome, ga){
@@ -4069,7 +4094,11 @@ function agregarPorCampoAux(pessoas, campo, metricaFn){
   });
   return [...mapa.entries()].map(([nome,valor]) => ({ nome, valor })).sort((a,b) => Math.abs(b.valor)-Math.abs(a.valor));
 }
-function renderAuxBars(containerId, rows, corVar, fmtFn){
+// linkTargetId (opcional): quando passado, o nome vira um botão que leva direto pros blocos
+// daquele GO no bloco de hierarquia do MESMO painel (ver jumpToGoInAuxHierarchy) — mesma ideia
+// do link de "Infrações por GO" pra "Colaboradores por hierarquia" (jumpToGoInHierarchy), só
+// que reaproveitado nos 3 painéis auxiliares (Banco de Horas/DSR/Feriados) via este parâmetro.
+function renderAuxBars(containerId, rows, corVar, fmtFn, linkTargetId){
   const el = document.getElementById(containerId);
   clear(el);
   if (!rows.length) { el.innerHTML = '<p style="font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0;">Sem dados.</p>'; return; }
@@ -4078,8 +4107,11 @@ function renderAuxBars(containerId, rows, corVar, fmtFn){
     const item = document.createElement('div');
     item.className = 'bar-item wide-total';
     const w = Math.abs(r.valor)/max*100;
+    const bnameHTML = linkTargetId
+      ? '<button type="button" class="bname bname-link" data-go="'+esc(r.nome)+'" data-target="'+esc(linkTargetId)+'" title="Ver '+esc(r.nome)+' na hierarquia">'+esc(r.nome)+'</button>'
+      : '<span class="bname" title="' + esc(r.nome) + '">' + esc(r.nome) + '</span>';
     item.innerHTML =
-      '<span class="bname" title="'+esc(r.nome)+'">'+esc(r.nome)+'</span>' +
+      bnameHTML +
       '<div class="stack-wrap">' +
         '<div class="stack-track single" data-tip>' +
           '<div class="seg" style="width:'+w+'%; background:'+corVar+'"></div>' +
@@ -4159,6 +4191,7 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
     const details = document.createElement('details');
     details.className = 'go-block';
     details.open = true;
+    details.dataset.go = goBlock.go || '';
     const statsGo = opts.statsFor(todasPessoasGo);
     const summary = document.createElement('summary');
     summary.innerHTML =
@@ -4359,7 +4392,7 @@ function renderBH(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
-  renderAuxBars('bh-go-bars', d.porGo, 'var(--s1)', fmtMoeda);
+  renderAuxBars('bh-go-bars', d.porGo, 'var(--s1)', fmtMoeda, 'bh-go-blocks');
   renderAuxBars('bh-ga-bars', d.porGa, 'var(--s1)', fmtMoeda);
   document.getElementById('bh-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
   renderAuxGoGaBlocks('bh-go-blocks', d.goGaBlocks, BH_OPTS, { tema:'bh', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
@@ -4474,7 +4507,7 @@ function renderDSR(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
-  renderAuxBars('dsr-go-bars', d.porGo, 'var(--s2)', fmtMoeda);
+  renderAuxBars('dsr-go-bars', d.porGo, 'var(--s2)', fmtMoeda, 'dsr-go-blocks');
   renderAuxBars('dsr-ga-bars', d.porGa, 'var(--s2)', fmtMoeda);
   document.getElementById('dsr-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
   renderAuxGoGaBlocks('dsr-go-blocks', d.goGaBlocks, DSR_OPTS, { tema:'dsr', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
@@ -4590,7 +4623,7 @@ function renderFeriado(){
       tile.innerHTML = '<span class="label">'+esc(label)+'</span><span class="value">'+esc(String(valor))+'</span>';
       kpiEl.appendChild(tile);
     });
-  renderAuxBars('feriado-go-bars', d.porGo, 'var(--s3)', fmtMoeda);
+  renderAuxBars('feriado-go-bars', d.porGo, 'var(--s3)', fmtMoeda, 'feriado-go-blocks');
   renderAuxBars('feriado-ga-bars', d.porGa, 'var(--s3)', fmtMoeda);
   document.getElementById('feriado-go-hint').textContent = d.porGo.length + ' GO(s) · ' + d.porGa.length + ' GA(s) no período';
   renderAuxGoGaBlocks('feriado-go-blocks', d.goGaBlocks, FERIADO_OPTS, { tema:'feriado', periodType:d.periodType, periodKey:d.periodKey, periodLabel:d.periodLabel });
