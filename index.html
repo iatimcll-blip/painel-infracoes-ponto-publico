@@ -4062,7 +4062,11 @@ function derivarAux(estado, camposLinha){
   if (!ciclos.length) return null;
   const semanas = distinctSemanasAux(enriched);
   const period = currentPeriodAux(estado, enriched, ciclos, semanas);
-  return { ciclos, semanas, periodType: period.type, periodKey: period.key, periodLabel: period.label, rows: period.rows };
+  // enrichedAll: TODAS as linhas já importadas pra este painel, sem o filtro de ciclo/semana/
+  // período aplicado — usado só pra montar a coluna "Consolidado" (total geral por colaborador,
+  // independente do que estiver selecionado no filtro do topo). `rows` continua sendo só o
+  // período filtrado, pra não mudar o comportamento de mais nada que já usava esse retorno.
+  return { ciclos, semanas, periodType: period.type, periodKey: period.key, periodLabel: period.label, rows: period.rows, enrichedAll: enriched };
 }
 // Ciclo/Semana/Período dos painéis auxiliares usa o mesmo filtro único do topo da página —
 // ver renderTopFilterBar, chamada por renderBH/renderDSR/renderFeriado só quando a aba
@@ -4086,6 +4090,15 @@ function datasHorariosLabel(p){
 /* -------- gráficos por GO/GA (painéis auxiliares) --------
    Reaproveita o mesmo visual de barra usada em Infrações (.bars/.bar-item/.stack-track), só que
    com 1 segmento único em vez de empilhado (não há sub-tipos aqui) — cor identifica o painel. */
+// soma um campo de horas (horasDec no Banco de Horas, horas em DSR/Feriados) por colaborador
+// em cima do dataset INTEIRO do painel (enrichedAll de derivarAux, sem filtro de ciclo/semana/
+// período) — é o que alimenta a coluna "Consolidado" (total geral, sempre o mesmo número
+// independente do que estiver selecionado no filtro do topo).
+function consolidadoPorNome(enrichedAll, campoHoras){
+  const mapa = new Map();
+  enrichedAll.forEach(r => mapa.set(r.nome, (mapa.get(r.nome)||0) + (r[campoHoras]||0)));
+  return mapa;
+}
 function agregarPorCampoAux(pessoas, campo, metricaFn){
   const mapa = new Map();
   pessoas.forEach(p => {
@@ -4316,7 +4329,10 @@ function exportAuxGaBlockToExcel(gaBlock, opts, ctx){
 /* -------- Banco de Horas -------- */
 const BH_OPTS = {
   nameWidth: 190,
-  columns: [ {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Dias', num:true, width:64, pptFmt:fmt}, {label:'Data Limite', width:110}, {label:'Justificativa (FCA)', just:true} ],
+  // "Consolidado" — total geral de horas do colaborador, somando TODOS os registros já
+  // importados/sincronizados pra este painel, sempre o mesmo valor não importa o que esteja
+  // selecionado no filtro do topo (ciclo/semana/período) — ver consolidadoPorNome/deriveBH.
+  columns: [ {label:'Horas', num:true, width:80}, {label:'Consolidado', num:true, width:90}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Dias', num:true, width:64, pptFmt:fmt}, {label:'Data Limite', width:110}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: fmtHorasDecimais(pessoas.reduce((a,p)=>a+p.horasDec,0)), l:'Horas' },
@@ -4327,12 +4343,13 @@ const BH_OPTS = {
     const justKey = justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey);
     const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
     return '<td class="num-col num'+(p.horasDec<0?' has-infra':'')+'">'+esc(fmtHorasDecimais(p.horasDec))+'</td>'+
+      '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasDecimais(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.vlr<0?' has-infra':'')+'">'+esc(fmtMoeda(p.vlr))+'</td>'+
       '<td class="num-col num'+(p.dias<0?' has-infra':'')+'">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
       '<td>'+esc(datasLimiteLabel(p))+'</td>'+
       '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
-  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Consolidado:fmtHorasDecimais(p.consolidado), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveBH(){
@@ -4344,6 +4361,8 @@ function deriveBH(){
     const p = porPessoa.get(r.nome); p.horasDec += r.horasDec; p.vlr += r.vlr; p.dias += r.dias; p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.vlr - a.vlr);
+  const consolidadoMap = consolidadoPorNome(d.enrichedAll, 'horasDec');
+  pessoas.forEach(p => { p.consolidado = consolidadoMap.get(p.nome) || 0; });
   const totalHoras = pessoas.reduce((a,p)=>a+p.horasDec,0);
   const totalVlr = pessoas.reduce((a,p)=>a+p.vlr,0);
   const totalDias = pessoas.reduce((a,p)=>a+p.dias,0);
@@ -4437,7 +4456,9 @@ document.getElementById('file-bh').addEventListener('change', async evt => {
 /* -------- DSR -------- */
 const DSR_OPTS = {
   nameWidth: 190,
-  columns: [ {label:'Ocorrências', num:true, width:100, pptFmt:fmt}, {label:'Horas', num:true, width:80, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Data / Horário', width:160}, {label:'Justificativa (FCA)', just:true} ],
+  // "Consolidado" — total geral de horas do colaborador em TODOS os registros já importados/
+  // sincronizados, sempre o mesmo valor não importa o filtro selecionado (ver deriveDSR).
+  columns: [ {label:'Ocorrências', num:true, width:100, pptFmt:fmt}, {label:'Horas', num:true, width:80, pptFmt:fmtHorasSoltas}, {label:'Consolidado', num:true, width:90, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Data / Horário', width:160}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4449,11 +4470,12 @@ const DSR_OPTS = {
     const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
     return '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
       '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
       '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
-  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveDSR(){
@@ -4465,6 +4487,8 @@ function deriveDSR(){
     const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
+  const consolidadoMap = consolidadoPorNome(d.enrichedAll, 'horas');
+  pessoas.forEach(p => { p.consolidado = consolidadoMap.get(p.nome) || 0; });
   const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
   const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
   const goGaBlocks = buildGoGaBlocks(pessoas);
@@ -4552,7 +4576,9 @@ document.getElementById('file-dsr').addEventListener('change', async evt => {
 /* -------- Feriados -------- */
 const FERIADO_OPTS = {
   nameWidth: 170,
-  columns: [ {label:'Tipo', width:130}, {label:'Ocorrências', num:true, width:95, pptFmt:fmt}, {label:'Horas', num:true, width:70, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:95, pptFmt:fmtMoeda}, {label:'Data / Horário', width:150}, {label:'Justificativa (FCA)', just:true} ],
+  // "Consolidado" — total geral de horas do colaborador em TODOS os registros já importados/
+  // sincronizados, sempre o mesmo valor não importa o filtro selecionado (ver deriveFeriado).
+  columns: [ {label:'Tipo', width:130}, {label:'Ocorrências', num:true, width:95, pptFmt:fmt}, {label:'Horas', num:true, width:70, pptFmt:fmtHorasSoltas}, {label:'Consolidado', num:true, width:90, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:95, pptFmt:fmtMoeda}, {label:'Data / Horário', width:150}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4565,11 +4591,12 @@ const FERIADO_OPTS = {
     return '<td>'+esc([...p.tipos].join(', '))+'</td>'+
       '<td class="num-col num">'+fmt(p.ocorrencias)+'</td>'+
       '<td class="num-col num'+(p.horas<0?' has-infra':'')+'">'+(Math.round(p.horas*100)/100).toString().replace('.',',')+'</td>'+
+      '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
       '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
-  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveFeriado(){
@@ -4581,6 +4608,8 @@ function deriveFeriado(){
     const p = porPessoa.get(r.nome); p.ocorrencias++; p.horas += r.horas; p.valor += r.valor; if (r.tipoFeriado) p.tipos.add(r.tipoFeriado); p.detalhes.push(r);
   });
   const pessoas = [...porPessoa.values()].sort((a,b) => b.valor - a.valor);
+  const consolidadoMap = consolidadoPorNome(d.enrichedAll, 'horas');
+  pessoas.forEach(p => { p.consolidado = consolidadoMap.get(p.nome) || 0; });
   const porGo = agregarPorCampoAux(pessoas, 'go', p=>p.valor);
   const porGa = agregarPorCampoAux(pessoas, 'ga', p=>p.valor);
   const goGaBlocks = buildGoGaBlocks(pessoas);
