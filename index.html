@@ -2086,11 +2086,14 @@ function renderTopFilterBar(d, cfg){
   const optNone = document.createElement('option');
   optNone.value = ''; optNone.textContent = 'Todas as semanas';
   weekSel.appendChild(optNone);
-  // no dropdown a semana mais recente fica em primeiro (S38, S37, S36, ...) — só na lista de
-  // opções; os gráficos "por semana" continuam em ordem cronológica normal.
+  // no dropdown a semana mais recente fica em primeiro (S38, S37, S36, ...) — sempre da maior
+  // pra menor semana, só na lista de opções; os gráficos "por semana" continuam em ordem
+  // cronológica normal. cfg.weekLabelSuffix (só o Banco de Horas usa, ver renderBH) acrescenta um
+  // texto fixo depois da data de cada opção — ali a "semana" é a data limite de compensação, não
+  // um período qualquer, então o rótulo avisa isso explicitamente.
   [...d.semanas].reverse().forEach(s => {
     const o = document.createElement('option');
-    o.value = s.key; o.textContent = s.label;
+    o.value = s.key; o.textContent = s.label + (cfg.weekLabelSuffix || '');
     if (d.periodType === 'semana' && s.key === d.periodKey) o.selected = true;
     weekSel.appendChild(o);
   });
@@ -3278,15 +3281,18 @@ function exportSectionToExcel(exportId){
 
 /* ---------------- apresentação PowerPoint ----------------
    Gerada 100% no navegador (pptxgenjs via CDN, mesmo esquema do xlsx/html2canvas/supabase-js),
-   sempre com os dados do filtro selecionado no momento do clique (STATE.lastDerived) — igual
-   ao Excel por bloco, nunca um instantâneo fixo.
+   sempre com os dados do filtro selecionado no momento do clique (cada painel lê o seu próprio
+   *.lastDerived) — igual ao Excel por bloco, nunca um instantâneo fixo.
+
+   Um clique gera UMA apresentação com os 4 painéis (Infrações, Banco de Horas, DSR, Feriados) —
+   cada um contribui sua própria seção (divisória + indicadores + por GO + um slide por GA),
+   só que apenas os painéis que têm alguma planilha anexada no momento entram na apresentação
+   (ver buildApresentacaoPres/gerarApresentacaoPPT); nenhuma seção vazia é gerada.
 
    Replica a identidade visual do modelo em D:\infrações\apresentação ppt (navy + verde +
-   "alloha FIBRA", tabela "Período/Gestor" por GA com a coluna Total colorida). NÃO inclui os
-   slides do modelo que dependem de dados que este painel não tem — custo/orçamento (Sobreaviso,
-   HE, DSR em R$), Banco de Horas, Feriados e o roteiro de "Plano de Redução" são conteúdo
-   estratégico/financeiro alheio à base de ponto importada aqui; inventar números pra preencher
-   esses slides seria pior do que não ter o slide. */
+   "alloha FIBRA", tabela "Período/Gestor" por GA com a coluna Total colorida) — o roteiro de
+   "Plano de Redução" do modelo original continua fora (conteúdo estratégico que este painel
+   não calcula; inventar números seria pior que não ter o slide). */
 const PPT_NAVY = '0B3D63';
 const PPT_NAVY_DARK = '072843';
 const PPT_GREEN = '027431';
@@ -3362,16 +3368,138 @@ function pptTabelaColaboradoresGA(block, d){
   return rows;
 }
 
+// --- Banco de Horas / DSR / Feriados: mesmo roteiro pros 3 painéis auxiliares (divisória +
+// indicadores + por GO + um slide por GA), dirigido por opts (as mesmas colunas/exportRow já
+// usadas na tela e no Excel de cada painel — ver BH_OPTS/DSR_OPTS/FERIADO_OPTS) pra nunca ter
+// 3 cópias quase iguais divergindo entre si. exportRow já devolve um objeto plano chaveado
+// pelo mesmo texto do cabeçalho da coluna (inclusive "Colaborador"), então a tabela da
+// apresentação é só reler essas chaves — sem duplicar a lógica de "que valor vai em que coluna".
+function pptTabelaColaboradoresAux(pessoas, opts, ctx){
+  const cols = [{ label:'Colaborador' }].concat(opts.columns);
+  const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:10, valign:'middle' };
+  const rows = [ cols.map(c => ({ text:c.label, options: Object.assign({}, headerOpts, { align: c.num ? 'center' : 'left' }) })) ];
+  pessoas.forEach(p => {
+    const rowObj = opts.exportRow(p, p.go, p.ga, ctx);
+    const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:9.5, valign:'middle' };
+    rows.push(cols.map(c => {
+      const raw = rowObj[c.label];
+      const vazio = raw == null || raw === '';
+      // mesma regra visual da tela (célula .has-infra): Horas/Valor/Dias negativos saltam aos
+      // olhos em vermelho, aqui também — só se aplica a colunas numéricas.
+      const negativo = c.num && typeof raw === 'number' && raw < 0;
+      return {
+        text: vazio ? (c.just ? '—' : '') : String(raw),
+        options: Object.assign({}, cel, {
+          align: c.num ? 'center' : 'left',
+          italic: c.just && vazio,
+          bold: !!negativo,
+          color: negativo ? PPT_RED : (c.just && vazio ? PPT_TEXT_MUTED : PPT_NAVY),
+          fill: negativo ? { color: PPT_RED_LIGHT } : cel.fill,
+        }),
+      };
+    }));
+  });
+  return rows;
+}
+// larguras de coluna proporcionais ao peso de cada uma (Justificativa sempre a mais larga,
+// igual na tela) — normalizadas pra somar sempre 12.3", a mesma largura útil das outras
+// tabelas da apresentação.
+function pptColWidthsAux(opts){
+  const pesos = [2.4].concat(opts.columns.map(c => c.just ? 4.2 : (c.width ? c.width/40 : 1.4)));
+  const total = pesos.reduce((a,b)=>a+b, 0);
+  return pesos.map(p => Math.round(p/total*12.3*100)/100);
+}
+function pptSecaoTemaAuxiliar(pres, temaKey, temaLabel, d, opts, kpiTiles, eyebrow, rodapeTxt){
+  // --- divisória de seção ---
+  {
+    const s = pres.addSlide();
+    s.background = { color: PPT_NAVY };
+    s.addText(temaLabel, { x:0.5, y:3.15, w:12.3, h:1, align:'center', fontFace:'Cambria', fontSize:36, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+    s.addText(d.periodLabel, { x:0.5, y:4.15, w:12.3, h:0.5, align:'center', fontFace:'Arial', fontSize:14, color:'CADCFC', isTextBox:true, margin:0 });
+  }
+  // --- indicadores ---
+  {
+    const s = pres.addSlide();
+    pptCabecalho(s, temaLabel + ' — Indicadores', 'Recalculado a partir da planilha anexada · ' + d.periodLabel, eyebrow);
+    const n = kpiTiles.length, colW = (12.3 - (n-1)*0.2)/n, startX = 0.5, y0 = 2.3, rowH = 2.4;
+    kpiTiles.forEach((t, i) => {
+      const x = startX + i*(colW+0.2);
+      s.addShape('roundRect', { x, y:y0, w:colW, h:rowH, rectRadius:0.08, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
+      s.addText(String(t[1]), { x:x+0.15, y:y0+0.3, w:colW-0.3, h:1.2, align:'center', fontFace:'Cambria', fontSize:26, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      s.addText(t[0].toUpperCase(), { x:x+0.15, y:y0+1.55, w:colW-0.3, h:0.65, align:'center', fontFace:'Arial', fontSize:10, bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
+    });
+    pptRodape(s, rodapeTxt);
+  }
+  // --- por GO ---
+  if (d.porGo && d.porGo.length) {
+    const s = pres.addSlide();
+    pptCabecalho(s, temaLabel + ' por GO (Gestor Operacional)', 'Soma dos GOs = total do período selecionado', eyebrow);
+    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
+    const rows = [[
+      { text:'GO', options: Object.assign({}, headerOpts, { align:'left' }) },
+      { text:'Total', options: Object.assign({}, headerOpts, { align:'center' }) },
+    ]];
+    d.porGo.forEach(g => {
+      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:11, valign:'middle' };
+      rows.push([
+        { text:g.nome, options: Object.assign({}, cel, { align:'left', bold:true }) },
+        { text:fmtMoeda(g.valor), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
+      ]);
+    });
+    s.addTable(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
+    pptRodape(s, rodapeTxt);
+  }
+  // --- um slide por GA ---
+  const colW = pptColWidthsAux(opts);
+  (d.goGaBlocks || []).forEach(goBlock => {
+    goBlock.gas.forEach(gaBlock => {
+      if (!gaBlock.pessoas.length) return;
+      const s = pres.addSlide();
+      pptCabecalho(s, temaLabel + ' — ' + d.periodLabel, 'Acompanhamento por gestor de área', eyebrow);
+      s.addText([
+        { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:gaBlock.ga, options:{ color:PPT_NAVY } },
+        { text:'   ·   GO: ', options:{ bold:true, color:PPT_NAVY } }, { text:(gaBlock.go||'—'), options:{ color:PPT_NAVY } },
+      ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
+      const ctx = { tema: temaKey, periodType: d.periodType, periodKey: d.periodKey, periodLabel: d.periodLabel };
+      s.addTable(pptTabelaColaboradoresAux(gaBlock.pessoas, opts, ctx), { x:0.5, y:2.05, w:12.3, colW, border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
+      pptRodape(s, rodapeTxt);
+    });
+  });
+}
+// rótulo de período "principal" da apresentação — usado no rodapé/título/nome do arquivo:
+// prioriza o ciclo de Infrações (é o painel original do modelo); se só os painéis auxiliares
+// tiverem dados anexados, cai pro período de qualquer um deles que exista.
+function labelPrincipalApresentacao(dados){
+  return (dados.infracoes && dados.infracoes.cicloAtualLabel) || (dados.bh && dados.bh.periodLabel) ||
+    (dados.dsr && dados.dsr.periodLabel) || (dados.feriado && dados.feriado.periodLabel) || 'painel';
+}
+
 // monta o objeto pres (sem tocar em DOM/download) — separado assim pra dar pra testar em
-// Node direto, chamando essa função com um `d` de teste e conferindo o conteúdo gerado.
-function buildApresentacaoPres(d){
+// Node direto, chamando essa função com um `dados` de teste e conferindo o conteúdo gerado.
+// dados: { infracoes, bh, dsr, feriado } — o *.lastDerived de cada painel (null se aquele
+// painel não tem planilha anexada); só os painéis presentes ganham seção na apresentação.
+function buildApresentacaoPres(dados){
+  const d = dados.infracoes;
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_WIDE'; // 13.33" x 7.5"
   pres.author = 'Painel Infrações de Ponto';
-  pres.title = 'Infrações — ' + d.cicloAtualLabel;
+  const labelPrincipal = labelPrincipalApresentacao(dados);
+  pres.title = 'Painel Infrações de Ponto — ' + labelPrincipal;
   const regiaoTxt = regiaoDaBase();
   const eyebrow = regiaoTxt ? ('OPERAÇÕES · ' + regiaoTxt) : 'OPERAÇÕES';
-  const rodapeTxt = 'Gerado automaticamente pelo Painel Infrações de Ponto em ' + fmtDMY(new Date()) + ' · dados do período: ' + d.cicloAtualLabel;
+  const rodapeTxtFor = periodLabel => 'Gerado automaticamente pelo Painel Infrações de Ponto em ' + fmtDMY(new Date()) + ' · dados do período: ' + periodLabel;
+  const rodapeTxt = rodapeTxtFor(labelPrincipal);
+  // lista os painéis que de fato entram na apresentação (só os com planilha anexada) — vira a
+  // linha de destaque do slide de título; com só Infrações, mantém a descrição original dos
+  // 3 tipos de infração (mais informativa que o nome do painel repetido).
+  const secoesIncluidas = [];
+  if (dados.infracoes) secoesIncluidas.push('Infrações');
+  if (dados.bh) secoesIncluidas.push('Banco de Horas');
+  if (dados.dsr) secoesIncluidas.push('DSR');
+  if (dados.feriado) secoesIncluidas.push('Feriados');
+  const taglineTxt = secoesIncluidas.length > 1
+    ? secoesIncluidas.join('  ·  ')
+    : '>7 dias trabalhados  ·  Interjornada  ·  >2 horas extras';
 
   // --- slide 1: título ---
   {
@@ -3381,10 +3509,12 @@ function buildApresentacaoPres(d){
     s.addText('F I B R A', { x:0.6, y:0.98, w:5, h:0.4, fontFace:'Arial', fontSize:13, bold:true, color:PPT_GREEN_LIGHT, charSpacing:3, isTextBox:true, margin:0 });
     if (regiaoTxt) s.addText(regiaoTxt.toUpperCase(), { x:0.6, y:2.7, w:12, h:0.45, fontFace:'Arial', fontSize:15, bold:true, color:'9FC6E0', charSpacing:1, isTextBox:true, margin:0 });
     s.addText('Infrações de Ponto', { x:0.6, y:3.15, w:12, h:1.1, fontFace:'Cambria', fontSize:40, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
-    s.addText('>7 dias trabalhados  ·  Interjornada  ·  >2 horas extras', { x:0.6, y:4.25, w:12, h:0.5, fontFace:'Arial', fontSize:16, color:'CADCFC', isTextBox:true, margin:0 });
-    s.addText(d.cicloAtualLabel, { x:0.6, y:6.75, w:12, h:0.4, fontFace:'Arial', fontSize:12, color:'7C93B0', isTextBox:true, margin:0 });
+    s.addText(taglineTxt, { x:0.6, y:4.25, w:12, h:0.5, fontFace:'Arial', fontSize:16, color:'CADCFC', isTextBox:true, margin:0 });
+    s.addText(labelPrincipal, { x:0.6, y:6.75, w:12, h:0.4, fontFace:'Arial', fontSize:12, color:'7C93B0', isTextBox:true, margin:0 });
   }
 
+  // --- slides de Infrações (só se essa Base estiver anexada) ---
+  if (d) {
   // --- slide 2: indicadores do período ---
   {
     const s = pres.addSlide();
@@ -3513,6 +3643,33 @@ function buildApresentacaoPres(d){
       pptRodape(s, rodapeTxt);
     }
   }
+  } // fim do "if (d)" — slides de Infrações
+
+  // --- seções dos painéis auxiliares (só entra quem tem planilha anexada) ---
+  if (dados.bh) {
+    pptSecaoTemaAuxiliar(pres, 'bh', 'Banco de Horas', dados.bh, BH_OPTS, [
+      ['Total em horas', fmtHorasDecimais(dados.bh.totalHoras)],
+      ['Total em valor', fmtMoeda(dados.bh.totalVlr)],
+      ['Total em dias', fmt(Math.round(dados.bh.totalDias*10)/10)],
+      ['Colaboradores', fmt(dados.bh.pessoas.length)],
+    ], eyebrow, rodapeTxtFor(dados.bh.periodLabel));
+  }
+  if (dados.dsr) {
+    pptSecaoTemaAuxiliar(pres, 'dsr', 'DSR', dados.dsr, DSR_OPTS, [
+      ['Ocorrências', fmt(dados.dsr.totalOcorrencias)],
+      ['Total em horas', (Math.round(dados.dsr.totalHoras*100)/100).toString().replace('.', ',')],
+      ['Total em valor', fmtMoeda(dados.dsr.totalValor)],
+      ['Colaboradores', fmt(dados.dsr.pessoas.length)],
+    ], eyebrow, rodapeTxtFor(dados.dsr.periodLabel));
+  }
+  if (dados.feriado) {
+    pptSecaoTemaAuxiliar(pres, 'feriado', 'Feriados', dados.feriado, FERIADO_OPTS, [
+      ['Ocorrências', fmt(dados.feriado.totalOcorrencias)],
+      ['Total em horas', (Math.round(dados.feriado.totalHoras*100)/100).toString().replace('.', ',')],
+      ['Total em valor', fmtMoeda(dados.feriado.totalValor)],
+      ['Colaboradores', fmt(dados.feriado.pessoas.length)],
+    ], eyebrow, rodapeTxtFor(dados.feriado.periodLabel));
+  }
 
   // --- slide final ---
   {
@@ -3526,19 +3683,26 @@ function buildApresentacaoPres(d){
   return pres;
 }
 
-function nomeArquivoApresentacao(d){
-  return 'apresentacao-infracoes-' + nomeArquivoSeguro(d.cicloAtualLabel);
+function nomeArquivoApresentacao(labelPrincipal){
+  return 'apresentacao-painel-' + nomeArquivoSeguro(labelPrincipal);
 }
 async function gerarApresentacaoPPT(){
-  const d = STATE.lastDerived;
-  if (!d) { showToast('Nenhum dado carregado pra gerar a apresentação — anexe uma Base primeiro.'); return; }
+  // um clique só, apresentação com todos os painéis que tiverem alguma planilha anexada no
+  // momento (cada *.lastDerived só existe depois de pelo menos um anexo bem-sucedido daquele
+  // painel) — não exige mais que Infrações especificamente tenha dados.
+  const dados = { infracoes: STATE.lastDerived, bh: STATE_BH.lastDerived, dsr: STATE_DSR.lastDerived, feriado: STATE_FERIADO.lastDerived };
+  if (!dados.infracoes && !dados.bh && !dados.dsr && !dados.feriado) {
+    showToast('Nenhum dado carregado pra gerar a apresentação — anexe uma planilha em pelo menos um painel primeiro.');
+    return;
+  }
   if (typeof PptxGenJS === 'undefined') { showToast('A biblioteca de apresentações ainda não carregou — aguarde alguns segundos e tente de novo.'); return; }
   const btn = document.getElementById('apresentacao-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
   try {
-    const pres = buildApresentacaoPres(d);
-    await pres.writeFile({ fileName: nomeArquivoApresentacao(d) + '.pptx' });
-    showToast('Apresentação gerada: ' + d.cicloAtualLabel + '.');
+    const pres = buildApresentacaoPres(dados);
+    const labelPrincipal = labelPrincipalApresentacao(dados);
+    await pres.writeFile({ fileName: nomeArquivoApresentacao(labelPrincipal) + '.pptx' });
+    showToast('Apresentação gerada: ' + labelPrincipal + '.');
   } catch (e) {
     console.error('Falha ao gerar a apresentação em PowerPoint.', e);
     showToast('Não foi possível gerar a apresentação — detalhes no console (F12).');
@@ -4056,6 +4220,10 @@ function renderBH(){
     renderTopFilterBar(d, {
       estado: STATE_BH,
       render: renderBH,
+      // só no Banco de Horas: a "semana" do filtro é o agrupamento da coluna LIMITE COMP.
+      // (data limite pra compensar o banco de horas em folga), não um período genérico —
+      // o sufixo deixa isso explícito em cada opção da lista suspensa.
+      weekLabelSuffix: ' - Data Limite para Folga',
       onCycleChange: v => { STATE_BH.filterMode = 'ciclo'; STATE_BH.cicloSel = v; renderBH(); },
       onWeekChange: v => {
         if (!v) { STATE_BH.filterMode = 'ciclo'; STATE_BH.semanaSel = null; }
