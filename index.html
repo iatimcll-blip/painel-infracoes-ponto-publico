@@ -3363,20 +3363,20 @@ function pptTabelaColaboradoresGA(block, d){
     const justTexto = (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '';
     rows.push([
       { text:c.nome, options: Object.assign({}, cel, { align:'left' }) },
-      { text:String(c.d7), options: Object.assign({}, cel, { align:'center' }) },
-      { text:String(c.interj), options: Object.assign({}, cel, { align:'center' }) },
-      { text:String(c.hex), options: Object.assign({}, cel, { align:'center' }) },
-      { text:String(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
+      { text:fmt(c.d7), options: Object.assign({}, cel, { align:'center' }) },
+      { text:fmt(c.interj), options: Object.assign({}, cel, { align:'center' }) },
+      { text:fmt(c.hex), options: Object.assign({}, cel, { align:'center' }) },
+      { text:fmt(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
       { text: justTexto || '—', options: Object.assign({}, cel, { align:'left', fontSize:9.5, italic: !justTexto, color: justTexto ? PPT_NAVY : PPT_TEXT_MUTED }) },
     ]);
   });
   const totalOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY_DARK }, fontFace:'Arial', fontSize:11, valign:'middle' };
   rows.push([
     { text:'Total Geral', options: Object.assign({}, totalOpts, { align:'left' }) },
-    { text:String(sD7), options: Object.assign({}, totalOpts, { align:'center' }) },
-    { text:String(sInt), options: Object.assign({}, totalOpts, { align:'center' }) },
-    { text:String(sHex), options: Object.assign({}, totalOpts, { align:'center' }) },
-    { text:String(sTot), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:fmt(sD7), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:fmt(sInt), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:fmt(sHex), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text:fmt(sTot), options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:'', options: Object.assign({}, totalOpts, { align:'left' }) },
   ]);
   return rows;
@@ -3401,8 +3401,14 @@ function pptTabelaColaboradoresAux(pessoas, opts, ctx){
       // mesma regra visual da tela (célula .has-infra): Horas/Valor/Dias negativos saltam aos
       // olhos em vermelho, aqui também — só se aplica a colunas numéricas.
       const negativo = c.num && typeof raw === 'number' && raw < 0;
+      // exportRow devolve Valor/Dias/Horas como número puro pro Excel (célula numérica de
+      // verdade, pra dar pra somar/recalcular na planilha) — na apresentação isso virava
+      // String(raw) cru ("1234.5", ponto e sem R$/separador de milhar), diferente do que a
+      // tela mostra (fmtMoeda/fmt, vírgula decimal). c.pptFmt (quando a coluna declara) reaplica
+      // a MESMA formatação da tela só pro texto do slide — nunca ao valor exportado pro Excel.
+      const texto = vazio ? (c.just ? '—' : '') : (c.pptFmt ? c.pptFmt(raw) : String(raw));
       return {
-        text: vazio ? (c.just ? '—' : '') : String(raw),
+        text: texto,
         options: Object.assign({}, cel, {
           align: c.num ? 'center' : 'left',
           italic: c.just && vazio,
@@ -3538,8 +3544,8 @@ function buildApresentacaoPres(dados){
       ['Ciclo/semana anterior', d.temAnterior ? fmt(d.totalAnterior) : '—'],
       ['Variação', d.temAnterior ? (d.variacaoAbs>0?'+':'')+fmt(d.variacaoAbs) : '—'],
       ['Tipo mais recorrente', d.tipoRecorrente],
-      ['% do efetivo com infração', Math.round(d.pctEfetivo*10)/10 + '%'],
-      ['Média por colaborador afetado', (Math.round(d.mediaAfetado*10)/10).toString().replace('.', ',')],
+      ['% do efetivo com infração', Math.round(d.pctEfetivo) + '%'],
+      ['Média por colaborador afetado', d.mediaAfetado.toFixed(1).replace('.', ',')],
     ];
     const colW = 3.98, gap = 0.2, startX = 0.5, y0 = 2.0, rowH = 2.1;
     tiles.forEach((t, i) => {
@@ -3753,6 +3759,11 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
    ========================================================================== */
 function fmtMoeda(n){
   return (n||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+}
+// horas "soltas" (DSR/Feriados) — mesma formatação usada na tela (vírgula decimal, 2 casas
+// no máximo), pra bater dígito a dígito com o que o GA já vê no painel.
+function fmtHorasSoltas(n){
+  return (Math.round((n||0)*100)/100).toString().replace('.', ',');
 }
 // "HH:MM" ou "-HH:MM" (Banco de Horas negativo = devendo) -> horas decimais, sinal preservado
 function parseHHMMSigned(v){
@@ -4177,7 +4188,7 @@ function exportAuxGaBlockToExcel(gaBlock, opts, ctx){
 /* -------- Banco de Horas -------- */
 const BH_OPTS = {
   nameWidth: 190,
-  columns: [ {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100}, {label:'Dias', num:true, width:64}, {label:'Data Limite', width:110}, {label:'Justificativa (FCA)', just:true} ],
+  columns: [ {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Dias', num:true, width:64, pptFmt:fmt}, {label:'Data Limite', width:110}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: fmtHorasDecimais(pessoas.reduce((a,p)=>a+p.horasDec,0)), l:'Horas' },
@@ -4298,7 +4309,7 @@ document.getElementById('file-bh').addEventListener('change', async evt => {
 /* -------- DSR -------- */
 const DSR_OPTS = {
   nameWidth: 190,
-  columns: [ {label:'Ocorrências', num:true, width:100}, {label:'Horas', num:true, width:80}, {label:'Valor', num:true, width:100}, {label:'Data / Horário', width:160}, {label:'Justificativa (FCA)', just:true} ],
+  columns: [ {label:'Ocorrências', num:true, width:100, pptFmt:fmt}, {label:'Horas', num:true, width:80, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:100, pptFmt:fmtMoeda}, {label:'Data / Horário', width:160}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4314,7 +4325,7 @@ const DSR_OPTS = {
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
       '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
-  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveDSR(){
@@ -4413,7 +4424,7 @@ document.getElementById('file-dsr').addEventListener('change', async evt => {
 /* -------- Feriados -------- */
 const FERIADO_OPTS = {
   nameWidth: 170,
-  columns: [ {label:'Tipo', width:130}, {label:'Ocorrências', num:true, width:95}, {label:'Horas', num:true, width:70}, {label:'Valor', num:true, width:95}, {label:'Data / Horário', width:150}, {label:'Justificativa (FCA)', just:true} ],
+  columns: [ {label:'Tipo', width:130}, {label:'Ocorrências', num:true, width:95, pptFmt:fmt}, {label:'Horas', num:true, width:70, pptFmt:fmtHorasSoltas}, {label:'Valor', num:true, width:95, pptFmt:fmtMoeda}, {label:'Data / Horário', width:150}, {label:'Justificativa (FCA)', just:true} ],
   statsFor: pessoas => [
     { n: pessoas.length, l:'Colaboradores' },
     { n: pessoas.reduce((a,p)=>a+p.ocorrencias,0), l:'Ocorrências' },
@@ -4430,7 +4441,7 @@ const FERIADO_OPTS = {
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
       '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
   },
-  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), Ocorrencias:p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
+  exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
 };
 function deriveFeriado(){
