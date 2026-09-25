@@ -681,13 +681,6 @@
       <h2>Ranking · maior redução de infrações (semana anterior x semana atual)</h2>
       <span class="hint" id="week-range-hint"></span>
     </div>
-    <div class="toolbar">
-      <span class="periodo-label">Semana</span>
-      <select class="cycle-select" id="rank-semana-a" title="Semana mais recente da comparação (fica em 'Semana atual')" style="flex:none; width:auto;"></select>
-      <span class="periodo-sep">contra</span>
-      <select class="cycle-select" id="rank-semana-b" title="Semana anterior da comparação (fica em 'Semana anterior')" style="flex:none; width:auto;"></select>
-      <button type="button" class="periodo-btn" id="rank-semana-auto" hidden>Automático</button>
-    </div>
     <div class="card">
       <div class="rank-row rank-head">
         <span></span>
@@ -1434,7 +1427,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null, rankSemanaA: null, rankSemanaB: null };
+let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1747,7 +1740,7 @@ function resetData(){
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); localStorage.removeItem(STORAGE_HIER_PENDENTE); } catch(e) {}
   // justificativas NÃO são apagadas aqui — são anotações do GA, independentes da Base/Hierarquia
   // anexada, e "limpar dados locais" é especificamente sobre essas duas.
-  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null, rankSemanaA: null, rankSemanaB: null };
+  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -1945,24 +1938,11 @@ function deriveAll(){
   // ranking semana anterior x atual, por GA — usa a semana selecionada quando o filtro está em
   // modo "semana"; as duas semanas mais recentes DENTRO do período quando o filtro é "Período"
   // (nunca semanas de fora do intervalo escolhido); e as 2 semanas mais recentes da base inteira
-  // só no modo "ciclo" (sem período/semana restringindo nada). Isso tudo é sobreposto por
-  // STATE.rankSemanaA/B quando a pessoa escolhe manualmente "semana X contra semana Y" nos
-  // seletores de dentro do próprio bloco de Ranking — nesse caso ignora o filtro do topo e
-  // compara direto no dataset inteiro (ver rankSemanaSelect abaixo).
-  let rankGa = [], weekAtualLabel = null, weekAntLabel = null, weekAtualKey = null, weekAntKey = null;
-  const manualA = STATE.rankSemanaA && semanas.some(s => s.key === STATE.rankSemanaA) ? STATE.rankSemanaA : null;
-  const manualB = STATE.rankSemanaB && semanas.some(s => s.key === STATE.rankSemanaB) ? STATE.rankSemanaB : null;
+  // só no modo "ciclo" (sem período/semana restringindo nada).
+  let rankGa = [], weekAtualLabel = null, weekAntLabel = null;
   {
     let wAtual, wAnt, fonte;
-    if (manualA) {
-      // "Semana atual"/"Semana anterior" seguem sempre a ordem cronológica das DUAS semanas
-      // escolhidas, não a ordem em que a pessoa mexeu nos seletores — senão escolher a mais
-      // antiga no seletor A e a mais recente no B rotulava a mais recente como "anterior",
-      // o que ficaria enganoso. Chaves de semana são datas ISO, então comparam certo como texto.
-      if (manualB && manualB > manualA) { wAtual = manualB; wAnt = manualA; }
-      else { wAtual = manualA; wAnt = manualB; }
-      fonte = enriched;
-    } else if (period.type === 'semana') {
+    if (period.type === 'semana') {
       wAtual = period.key;
       wAnt = period.temAnterior ? prevWeekKey(wAtual) : null;
       fonte = enriched;
@@ -1982,7 +1962,6 @@ function deriveAll(){
       const rowsAnt = wAnt ? fonte.filter(r=>r.weekKey===wAnt) : [];
       weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : (semanas.find(s=>s.key===wAtual)||{}).label || null;
       weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
-      weekAtualKey = wAtual; weekAntKey = wAnt || null;
       const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(ga => ga && !EXCLUDED_GA.has(ga)));
       const sumAtual = groupSum(rowsAtual, r=>r.ga||'SEM HIERARQUIA');
       const sumAnt = groupSum(rowsAnt, r=>r.ga||'SEM HIERARQUIA');
@@ -2013,7 +1992,7 @@ function deriveAll(){
     total, totalAnterior, variacaoAbs, tipoRecorrente,
     pctEfetivo, afetadosCount: afetados.length, roster: roster.length, mediaAfetado,
     porGo, porGa, hierBlocks, topColaboradores, detalhesByNome,
-    rankGa, weekAtualLabel, weekAntLabel, weekAtualKey, weekAntKey, rankManualAtiva: !!manualA,
+    rankGa, weekAtualLabel, weekAntLabel,
     weekdayOrdered, porFuncao, porSubbu, porDia
   };
 }
@@ -2292,49 +2271,11 @@ function renderGoGa(d){
   document.getElementById('ga-count-hint').textContent = d.porGa.length + ' GA(s) no ciclo';
 }
 
-// popula os dois <select> de "Semana X contra Semana Y" do Ranking com TODAS as semanas do
-// dataset (não só as do ciclo/período filtrado no topo — o ponto de comparar manualmente é
-// justamente poder pegar qualquer par de semanas, mesmo de ciclos diferentes), da mais recente
-// pra mais antiga, igual ao <select> de semana do filtro principal.
-function popularRankSemanaSelect(sel, semanas, keySelecionada){
-  clear(sel);
-  const optAuto = document.createElement('option');
-  optAuto.value = ''; optAuto.textContent = 'Automático';
-  sel.appendChild(optAuto);
-  [...semanas].reverse().forEach(s => {
-    const o = document.createElement('option');
-    o.value = s.key; o.textContent = s.label;
-    if (s.key === keySelecionada) o.selected = true;
-    sel.appendChild(o);
-  });
-  if (!keySelecionada) optAuto.selected = true;
-}
 function renderRanking(d){
   const el = document.getElementById('rank-list');
   clear(el);
-
-  const selA = document.getElementById('rank-semana-a');
-  const selB = document.getElementById('rank-semana-b');
-  popularRankSemanaSelect(selA, d.semanas, d.rankManualAtiva ? STATE.rankSemanaA : d.weekAtualKey);
-  popularRankSemanaSelect(selB, d.semanas, d.rankManualAtiva ? STATE.rankSemanaB : d.weekAntKey);
-  selA.onchange = () => {
-    // escolher a "Semana A" manualmente sempre ativa o modo manual — mesmo que a semana
-    // escolhida coincida por acaso com a que já estava selecionada automaticamente.
-    STATE.rankSemanaA = selA.value || null;
-    if (!STATE.rankSemanaA) STATE.rankSemanaB = null; // "Automático" limpa os dois de vez
-    recomputeAndRender();
-  };
-  selB.onchange = () => {
-    STATE.rankSemanaB = selB.value || null;
-    if (!STATE.rankSemanaA) STATE.rankSemanaA = d.weekAtualKey; // escolheu só a "B" — trava a "A" na atual antes de virar manual
-    recomputeAndRender();
-  };
-  const autoBtn = document.getElementById('rank-semana-auto');
-  autoBtn.hidden = !d.rankManualAtiva;
-  autoBtn.onclick = () => { STATE.rankSemanaA = null; STATE.rankSemanaB = null; recomputeAndRender(); };
-
   document.getElementById('week-range-hint').textContent = d.weekAtualLabel
-    ? ((d.rankManualAtiva ? 'comparando ' : 'semana atual: ') + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : ' · sem semana anterior para comparar'))
+    ? ('semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : ' · sem semana anterior para comparar'))
     : 'sem dados semanais suficientes';
   if (!d.rankGa.length) {
     el.innerHTML = '<p style="font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0;">Sem dados suficientes para o ranking semanal.</p>';
