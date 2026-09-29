@@ -1606,12 +1606,34 @@ function serialParaHHMM(v){
   const dc = XLSX.SSF.parse_date_code(v);
   return dc ? (pad2(dc.H||0)+':'+pad2(dc.M||0)) : null;
 }
+// aceita a célula de data como o Excel realmente devolve: normalmente um objeto Date (quando
+// XLSX.read reconhece o formato numérico da célula como data, via cellDates:true), mas também
+// um número de série cru (célula formatada como "Geral"/número em vez de Data — comum em bases
+// exportadas de outros sistemas) ou texto "DD/MM/AAAA"/"AAAA-MM-DD" (célula formatada como
+// Texto) — sem isto, uma linha com data válida mas fora do formato Date esperado era descartada
+// silenciosamente (contada em "descartadas", sem dizer qual dia sumiu).
 function toISODateCell(v){
   if (v instanceof Date) return v.getFullYear()+'-'+pad2(v.getMonth()+1)+'-'+pad2(v.getDate());
+  if (typeof v === 'number') return serialParaISODate(v);
+  if (typeof v === 'string') {
+    const s = v.trim();
+    const br = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (br) {
+      const dd = Number(br[1]), mm = Number(br[2]), yyyy = Number(br[3]);
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) return yyyy+'-'+pad2(mm)+'-'+pad2(dd);
+    }
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (iso) return iso[1]+'-'+pad2(Number(iso[2]))+'-'+pad2(Number(iso[3]));
+  }
   return null;
 }
 function toHHMMCell(v){
   if (v instanceof Date) return pad2(v.getHours())+':'+pad2(v.getMinutes());
+  if (typeof v === 'number') return serialParaHHMM(v);
+  if (typeof v === 'string') {
+    const m = v.trim().match(/^(\d{1,2}):(\d{2})/);
+    if (m) return pad2(Number(m[1]))+':'+m[2];
+  }
   return null;
 }
 // normaliza texto vindo da planilha: colapsa espaços duplos/tabs e tira sobra nas pontas.
