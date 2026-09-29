@@ -455,6 +455,15 @@
   .just-input::placeholder{ color:var(--text-muted); }
   td.just-col.just-saved{ animation:just-saved-flash 1.2s ease-out; }
   @keyframes just-saved-flash{ 0%{ background:var(--good-tint); } 100%{ background:transparent; } }
+  /* 1 linha de justificativa POR DATA (Infrações · Colaboradores por hierarquia) — cada data
+     em que o colaborador teve infração ganha seu próprio campo, que cresce sozinho só até
+     onde o texto DELE precisar (compact = bem mais baixo que o .just-input "cheio" das abas
+     auxiliares, que continua 1 texto só pro período inteiro). */
+  .just-date-rows{ display:flex; flex-direction:column; gap:6px; }
+  .just-date-row{ display:flex; align-items:flex-start; gap:8px; }
+  .just-date-row.just-saved{ animation:just-saved-flash 1.2s ease-out; border-radius:6px; }
+  .just-date-label{ flex:none; font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--text-muted); padding-top:8px; min-width:32px; }
+  .just-input.just-input-compact{ min-height:34px; max-height:200px; padding:7px 9px; }
 
   /* ---------- detail modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
@@ -1152,6 +1161,37 @@ const STORAGE_HIER_PENDENTE = 'painelInfracoes.hierPendente.v1';
 const STORAGE_JUST = 'painelInfracoes.justificativas.v1';
 function justificativaKey(nome, periodType, periodKey){
   return nome + '::' + periodType + ':' + periodKey;
+}
+// chave de 1 linha de justificativa específica de 1 DATA (pedido do usuário: "uma linha de
+// justificativa para cada data" — antes era 1 texto só pra todas as datas do colaborador no
+// período). Só usada no bloco "Colaboradores por hierarquia" de Infrações por enquanto — os
+// painéis auxiliares (BH/DSR/Feriado) continuam com justificativaKeyAux, 1 texto por período.
+function justificativaKeyData(nome, periodType, periodKey, dataISO){
+  return justificativaKey(nome, periodType, periodKey) + '|' + dataISO;
+}
+// antes desta mudança existia só 1 justificativa por colaborador+período (chave sem a data).
+// Se essa chave antiga ainda tiver texto e nenhuma das datas já tiver sido preenchida, joga o
+// texto antigo pra primeira data (não perde o que o GA já tinha escrito) — roda 1x por pessoa,
+// a própria migração apaga a chave antiga, então não repete em renders seguintes.
+function migrarJustificativaAntigaSeNecessario(nome, periodType, periodKey, datas){
+  if (!datas || !datas.length) return;
+  const keyAntiga = justificativaKey(nome, periodType, periodKey);
+  const antiga = STATE.justificativas[keyAntiga];
+  if (!antiga || !antiga.texto) return;
+  const jaTemAlgumaData = datas.some(iso => STATE.justificativas[justificativaKeyData(nome, periodType, periodKey, iso)]);
+  if (!jaTemAlgumaData) STATE.justificativas[justificativaKeyData(nome, periodType, periodKey, datas[0])] = antiga;
+  delete STATE.justificativas[keyAntiga];
+  saveJustificativasToStorage();
+}
+// junta as justificativas de cada data num texto só, prefixado pela data — usado nas
+// exportações (Excel/PPT), que mostram 1 célula por colaborador, não 1 linha por data como a
+// tela agora mostra.
+function justificativasConsolidadas(nome, periodType, periodKey, datas){
+  return (datas || [])
+    .map(iso => ({ iso, texto: (STATE.justificativas[justificativaKeyData(nome, periodType, periodKey, iso)] || {}).texto || '' }))
+    .filter(x => x.texto)
+    .map(x => fmtDM(parseISODate(x.iso)) + ': ' + x.texto)
+    .join(' | ');
 }
 // liga/desliga do bloco "Verificação · Base de dados x Hierarquia" — preferência de tela,
 // por navegador, igual ao tema claro/escuro (não é um dado compartilhado, então não sincroniza
@@ -3124,8 +3164,7 @@ function renderHierarchy(d){
       const tbody = table.querySelector('tbody');
       block.colaboradores.forEach(c => {
         const tr = document.createElement('tr');
-        const justKey = justificativaKey(c.nome, d.periodType, d.periodKey);
-        const justTexto = (STATE.justificativas[justKey] || {}).texto || '';
+        migrarJustificativaAntigaSeNecessario(c.nome, d.periodType, d.periodKey, c.datas);
         // datas das infrações desse colaborador dentro do período em exibição, embaixo do
         // nome — mostra só as primeiras (a mais provável de ser lida) e o resto no title.
         const MAX_DATAS_VISIVEIS = 4;
@@ -3133,6 +3172,16 @@ function renderHierarchy(d){
         const datasLabel = datasFmt.length
           ? datasFmt.slice(0, MAX_DATAS_VISIVEIS).join(', ') + (datasFmt.length > MAX_DATAS_VISIVEIS ? ' +' + (datasFmt.length - MAX_DATAS_VISIVEIS) : '')
           : '';
+        // 1 linha de justificativa por data (pedido do usuário) — cada data com infração ganha
+        // seu próprio campo, em vez de 1 texto só cobrindo todas as datas do período.
+        const justRowsHtml = (c.datas || []).map(iso => {
+          const jTexto = (STATE.justificativas[justificativaKeyData(c.nome, d.periodType, d.periodKey, iso)] || {}).texto || '';
+          const label = fmtDM(parseISODate(iso));
+          return '<div class="just-date-row">' +
+            '<span class="just-date-label">'+esc(label)+'</span>' +
+            '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…">'+esc(jTexto)+'</textarea>' +
+          '</div>';
+        }).join('');
         tr.innerHTML =
           '<td class="name"><div class="colab-name-row"><div class="colab-name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</div>'+hierEditIconHTML(c.nome)+'</div>' +
           (datasLabel ? '<div class="colab-dates" title="'+esc(datasFmt.join(', '))+'">'+esc(datasLabel)+'</div>' : '') +
@@ -3142,7 +3191,7 @@ function renderHierarchy(d){
           '<td class="num-col num'+(c.hex>0?' has-infra':'')+'">'+fmt(c.hex)+'</td>' +
           '<td class="num-col">'+totalLinkHTML(c.nome, c.total)+'<span class="mini-track"><span class="mini-fill" style="width:'+(c.total/maxTotal*100)+'%"></span></span></td>' +
           '<td>'+(c.reinc ? '<span class="badge reinc">⚠ reincidente</span>' : '')+'</td>' +
-          '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" placeholder="Justificar esta infração (FCA)…">'+esc(justTexto)+'</textarea></td>';
+          '<td class="just-col"><div class="just-date-rows">'+justRowsHtml+'</div></td>';
         tbody.appendChild(tr);
       });
       body.appendChild(table);
@@ -3173,19 +3222,25 @@ hierBlocksContainer.addEventListener('input', evt => {
 hierBlocksContainer.addEventListener('focusout', evt => {
   const ta = evt.target.closest && evt.target.closest('.just-input');
   if (!ta) return;
-  const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey;
-  const key = justificativaKey(nome, periodType, periodKey);
+  const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey, dataISO = ta.dataset.data;
+  // com data (linha por data, o caso normal agora) usa a chave específica daquela data;
+  // sem data (não deveria mais acontecer nesta tabela, mas mantém como rede de segurança)
+  // cai na chave antiga, de todo o período.
+  const key = dataISO ? justificativaKeyData(nome, periodType, periodKey, dataISO) : justificativaKey(nome, periodType, periodKey);
   const texto = ta.value.trim();
   const antes = (STATE.justificativas[key] || {}).texto || '';
   if (texto === antes) return; // nada mudou — não grava (e não pisca "salvo") à toa
   if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
   else delete STATE.justificativas[key];
   saveJustificativasToStorage();
-  const cell = ta.closest('td');
-  if (cell) {
-    cell.classList.remove('just-saved');
-    void cell.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
-    cell.classList.add('just-saved');
+  // com data: pisca só a linha daquela data (não a célula inteira, que pode ter várias datas
+  // — sem isto uma edição num dia fazia parecer que TODAS as datas daquele colaborador tinham
+  // sido salvas agora). Sem data (rede de segurança): mantém o comportamento antigo na célula.
+  const flashAlvo = dataISO ? ta.closest('.just-date-row') : ta.closest('td');
+  if (flashAlvo) {
+    flashAlvo.classList.remove('just-saved');
+    void flashAlvo.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
+    flashAlvo.classList.add('just-saved');
   }
 });
 
@@ -3400,7 +3455,7 @@ function linhasColaboradoresParaExport(block, d){
     'Data(s) da infração': (c.datas || []).map(iso => fmtDMY(parseISODate(iso))).join(', '),
     '>7 dias': c.d7, Interjornada: c.interj, '>2h extras': c.hex, Total: c.total,
     Reincidente: c.reinc ? 'Sim' : 'Não',
-    'Justificativa (FCA)': (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '',
+    'Justificativa (FCA)': justificativasConsolidadas(c.nome, d.periodType, d.periodKey, c.datas),
   }));
 }
 function exportGaBlockToExcel(block, d){
@@ -3588,8 +3643,9 @@ function pptTabelaColaboradoresGA(block, d){
     const cor = corCelulaTotalPPT(c.total);
     const cel = { fill:{ color:PPT_ROW_BG }, fontFace:'Arial', fontSize:10.5, valign:'middle' };
     // mesma origem do campo Justificativa (FCA) da tela e da exportação Excel do bloco —
-    // texto do GA pro colaborador, específico ao período em exibição.
-    const justTexto = (STATE.justificativas[justificativaKey(c.nome, d.periodType, d.periodKey)] || {}).texto || '';
+    // consolida as justificativas por data (1 linha por data na tela) numa célula só, já que
+    // aqui só cabe 1 célula por colaborador.
+    const justTexto = justificativasConsolidadas(c.nome, d.periodType, d.periodKey, c.datas);
     rows.push([
       { text:c.nome, options: Object.assign({}, cel, { align:'left' }) },
       { text:fmt(c.d7), options: Object.assign({}, cel, { align:'center' }) },
