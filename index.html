@@ -304,15 +304,15 @@
 
   /* ---------- ranking (redução semanal) ---------- */
   .rank-list{ display:flex; flex-direction:column; gap:2px; }
-  .rank-row{ display:grid; grid-template-columns:26px 1fr 90px 90px 110px; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--grid); }
+  .rank-row{ display:grid; grid-template-columns:26px 1fr 90px 90px 70px 110px; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--grid); }
   .rank-row:last-child{ border-bottom:none; }
-  @media (max-width:680px){ .rank-row{ grid-template-columns:22px 1fr 100px; } .rank-row .col-prev, .rank-row .col-atual{ display:none; } }
+  @media (max-width:680px){ .rank-row{ grid-template-columns:22px 1fr 100px; } .rank-row .col-prev, .rank-row .col-atual, .rank-row .col-peso{ display:none; } }
   .rank-row.rank-head{ border-bottom:1px solid var(--baseline); padding-bottom:8px; margin-bottom:2px; }
   .rank-row.rank-head span{ font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); }
-  .rank-row.rank-head .col-prev, .rank-row.rank-head .col-atual{ text-align:right; }
+  .rank-row.rank-head .col-prev, .rank-row.rank-head .col-atual, .rank-row.rank-head .col-peso{ text-align:right; }
   .rank-row .pos{ font-family:var(--mono); color:var(--text-muted); font-size:12px; }
   .rank-row .ga-name{ font-size:12.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .rank-row .col-prev, .rank-row .col-atual{ font-size:12px; color:var(--text-secondary); text-align:right; }
+  .rank-row .col-prev, .rank-row .col-atual, .rank-row .col-peso{ font-size:12px; color:var(--text-secondary); text-align:right; }
   .rank-delta{ display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; justify-content:flex-end; }
   .rank-delta.good{ color:var(--good); }
   .rank-delta.bad{ color:var(--critical); }
@@ -434,7 +434,10 @@
   .ga-table td.num-col.has-infra{ background:var(--critical-tint); color:var(--critical); font-weight:700; border-radius:6px; }
   .ga-table td{ padding:6px 8px; border-top:1px solid var(--grid); vertical-align:middle; }
   .ga-table td.name{ font-weight:500; }
-  .colab-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* linha flex nome+lápis — o lápis (largura fixa) nunca é espremido/cortado pelo nome longo,
+     só o texto do nome trunca com "..." dentro do espaço que sobrar. */
+  .colab-name-row{ display:flex; align-items:center; min-width:0; }
+  .colab-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .colab-dates{ margin-top:2px; font-family:var(--mono); font-size:10px; font-weight:400; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
 
@@ -555,6 +558,18 @@
     border-radius:999px; padding:4px 10px; cursor:pointer;
   }
   .edit-hier-btn:hover{ border-color:var(--warning); }
+  /* lápis pequeno ao lado do nome do colaborador — abre o MESMO editor de hierarquia acima
+     (criar/alterar/remover), reaproveitado em toda tabela por colaborador dos 4 painéis
+     (Infrações e os 3 auxiliares compartilham o mesmo STATE.hierMap). Ícone discreto de
+     propósito: diferente do botão "SEM HIERARQUIA" (que já chama atenção sozinho), aqui a
+     pessoa já tem nome/GA visíveis, só precisa de um jeito de corrigir sem virar um botão
+     berrante em toda linha da tabela. */
+  .edit-hier-icon-btn{
+    display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; flex:none;
+    color:var(--text-muted); background:none; border:none; border-radius:4px; cursor:pointer;
+    margin-left:4px; padding:0; vertical-align:middle;
+  }
+  .edit-hier-icon-btn:hover{ color:var(--warning); background:var(--warning-tint); }
 
   /* ---------- hierarchy inline editor popover ---------- */
   .hier-editor{
@@ -573,6 +588,11 @@
   .he-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:2px; }
   .he-btn{ font-family:var(--sans); font-size:12px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--text-secondary); }
   .he-btn.primary{ background:var(--s1); border-color:var(--s1); color:#fff; }
+  /* botão "Remover hierarquia" — só aparece editando alguém que JÁ tem GA/GO definido (nada
+     pra remover de quem está "Sem Hierarquia"); fica isolado à esquerda dos outros dois pra não
+     ser clicado por engano no lugar de Cancelar/Salvar. */
+  .he-btn.danger{ color:var(--critical); border-color:transparent; margin-right:auto; }
+  .he-btn.danger:hover{ background:var(--critical-tint); border-color:transparent; }
   .he-btn:hover{ filter:brightness(1.05); }
 
   footer{ display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid var(--grid); padding-top:16px; }
@@ -678,7 +698,7 @@
 
   <section data-export="rank">
     <div class="section-head">
-      <h2>Ranking · maior redução de infrações (semana anterior x semana atual)</h2>
+      <h2>Ranking · classificação por peso de infrações (semana atual)</h2>
       <span class="hint" id="week-range-hint"></span>
     </div>
     <div class="card">
@@ -687,9 +707,13 @@
         <span>GA</span>
         <span class="col-prev">Semana anterior</span>
         <span class="col-atual">Semana atual</span>
+        <span class="col-peso">Peso</span>
         <span style="text-align:right;">Variação</span>
       </div>
       <div class="rank-list" id="rank-list"></div>
+      <div class="legend" style="margin-top:12px;">
+        <span class="item">Peso: &gt;7 dias ×7 · Interjornada ×5 · &gt;2h extras ×2 — quanto menor a soma, melhor a posição; quem zera fica sempre em 1º lugar.</span>
+      </div>
     </div>
   </section>
 
@@ -893,13 +917,14 @@
 <div class="toast" id="toast"></div>
 
 <div class="hier-editor" id="hier-editor">
-  <div class="he-title">Definir hierarquia</div>
+  <div class="he-title" id="he-title">Definir hierarquia</div>
   <div class="he-name" id="he-name"></div>
   <label class="he-field">GA (Gestor de Área)<input type="text" id="he-ga" list="he-ga-list" autocomplete="off"></label>
   <label class="he-field">GO (Gestor Operacional)<input type="text" id="he-go" list="he-go-list" autocomplete="off" placeholder="opcional — usa o GA se vazio"></label>
   <datalist id="he-ga-list"></datalist>
   <datalist id="he-go-list"></datalist>
   <div class="he-actions">
+    <button type="button" class="he-btn danger" id="he-remove" hidden>Remover hierarquia</button>
     <button type="button" class="he-btn" id="he-cancel">Cancelar</button>
     <button type="button" class="he-btn primary" id="he-save">Salvar</button>
   </div>
@@ -1349,6 +1374,10 @@ const MONTH_LABELS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out
 // acontecer com esta base, mas nunca inventa uma 9ª cor fora da paleta.
 const GO_PALETTE = ['var(--s2)','var(--s7)','var(--s5)','var(--s6)','var(--s8)','var(--s1)','var(--s3)','var(--s4)'];
 const TYPE_LABEL = { d7: '>7 dias', interj: 'Interjornada', hex: '>2h extras' };
+// pesos do Ranking (Ranking · classificação por peso de infrações) — quanto maior a soma dos
+// pesos, pior a posição; quem zera os 3 tipos fica sempre em 1º lugar. Valores definidos pelo
+// usuário: >7 dias é o mais grave (7), Interjornada intermediário (5), >2h extras o mais leve (2).
+const PESO_INFRACAO = { d7: 7, interj: 5, hex: 2 };
 // GAs que são, na verdade, entradas administrativas dos próprios GOs (sem equipe operacional
 // própria abaixo deles nesta visão) - excluídas das análises "por GA" a pedido do usuário.
 const EXCLUDED_GA = new Set(['WALMIR FERNANDES DA SILVA', 'IVANDRO PESSOA DA NOBREGA ALENCAR', 'WANDERSON MARCELLUS PENHA COSTA', 'WELLINGTON MARCIO FIGUEIRA']);
@@ -1965,11 +1994,16 @@ function deriveAll(){
       const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(ga => ga && !EXCLUDED_GA.has(ga)));
       const sumAtual = groupSum(rowsAtual, r=>r.ga||'SEM HIERARQUIA');
       const sumAnt = groupSum(rowsAnt, r=>r.ga||'SEM HIERARQUIA');
+      // classificação por PESO (não mais pela maior redução): >7 dias pesa 7, Interjornada pesa
+      // 5, >2h extras pesa 2 — sempre da semana ATUAL. Quanto menor a soma dos pesos, melhor a
+      // posição; quem zera todos os tipos (peso 0) fica sempre em 1º lugar, e o resto segue em
+      // ordem crescente de peso — não mais por quem reduziu mais em relação à semana anterior.
       rankGa = [...gasSet].map(ga => {
-        const a = (sumAtual.get(ga)||{total:0}).total;
+        const sA = sumAtual.get(ga) || {d7:0, interj:0, hex:0, total:0};
         const p = (sumAnt.get(ga)||{total:0}).total;
-        return { ga, atual:a, anterior:p, delta: p - a, temAnterior: !!wAnt };
-      }).sort((x,y)=>y.delta-x.delta);
+        const peso = sA.d7*PESO_INFRACAO.d7 + sA.interj*PESO_INFRACAO.interj + sA.hex*PESO_INFRACAO.hex;
+        return { ga, atual:sA.total, anterior:p, delta: p - sA.total, temAnterior: !!wAnt, peso };
+      }).sort((x,y) => x.peso - y.peso || x.ga.localeCompare(y.ga));
     }
   }
 
@@ -2295,6 +2329,7 @@ function renderRanking(d){
       '<span class="ga-name" title="'+esc(r.ga)+'">'+esc(r.ga)+'</span>' +
       '<span class="col-prev num">'+(r.temAnterior?fmt(r.anterior):'—')+'</span>' +
       '<span class="col-atual num">'+fmt(r.atual)+'</span>' +
+      '<span class="col-peso num"'+(r.peso===0?' style="color:var(--good); font-weight:700;"':'')+'>'+fmt(r.peso)+'</span>' +
       '<span class="rank-delta '+cls+'">'+(r.temAnterior?arrow+' ':'')+esc(text)+'</span>';
     el.appendChild(row);
   });
@@ -2678,12 +2713,22 @@ document.body.addEventListener('click', evt => {
   else jumpToGoInHierarchy(btn.dataset.go);
 });
 
+// pequeno botão "lápis" ao lado de um nome de colaborador — abre o editor de hierarquia
+// (criar/alterar/remover, ver openHierEditor) pra essa pessoa. Usado em toda tabela por
+// colaborador dos 4 painéis, já que todos compartilham o mesmo STATE.hierMap.
+function hierEditIconHTML(nome){
+  return '<button type="button" class="edit-hier-icon-btn edit-hier-btn" data-nome="'+esc(nome)+'" title="Criar, alterar ou remover a hierarquia de '+esc(nome)+'" aria-label="Editar hierarquia de '+esc(nome)+'">'+
+    '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2l3 3-8 8-3.5 1 1-3.5 7.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>'+
+  '</button>';
+}
 function gaCellHTML(nome, ga){
   if (ga === 'SEM HIERARQUIA') {
     // editar a hierarquia não é "anexar bases" — Usuário Padrão também pode ajustar
     return '<button type="button" class="edit-hier-btn" data-nome="'+esc(nome)+'">SEM HIERARQUIA <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11 2l3 3-8 8-3.5 1 1-3.5 7.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button>';
   }
-  return esc(ga);
+  // já tem GA definido — mostra o nome normal (sem virar um botão vistoso) + um lápis discreto
+  // do lado, pra dar pra "alterar" sem transformar toda linha já correta num alerta visual.
+  return esc(ga) + hierEditIconHTML(nome);
 }
 function renderTop(d){
   const tbody = document.getElementById('top-rows');
@@ -2878,14 +2923,23 @@ function renderVerification(){
   }
 }
 
-/* ---------------- editor inline de hierarquia (SEM HIERARQUIA) ---------------- */
+/* ---------------- editor inline de hierarquia (criar/alterar/remover, qualquer painel) ----------------
+   Reaproveitado em Infrações (Top colaboradores + Colaboradores por hierarquia) e nos 3 painéis
+   auxiliares (Banco de Horas/DSR/Feriados, na tabela por colaborador de cada GA) — todos leem/
+   escrevem o MESMO STATE.hierMap, então uma alteração feita a partir de qualquer painel já vale
+   pros outros 3 também. Pré-preenche GA/GO quando a pessoa já tem hierarquia definida (permite
+   "alterar"), e mostra "Remover hierarquia" nesse caso (não faz sentido remover de quem já está
+   "Sem Hierarquia"). */
 const hierEditor = document.getElementById('hier-editor');
 let hierEditorTarget = null;
 function openHierEditor(nome, anchorRect){
   hierEditorTarget = nome;
   document.getElementById('he-name').textContent = nome;
-  document.getElementById('he-ga').value = '';
-  document.getElementById('he-go').value = '';
+  const atual = STATE.hierMap[nome];
+  document.getElementById('he-ga').value = atual ? (atual.ga || '') : '';
+  document.getElementById('he-go').value = atual && atual.go && atual.go !== atual.ga ? atual.go : '';
+  document.getElementById('he-title').textContent = atual ? 'Alterar hierarquia' : 'Definir hierarquia';
+  document.getElementById('he-remove').hidden = !atual;
 
   const gas = new Set(), gos = new Set();
   Object.values(STATE.hierMap).forEach(h => { if (h.ga) gas.add(h.ga); if (h.go) gos.add(h.go); });
@@ -2911,6 +2965,16 @@ function closeHierEditor(){
   hierEditor.classList.remove('show');
   hierEditorTarget = null;
 }
+// repinta a aba que está VISÍVEL agora — hierMap é compartilhado pelos 4 painéis, mas cada um
+// só se redesenha sozinho quando é ele quem processou a mudança; sem isto, editar a hierarquia
+// a partir de Banco de Horas/DSR/Feriados salvava certo mas a tela daquela aba só atualizava se
+// a pessoa saísse e voltasse pra aba (mesma lógica de despacho por aba do tab-bar, ver abaixo).
+function rerenderActiveTab(){
+  if (activeTab === 'infracoes') recomputeAndRender();
+  else if (activeTab === 'bh') renderBH();
+  else if (activeTab === 'dsr') renderDSR();
+  else if (activeTab === 'feriado') renderFeriado();
+}
 document.getElementById('he-cancel').addEventListener('click', closeHierEditor);
 document.getElementById('he-save').addEventListener('click', async () => {
   const ga = document.getElementById('he-ga').value.trim();
@@ -2926,7 +2990,7 @@ document.getElementById('he-save').addEventListener('click', async () => {
   // confirmado, nunca antes).
   marcarHierPendente(nome, ga, go);
   closeHierEditor();
-  recomputeAndRender();
+  rerenderActiveTab();
   if (await hasSupabaseWriteSession()) {
     try {
       await withRetry(() => upsertSingleHierEntryToSupabase(nome, ga, go || ga), 3, 2000);
@@ -2956,6 +3020,22 @@ document.getElementById('he-save').addEventListener('click', async () => {
       showToast('Hierarquia de ' + nome + ' definida e salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
     }
   }
+});
+// remove a hierarquia da pessoa — some tanto o GA quanto o GO, ela volta a aparecer como "SEM
+// HIERARQUIA" em todo painel. Só local por enquanto (sem uma função no servidor pra apagar UMA
+// linha do roster compartilhado, só pra upsert em massa — ver upsertHierToSupabase/clearShared-
+// SupabaseData) — o toast avisa isso explicitamente, mesmo padrão de outras ações desta página
+// que ainda não sincronizam entre dispositivos (ex.: Justificativa/FCA).
+document.getElementById('he-remove').addEventListener('click', () => {
+  const nome = hierEditorTarget;
+  if (!nome) return;
+  delete STATE.hierMap[nome];
+  limparHierPendente(nome);
+  STATE.usingDefault = false;
+  saveToStorage();
+  closeHierEditor();
+  rerenderActiveTab();
+  showToast('Hierarquia de ' + nome + ' removida (só neste navegador — não sincroniza com outros dispositivos ainda).');
 });
 document.body.addEventListener('click', evt => {
   const trigger = evt.target.closest('.edit-hier-btn');
@@ -3032,7 +3112,7 @@ function renderHierarchy(d){
           ? datasFmt.slice(0, MAX_DATAS_VISIVEIS).join(', ') + (datasFmt.length > MAX_DATAS_VISIVEIS ? ' +' + (datasFmt.length - MAX_DATAS_VISIVEIS) : '')
           : '';
         tr.innerHTML =
-          '<td class="name"><div class="colab-name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</div>' +
+          '<td class="name"><div class="colab-name-row"><div class="colab-name" title="'+esc(c.nome)+'">'+esc(c.nome)+'</div>'+hierEditIconHTML(c.nome)+'</div>' +
           (datasLabel ? '<div class="colab-dates" title="'+esc(datasFmt.join(', '))+'">'+esc(datasLabel)+'</div>' : '') +
           '</td>' +
           '<td class="num-col num'+(c.d7>0?' has-infra':'')+'">'+fmt(c.d7)+'</td>' +
@@ -3369,9 +3449,10 @@ function exportSectionToExcel(exportId){
         GA: r.ga,
         'Semana anterior': r.temAnterior ? r.anterior : null,
         'Semana atual': r.atual,
+        Peso: r.peso,
         'Variação (positivo = redução)': r.temAnterior ? r.delta : null,
       })), 'Ranking');
-      nomeBase = 'ranking-reducao';
+      nomeBase = 'ranking-peso-infracoes';
       break;
     case 'weekly':
       addSheet(d.semanasExibicao.map(s => ({ Semana: s.label, Total: s.total })), 'Por semana');
@@ -3745,12 +3826,13 @@ function buildApresentacaoPres(dados){
   // --- ranking: maior redução de infrações ---
   if (d.rankGa && d.rankGa.length) {
     const s = pres.addSlide();
-    pptCabecalho(s, 'Ranking · maior redução de infrações', (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
+    pptCabecalho(s, 'Ranking · classificação por peso de infrações', 'Peso: >7 dias ×7 · Interjornada ×5 · >2h extras ×2 — quem zera fica em 1º lugar · ' + (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
     const rows = [[
       { text:'GA', options: Object.assign({}, headerOpts, { align:'left' }) },
       { text:'Semana anterior', options: headerOpts },
       { text:'Semana atual', options: headerOpts },
+      { text:'Peso', options: headerOpts },
       { text:'Variação', options: headerOpts },
     ]];
     d.rankGa.slice(0, 20).forEach(r => {
@@ -3761,11 +3843,12 @@ function buildApresentacaoPres(dados){
         { text:r.ga, options: Object.assign({}, cel, { align:'left' }) },
         { text:r.temAnterior?fmt(r.anterior):'—', options: Object.assign({}, cel, { align:'center' }) },
         { text:fmt(r.atual), options: Object.assign({}, cel, { align:'center' }) },
+        { text:fmt(r.peso), options: Object.assign({}, cel, { align:'center', bold: r.peso===0, color: r.peso===0 ? PPT_GREEN : PPT_NAVY }) },
         { text: r.temAnterior ? (melhorou ? '▼ '+fmt(r.delta)+' a menos' : piorou ? '▲ '+fmt(Math.abs(r.delta))+' a mais' : 'igual') : '—',
           options: Object.assign({}, cel, { align:'center', bold:true, color: melhorou ? PPT_GREEN : piorou ? PPT_RED : PPT_TEXT_MUTED }) },
       ]);
     });
-    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[5.5,2.27,2.27,2.26], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
+    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[4.5,1.95,1.95,1.7,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
     pptRodape(s, rodapeTxt);
   }
 
@@ -4268,7 +4351,7 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
       const tbody = table.querySelector('tbody');
       [...gaBlock.pessoas].sort((a,b) => opts.sortValue(b)-opts.sortValue(a)).forEach(p => {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td class="name">'+esc(p.nome)+'</td>' + opts.cellsFor(p, ctx);
+        tr.innerHTML = '<td class="name">'+esc(p.nome)+hierEditIconHTML(p.nome)+'</td>' + opts.cellsFor(p, ctx);
         tbody.appendChild(tr);
       });
       gaBody.appendChild(table);
