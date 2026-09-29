@@ -779,7 +779,7 @@
     <div class="hier-toolbar">
       <button type="button" id="hier-expand">Expandir todos</button>
       <button type="button" id="hier-collapse">Recolher todos</button>
-      <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
+      <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -834,7 +834,7 @@
       <div class="hier-toolbar">
         <button type="button" id="bh-hier-expand">Expandir todos</button>
         <button type="button" id="bh-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
       </div>
       <div class="hier-blocks" id="bh-go-blocks"></div>
     </section>
@@ -874,7 +874,7 @@
       <div class="hier-toolbar">
         <button type="button" id="dsr-hier-expand">Expandir todos</button>
         <button type="button" id="dsr-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
       </div>
       <div class="hier-blocks" id="dsr-go-blocks"></div>
     </section>
@@ -914,7 +914,7 @@
       <div class="hier-toolbar">
         <button type="button" id="feriado-hier-expand">Expandir todos</button>
         <button type="button" id="feriado-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) salva só neste navegador por enquanto — ainda não sincroniza entre dispositivos.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
       </div>
       <div class="hier-blocks" id="feriado-go-blocks"></div>
     </section>
@@ -1154,11 +1154,14 @@ const STORAGE_HIER = 'painelInfracoes.hier.v1';
 // ficam gravadas no navegador e são sempre reaplicadas por cima de qualquer leitura do servidor,
 // até conseguirem sincronizar de verdade.
 const STORAGE_HIER_PENDENTE = 'painelInfracoes.hierPendente.v1';
-// justificativas (FCA) que o GA escreve por colaborador+período na tabela de "Colaboradores por
-// hierarquia" — por enquanto só neste navegador (não sincroniza pelo Supabase ainda; ver aviso
-// perto de renderHierarchy). Chave: nome + tipo/valor do período selecionado no momento do save,
-// pra uma justificativa de setembro não aparecer colada no ciclo de outubro.
+// justificativas (FCA) que o GA escreve por colaborador+período (ou por data, ver
+// justificativaKeyData) — sincroniza com o Supabase (tabela infracoes_justificativas, chave
+// genérica -> texto) quando salva por um Admin com sessão válida; senão fica pendente e
+// protegida até sincronizar sozinha (ver marcarJustPendente/tentarSincronizarJustPendente).
+// Chave: nome + tipo/valor do período selecionado no momento do save, pra uma justificativa de
+// setembro não aparecer colada no ciclo de outubro.
 const STORAGE_JUST = 'painelInfracoes.justificativas.v1';
+const STORAGE_JUST_PENDENTE = 'painelInfracoes.justPendente.v1';
 function justificativaKey(nome, periodType, periodKey){
   return nome + '::' + periodType + ':' + periodKey;
 }
@@ -1250,12 +1253,25 @@ async function fetchAllRows(tabela, colunas){
 async function loadFromSupabase(){
   if (!sb) { STATE.readSyncFailed = true; return false; }
   try {
-    const [regs, roster, metaRes] = await Promise.all([
+    const [regs, roster, metaRes, justs] = await Promise.all([
       fetchAllRows('infracoes_registros', 'data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
       fetchAllRows('infracoes_roster', 'nome,ga,go'),
       withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(), 15000, 'ler meta'),
+      // justificativas não bloqueiam a leitura de Base/Hierarquia se falharem sozinhas — são
+      // um "plus" (anotações do GA), não o dado principal do painel.
+      fetchAllRows('infracoes_justificativas', 'chave,texto').catch(e => { console.error('Não foi possível ler justificativas do Supabase.', e); return null; }),
     ]);
     STATE.readSyncFailed = false;
+    if (justs) {
+      const justMap = {};
+      justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
+      // mesma proteção do hierMap: se a leitura vier vazia, não apaga o que já existe local —
+      // só reaplica o que estiver pendente (evita uma leitura vazia/transitória apagando
+      // justificativas reais por engano). Não-vazia: servidor manda, pendente sobrepõe por cima.
+      if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
+      else if (Object.keys(STATE.justificativasPendente).length) STATE.justificativas = aplicarJustPendente(Object.assign({}, STATE.justificativas));
+      saveJustificativasToStorage();
+    }
     if (!regs || !regs.length) {
       // consulta funcionou mas veio vazia (ex.: dados zerados) — não pode deixar "usingSupabase"
       // travado em true de uma sincronização anterior nesta mesma aba, senão o aviso "Dados
@@ -1393,6 +1409,13 @@ async function upsertSingleHierEntryToSupabase(nome, ga, go){
   const { error } = await withTimeout(sb.rpc('upsert_infracoes_roster', { novos: [{ nome, ga, go: go || ga }] }), 10000, 'gravar hierarquia');
   if (error) throw error;
 }
+// justificativa (FCA): chave já carrega nome+período+data embutidos (ver justificativaKeyData/
+// justificativaKeyAux), então o servidor só guarda chave->texto — 1 tabela genérica, sem
+// precisar decompor a chave nem acoplar o schema ao formato dela.
+async function upsertSingleJustificativaToSupabase(chave, texto){
+  const { error } = await withTimeout(sb.rpc('upsert_infracoes_justificativas', { novos: [{ chave, texto }] }), 10000, 'gravar justificativa');
+  if (error) throw error;
+}
 // APAGA de vez os dados compartilhados no Supabase (registros + hierarquia) — afeta TODO
 // dispositivo que sincronizar, e qualquer outro processo que escreva nessa mesma base.
 // Irreversível. Só a função server-side ("clear_infracoes_shared_data", authenticated-only,
@@ -1496,7 +1519,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, justificativasPendente: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -1507,6 +1530,7 @@ function tryLoadFromStorage(){
   } catch(e) { /* ignora - segue com defaults */ }
   loadJustificativasFromStorage();
   loadHierPendenteFromStorage();
+  loadJustPendenteFromStorage();
 }
 function loadHierPendenteFromStorage(){
   try {
@@ -1572,6 +1596,51 @@ function saveJustificativasToStorage(){
   // salvo à parte de saveToStorage() (raw+hier) de propósito: uma textarea perdendo foco não
   // deveria reserializar a Base inteira (pode ter milhares de linhas) a cada campo editado.
   try { localStorage.setItem(STORAGE_JUST, JSON.stringify(STATE.justificativas)); } catch(e) {}
+}
+function loadJustPendenteFromStorage(){
+  try {
+    const p = localStorage.getItem(STORAGE_JUST_PENDENTE);
+    if (p) STATE.justificativasPendente = JSON.parse(p);
+  } catch(e) { /* ignora - segue com defaults */ }
+}
+function saveJustPendenteToStorage(){
+  try { localStorage.setItem(STORAGE_JUST_PENDENTE, JSON.stringify(STATE.justificativasPendente)); } catch(e) {}
+}
+// mesmo padrão de marcarHierPendente/limparHierPendente/aplicarHierPendente: marca uma
+// justificativa como "ainda não confirmada no servidor" ANTES de tentar sincronizar, protegida
+// contra ser apagada por uma leitura do Supabase que chegue no meio da tentativa.
+function marcarJustPendente(chave, texto){
+  STATE.justificativasPendente[chave] = { texto, atualizadoEm: new Date().toISOString() };
+  saveJustPendenteToStorage();
+}
+function limparJustPendente(chave){
+  if (!(chave in STATE.justificativasPendente)) return;
+  delete STATE.justificativasPendente[chave];
+  saveJustPendenteToStorage();
+}
+function aplicarJustPendente(justMap){
+  Object.keys(STATE.justificativasPendente).forEach(chave => { justMap[chave] = STATE.justificativasPendente[chave]; });
+  return justMap;
+}
+// tenta mandar pro Supabase tudo que ainda está pendente — chamada sempre que uma sessão de
+// escrita válida aparece (login bem-sucedido, sessão que estava expirada voltou a funcionar),
+// mesmo gatilho de tentarSincronizarHierPendente.
+async function tentarSincronizarJustPendente(){
+  const chaves = Object.keys(STATE.justificativasPendente);
+  if (!chaves.length) return;
+  if (!(await hasSupabaseWriteSession())) return;
+  let sincronizadas = 0;
+  for (const chave of chaves) {
+    try {
+      await upsertSingleJustificativaToSupabase(chave, STATE.justificativasPendente[chave].texto);
+      delete STATE.justificativasPendente[chave];
+      saveJustPendenteToStorage();
+      sincronizadas++;
+    } catch(e) {
+      console.error('Não deu pra sincronizar a justificativa pendente de "' + chave + '" agora.', e);
+    }
+  }
+  if (sincronizadas) showToast(sincronizadas + ' justificativa(s) pendente(s) finalmente sincronizada(s).');
 }
 function saveToStorage(){
   try {
@@ -1829,9 +1898,10 @@ function resetData(){
   // deve mostrar nenhum dado de exemplo/planilha embutida — só reporta quando existe uma
   // Base anexada de verdade (localmente ou sincronizada), então "limpar" volta pro vazio.
   try { localStorage.removeItem(STORAGE_RAW); localStorage.removeItem(STORAGE_HIER); localStorage.removeItem(STORAGE_HIER_PENDENTE); } catch(e) {}
-  // justificativas NÃO são apagadas aqui — são anotações do GA, independentes da Base/Hierarquia
-  // anexada, e "limpar dados locais" é especificamente sobre essas duas.
-  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+  // justificativas (e o que ainda está pendente de sincronizar delas) NÃO são apagadas aqui —
+  // são anotações do GA, independentes da Base/Hierarquia anexada, e "limpar dados locais" é
+  // especificamente sobre essas duas.
+  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, justificativasPendente: STATE.justificativasPendente, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -3086,8 +3156,8 @@ document.getElementById('he-save').addEventListener('click', async () => {
 // remove a hierarquia da pessoa — some tanto o GA quanto o GO, ela volta a aparecer como "SEM
 // HIERARQUIA" em todo painel. Só local por enquanto (sem uma função no servidor pra apagar UMA
 // linha do roster compartilhado, só pra upsert em massa — ver upsertHierToSupabase/clearShared-
-// SupabaseData) — o toast avisa isso explicitamente, mesmo padrão de outras ações desta página
-// que ainda não sincronizam entre dispositivos (ex.: Justificativa/FCA).
+// SupabaseData) — o toast avisa isso explicitamente. (A Justificativa (FCA) já sincroniza de
+// verdade — ver marcarJustPendente — só esta ação de remoção de hierarquia que continua local.)
 document.getElementById('he-remove').addEventListener('click', () => {
   const nome = hierEditorTarget;
   if (!nome) return;
@@ -3213,13 +3283,16 @@ function autoGrowTextarea(ta){
 }
 
 // listeners únicos (delegados no container, não recriados a cada render) pro campo de
-// Justificativa: salva quando o campo perde o foco (não a cada tecla) — hoje só neste
-// navegador, IGUAL A hierMap era antes de existir sincronismo (ver aviso em renderHierarchy).
+// Justificativa: salva quando o campo perde o foco (não a cada tecla). Salva local SEMPRE (na
+// hora), e tenta sincronizar com o Supabase em seguida — igual ao editor de hierarquia inline
+// (ver he-save): marca pendente ANTES de tentar (protegida até confirmar), e se a sincronização
+// falhar ou não houver sessão de escrita, fica esperando (tentarSincronizarJustPendente tenta de
+// novo sozinha no próximo login válido).
 const hierBlocksContainer = document.getElementById('hier-blocks');
 hierBlocksContainer.addEventListener('input', evt => {
   if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
 });
-hierBlocksContainer.addEventListener('focusout', evt => {
+hierBlocksContainer.addEventListener('focusout', async evt => {
   const ta = evt.target.closest && evt.target.closest('.just-input');
   if (!ta) return;
   const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey, dataISO = ta.dataset.data;
@@ -3233,6 +3306,7 @@ hierBlocksContainer.addEventListener('focusout', evt => {
   if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
   else delete STATE.justificativas[key];
   saveJustificativasToStorage();
+  marcarJustPendente(key, texto);
   // com data: pisca só a linha daquela data (não a célula inteira, que pode ter várias datas
   // — sem isto uma edição num dia fazia parecer que TODAS as datas daquele colaborador tinham
   // sido salvas agora). Sem data (rede de segurança): mantém o comportamento antigo na célula.
@@ -3241,6 +3315,27 @@ hierBlocksContainer.addEventListener('focusout', evt => {
     flashAlvo.classList.remove('just-saved');
     void flashAlvo.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
     flashAlvo.classList.add('just-saved');
+  }
+  if (await hasSupabaseWriteSession()) {
+    try {
+      await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
+      limparJustPendente(key);
+    } catch(syncErr) {
+      // sem toast a cada campo bem-sucedido (são muitos campos na tela) — só avisa quando
+      // realmente falha, já que aí a pessoa precisa saber que ainda não está protegida em
+      // outro dispositivo.
+      console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
+      showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+    }
+  } else {
+    // mesma distinção da hierarquia inline (ver he-save): Usuário Padrão sem sessão é o
+    // esperado (nunca teve uma pra começar); Admin sem sessão válida é quem precisa saber que
+    // precisa entrar de novo com a senha pra essa justificativa sincronizar.
+    if (isAdmin()) {
+      showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
+    } else {
+      showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
+    }
   }
 });
 
@@ -3276,8 +3371,9 @@ async function checkSupabaseSessionForBadge(){
   AUTH.supabaseSessionOk = await hasSupabaseWriteSession();
   updateRoleBadge();
   // sessão de escrita disponível de novo: aproveita e manda pro servidor qualquer hierarquia
-  // definida aqui no painel que ficou esperando (ver marcarHierPendente).
-  if (AUTH.supabaseSessionOk) tentarSincronizarHierPendente();
+  // ou justificativa definida aqui no painel que ficou esperando (ver marcarHierPendente/
+  // marcarJustPendente).
+  if (AUTH.supabaseSessionOk) { tentarSincronizarHierPendente(); tentarSincronizarJustPendente(); }
 }
 
 function renderSettingsPanel(){
@@ -4452,7 +4548,7 @@ function wireJustificativaAutosave(containerId){
   container.addEventListener('input', evt => {
     if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
   });
-  container.addEventListener('focusout', evt => {
+  container.addEventListener('focusout', async evt => {
     const ta = evt.target.closest && evt.target.closest('.just-input');
     if (!ta) return;
     const key = justificativaKeyAux(ta.dataset.tema, ta.dataset.nome, ta.dataset.periodType, ta.dataset.periodKey);
@@ -4462,8 +4558,26 @@ function wireJustificativaAutosave(containerId){
     if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
     else delete STATE.justificativas[key];
     saveJustificativasToStorage();
+    // mesmo mecanismo de sincronização da Justificativa (FCA) de Infrações (ver
+    // hierBlocksContainer.focusout) — a tabela no Supabase é chave->texto genérica, então a
+    // mesma função de upsert serve pra qualquer formato de chave, incluindo esta com o prefixo
+    // de tema (bh/dsr/feriado).
+    marcarJustPendente(key, texto);
     const cell = ta.closest('td');
     if (cell) { cell.classList.remove('just-saved'); void cell.offsetWidth; cell.classList.add('just-saved'); }
+    if (await hasSupabaseWriteSession()) {
+      try {
+        await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
+        limparJustPendente(key);
+      } catch(syncErr) {
+        console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
+        showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+      }
+    } else if (isAdmin()) {
+      showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
+    } else {
+      showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
+    }
   });
 }
 function wireHierToolbar(prefix, containerId){
