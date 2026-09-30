@@ -484,6 +484,11 @@
   .detail-table td{ padding:7px 8px; border-bottom:1px solid var(--grid); vertical-align:middle; }
   .detail-table td.date{ font-family:var(--mono); white-space:nowrap; }
   .detail-table td.time{ font-family:var(--mono); color:var(--text-secondary); white-space:nowrap; }
+  /* Total de Horas: intervalo de interjornada (saída deste dia -> entrada do registro
+     seguinte) — farol vermelho quando fica abaixo das 11h mínimas de intervalo legal. */
+  .interj-farol{ display:inline-flex; align-items:center; gap:5px; }
+  .interj-farol.farol-vermelho{ color:var(--critical); font-weight:700; }
+  .farol-dot{ width:8px; height:8px; border-radius:50%; background:var(--critical); flex:none; box-shadow:0 0 0 2px var(--critical-tint); }
 
   /* ---------- settings / login / user management ---------- */
   .settings-panel{ max-width:460px; }
@@ -1008,7 +1013,7 @@
         <span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>
       </div>
       <table class="detail-table">
-        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Infração(ões) do dia</th></tr></thead>
+        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Total de Horas</th><th>Infração(ões) do dia</th></tr></thead>
         <tbody id="modal-rows"></tbody>
       </table>
     </div>
@@ -2745,25 +2750,57 @@ const modalSub = document.getElementById('modal-sub');
 const modalRows = document.getElementById('modal-rows');
 let lastFocused = null, currentDerived = null;
 
+// intervalo de interjornada entre a SAÍDA de um registro e a ENTRADA do registro SEGUINTE da
+// lista (não necessariamente o dia seguinte do calendário — a Base só traz dias com alguma
+// infração, então "dia posterior" aqui é o próximo registro mesmo, podendo haver dias sem
+// batida no meio). Usa as duas datas de verdade (não só a hora) pra cruzar a meia-noite certo.
+function calcularIntervaloInterjornada(dataSaidaISO, saida, dataEntradaISO, entrada){
+  if (!saida || !entrada) return null;
+  const partesSaida = saida.split(':').map(Number);
+  const partesEntrada = entrada.split(':').map(Number);
+  const dSaida = parseISODate(dataSaidaISO);
+  const dEntrada = parseISODate(dataEntradaISO);
+  if (!dSaida || !dEntrada || partesSaida.some(isNaN) || partesEntrada.some(isNaN)) return null;
+  const tSaida = new Date(dSaida.getFullYear(), dSaida.getMonth(), dSaida.getDate(), partesSaida[0], partesSaida[1]).getTime();
+  const tEntrada = new Date(dEntrada.getFullYear(), dEntrada.getMonth(), dEntrada.getDate(), partesEntrada[0], partesEntrada[1]).getTime();
+  const horas = (tEntrada - tSaida) / 3600000;
+  return Number.isFinite(horas) ? horas : null;
+}
+const INTERJORNADA_MINIMA_H = 11;
+function totalHorasCellHTML(horas){
+  if (horas == null) return '<span style="color:var(--text-muted);">—</span>';
+  const abaixoDoMinimo = horas < INTERJORNADA_MINIMA_H;
+  return '<span class="interj-farol'+(abaixoDoMinimo?' farol-vermelho':'')+'"'+
+    (abaixoDoMinimo ? ' title="Intervalo abaixo de '+INTERJORNADA_MINIMA_H+'h — mínimo legal de interjornada"' : '') + '>' +
+    (abaixoDoMinimo ? '<span class="farol-dot"></span>' : '') +
+    fmtHorasDecimais(horas) +
+  '</span>';
+}
+
 function openDetail(nome, total){
   const registros = (currentDerived.detalhesByNome[nome] || []);
   modalName.textContent = nome;
   modalSub.textContent = fmt(total) + ' infrações no ciclo ' + currentDerived.cicloAtualLabel + ' · ' + registros.length + ' dia(s) com registro';
   clear(modalRows);
   if (!registros.length) {
-    modalRows.innerHTML = '<tr><td colspan="4" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
+    modalRows.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
   } else {
-    registros.forEach(rec => {
+    registros.forEach((rec, i) => {
       const chips = [];
       if (rec.d7) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.d7+'">'+TYPE_LABEL.d7+'</span>');
       if (rec.interj) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.interj+'">'+TYPE_LABEL.interj+'</span>');
       if (rec.hex) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.hex+'">'+TYPE_LABEL.hex+'</span>');
+      // Total de Horas = intervalo entre a SAÍDA deste registro e a ENTRADA do próximo — o
+      // último registro da lista não tem "próximo" pra comparar, então fica "—".
+      const prox = registros[i+1];
+      const horas = prox ? calcularIntervaloInterjornada(rec.data, rec.saida, prox.data, prox.entrada) : null;
       const tr = document.createElement('tr');
       const [y,m,dd] = rec.data.split('-');
       tr.innerHTML =
         '<td class="date">'+dd+'/'+m+'/'+y+'</td>' +
         '<td class="time">'+(rec.entrada?esc(rec.entrada):'—')+'</td>' +
         '<td class="time">'+(rec.saida?esc(rec.saida):'—')+'</td>' +
+        '<td class="time">'+totalHorasCellHTML(horas)+'</td>' +
         '<td><div class="type-chips">'+(chips.join('')||'—')+'</div></td>';
       modalRows.appendChild(tr);
     });
