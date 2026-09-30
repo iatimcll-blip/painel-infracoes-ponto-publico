@@ -1013,7 +1013,7 @@
         <span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>
       </div>
       <table class="detail-table">
-        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Total de Horas</th><th>Infração(ões) do dia</th></tr></thead>
+        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Interjornada</th><th>Infração(ões) do dia</th></tr></thead>
         <tbody id="modal-rows"></tbody>
       </table>
     </div>
@@ -2750,10 +2750,12 @@ const modalSub = document.getElementById('modal-sub');
 const modalRows = document.getElementById('modal-rows');
 let lastFocused = null, currentDerived = null;
 
-// intervalo de interjornada entre a SAÍDA de um registro e a ENTRADA do registro SEGUINTE da
-// lista (não necessariamente o dia seguinte do calendário — a Base só traz dias com alguma
-// infração, então "dia posterior" aqui é o próximo registro mesmo, podendo haver dias sem
-// batida no meio). Usa as duas datas de verdade (não só a hora) pra cruzar a meia-noite certo.
+// intervalo de INTERJORNADA de verdade: a SAÍDA de um registro até a ENTRADA do registro
+// seguinte, MAS só quando esse registro seguinte é do dia de calendário imediatamente depois
+// (ontem -> hoje). A Base só traz dias com alguma infração (não o histórico completo de ponto),
+// então se houver 1+ dia sem registro no meio, não dá pra saber se a pessoa trabalhou ou folgou
+// nesse meio-tempo — medir "saída de um dia" até a "entrada de dias depois" não é interjornada
+// nenhuma, é só a distância entre dois registros soltos. Nesses casos retorna null (mostra "—").
 function calcularIntervaloInterjornada(dataSaidaISO, saida, dataEntradaISO, entrada){
   if (!saida || !entrada) return null;
   const partesSaida = saida.split(':').map(Number);
@@ -2761,13 +2763,15 @@ function calcularIntervaloInterjornada(dataSaidaISO, saida, dataEntradaISO, entr
   const dSaida = parseISODate(dataSaidaISO);
   const dEntrada = parseISODate(dataEntradaISO);
   if (!dSaida || !dEntrada || partesSaida.some(isNaN) || partesEntrada.some(isNaN)) return null;
+  const diasEntreDatas = Math.round((dEntrada - dSaida) / 86400000);
+  if (diasEntreDatas !== 1) return null;
   const tSaida = new Date(dSaida.getFullYear(), dSaida.getMonth(), dSaida.getDate(), partesSaida[0], partesSaida[1]).getTime();
   const tEntrada = new Date(dEntrada.getFullYear(), dEntrada.getMonth(), dEntrada.getDate(), partesEntrada[0], partesEntrada[1]).getTime();
   const horas = (tEntrada - tSaida) / 3600000;
   return Number.isFinite(horas) ? horas : null;
 }
 const INTERJORNADA_MINIMA_H = 11;
-function totalHorasCellHTML(horas){
+function interjornadaCellHTML(horas){
   if (horas == null) return '<span style="color:var(--text-muted);">—</span>';
   const abaixoDoMinimo = horas < INTERJORNADA_MINIMA_H;
   return '<span class="interj-farol'+(abaixoDoMinimo?' farol-vermelho':'')+'"'+
@@ -2800,7 +2804,7 @@ function openDetail(nome, total){
         '<td class="date">'+dd+'/'+m+'/'+y+'</td>' +
         '<td class="time">'+(rec.entrada?esc(rec.entrada):'—')+'</td>' +
         '<td class="time">'+(rec.saida?esc(rec.saida):'—')+'</td>' +
-        '<td class="time">'+totalHorasCellHTML(horas)+'</td>' +
+        '<td class="time">'+interjornadaCellHTML(horas)+'</td>' +
         '<td><div class="type-chips">'+(chips.join('')||'—')+'</div></td>';
       modalRows.appendChild(tr);
     });
