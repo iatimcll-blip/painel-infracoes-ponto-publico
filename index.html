@@ -1771,6 +1771,14 @@ async function parseBaseFile(file){
     subbu: normText(row['SUB BU']),
     entrada: toHHMMCell(row['PRIMEIRA_ENTRADA']),
     saida: toHHMMCell(row['ULTIMA_SAIDA']),
+    // data EM QUE A SAÍDA/ENTRADA DE FATO OCORREU, extraída da própria célula de horário —
+    // em turnos que viram a noite, ULTIMA_SAIDA pode cair no dia seguinte a DATAREFERENCIA
+    // (ex.: entrada 15/07 11:35, saída só em 16/07 02:55 — ~5% das linhas da base real têm
+    // isso). Fica null quando a célula só tem hora sem data (texto "08:00"), caso em que não
+    // dá pra saber se cruzou a meia-noite — ver calcularIntervaloInterjornada, que cai de volta
+    // pra "data" (DATAREFERENCIA) nesse caso.
+    saidaData: toISODateCell(row['ULTIMA_SAIDA']),
+    entradaData: toISODateCell(row['PRIMEIRA_ENTRADA']),
     d7: Number(row['>7 DIAS TRAB']) || 0,
     interj: Number(row['INTERJORNADA']) || 0,
     hex: Number(row['> 2 HORAS EXTRAS']) || 0,
@@ -2751,20 +2759,30 @@ const modalRows = document.getElementById('modal-rows');
 let lastFocused = null, currentDerived = null;
 
 // intervalo de INTERJORNADA de verdade: a SAÍDA de um registro até a ENTRADA do registro
-// seguinte, MAS só quando esse registro seguinte é do dia de calendário imediatamente depois
-// (ontem -> hoje). A Base só traz dias com alguma infração (não o histórico completo de ponto),
-// então se houver 1+ dia sem registro no meio, não dá pra saber se a pessoa trabalhou ou folgou
-// nesse meio-tempo — medir "saída de um dia" até a "entrada de dias depois" não é interjornada
-// nenhuma, é só a distância entre dois registros soltos. Nesses casos retorna null (mostra "—").
-function calcularIntervaloInterjornada(dataSaidaISO, saida, dataEntradaISO, entrada){
-  if (!saida || !entrada) return null;
-  const partesSaida = saida.split(':').map(Number);
-  const partesEntrada = entrada.split(':').map(Number);
-  const dSaida = parseISODate(dataSaidaISO);
-  const dEntrada = parseISODate(dataEntradaISO);
+// seguinte, MAS só quando esse registro seguinte é do DIA DE REFERÊNCIA (DATAREFERENCIA)
+// imediatamente depois (ontem -> hoje). A Base só traz dias com alguma infração (não o
+// histórico completo de ponto), então se houver 1+ dia sem registro no meio, não dá pra saber
+// se a pessoa trabalhou ou folgou nesse meio-tempo — medir "saída de um dia" até a "entrada de
+// dias depois" não é interjornada nenhuma. Nesses casos retorna null (mostra "—").
+//
+// A verificação de "é mesmo o dia seguinte" usa DATAREFERENCIA (rec.data/prox.data), não a
+// data bruta do relógio da saída/entrada — em turno que vira a noite, ULTIMA_SAIDA já cai no
+// dia seguinte a DATAREFERENCIA (~5% das linhas da base real fazem isso), então comparar as
+// datas BRUTAS de saída/entrada rejeitaria pares de turnos genuinamente consecutivos. O CÁLCULO
+// em horas, esse sim, usa a data real de cada batida (rec.saidaData/prox.entradaData quando
+// disponível — célula tinha data+hora; cai pra rec.data/prox.data só quando a célula só tinha
+// hora solta, tipo texto "08:00", caso em que não dá pra saber se cruzou a meia-noite).
+function calcularIntervaloInterjornada(rec, prox){
+  if (!rec.saida || !prox.entrada) return null;
+  const dRef1 = parseISODate(rec.data), dRef2 = parseISODate(prox.data);
+  if (!dRef1 || !dRef2) return null;
+  const diasEntreDatasRef = Math.round((dRef2 - dRef1) / 86400000);
+  if (diasEntreDatasRef !== 1) return null;
+  const partesSaida = rec.saida.split(':').map(Number);
+  const partesEntrada = prox.entrada.split(':').map(Number);
+  const dSaida = parseISODate(rec.saidaData || rec.data);
+  const dEntrada = parseISODate(prox.entradaData || prox.data);
   if (!dSaida || !dEntrada || partesSaida.some(isNaN) || partesEntrada.some(isNaN)) return null;
-  const diasEntreDatas = Math.round((dEntrada - dSaida) / 86400000);
-  if (diasEntreDatas !== 1) return null;
   const tSaida = new Date(dSaida.getFullYear(), dSaida.getMonth(), dSaida.getDate(), partesSaida[0], partesSaida[1]).getTime();
   const tEntrada = new Date(dEntrada.getFullYear(), dEntrada.getMonth(), dEntrada.getDate(), partesEntrada[0], partesEntrada[1]).getTime();
   const horas = (tEntrada - tSaida) / 3600000;
@@ -2794,10 +2812,10 @@ function openDetail(nome, total){
       if (rec.d7) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.d7+'">'+TYPE_LABEL.d7+'</span>');
       if (rec.interj) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.interj+'">'+TYPE_LABEL.interj+'</span>');
       if (rec.hex) chips.push('<span class="type-chip" style="background:'+TYPE_COLOR.hex+'">'+TYPE_LABEL.hex+'</span>');
-      // Total de Horas = intervalo entre a SAÍDA deste registro e a ENTRADA do próximo — o
+      // Interjornada = intervalo entre a SAÍDA deste registro e a ENTRADA do próximo — o
       // último registro da lista não tem "próximo" pra comparar, então fica "—".
       const prox = registros[i+1];
-      const horas = prox ? calcularIntervaloInterjornada(rec.data, rec.saida, prox.data, prox.entrada) : null;
+      const horas = prox ? calcularIntervaloInterjornada(rec, prox) : null;
       const tr = document.createElement('tr');
       const [y,m,dd] = rec.data.split('-');
       tr.innerHTML =
