@@ -1,7 +1,14 @@
-"""Exporta a Base + Hierarquia do Supabase para dados.json na raiz do repositório.
+"""Exporta a Base + Hierarquia + Justificativas (FCA) do Supabase para dados.json na raiz do
+repositório.
 
 Usa apenas a chave pública (anon) do Supabase, que só dá acesso de leitura e já está no
 código do painel. Nenhum segredo novo é necessário.
+
+Além de servir como fonte reserva (o painel cai pra este arquivo se a leitura do Supabase
+falhar no navegador de alguém — ver loadFromGithubMirror no painel2.html), isto também vira um
+backup versionado de verdade: cada execução que muda algo gera um commit, então dá pra ver no
+histórico do Git exatamente quando cada justificativa foi criada/alterada, e recuperar qualquer
+versão anterior mesmo que o Supabase perca o dado por algum motivo.
 """
 
 import datetime
@@ -38,16 +45,28 @@ registros = buscar_tudo(
     "data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2",
 )
 roster = buscar_tudo("infracoes_roster", "nome,ga,go")
+# tabela pode ainda não existir em instalações antigas (criada por supabase_justificativas.sql)
+# — não deve quebrar o espelho de Base/Hierarquia se isso acontecer, só grava uma lista vazia.
+try:
+    justificativas = buscar_tudo("infracoes_justificativas", "chave,texto")
+except Exception as erro:  # noqa: BLE001 — queremos seguir o espelho mesmo se isto falhar
+    print(f"Aviso: não foi possível ler infracoes_justificativas ({erro}) — seguindo sem elas.")
+    justificativas = []
 
 saida = {
     "gerado_em": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "total_registros": len(registros),
     "total_hierarquia": len(roster),
+    "total_justificativas": len(justificativas),
     "registros": registros,
     "roster": roster,
+    "justificativas": justificativas,
 }
 
 with open("dados.json", "w", encoding="utf-8") as f:
     json.dump(saida, f, ensure_ascii=False, separators=(",", ":"))
 
-print(f"{len(registros)} registros e {len(roster)} linhas de hierarquia gravados.")
+print(
+    f"{len(registros)} registros, {len(roster)} linhas de hierarquia e "
+    f"{len(justificativas)} justificativas gravados."
+)

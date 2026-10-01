@@ -1331,6 +1331,19 @@ async function loadFromGithubMirror(){
     (d.roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
     if (Object.keys(hierMap).length) STATE.hierMap = aplicarHierPendente(hierMap);
     else if (Object.keys(STATE.hierMapPendente).length) STATE.hierMap = aplicarHierPendente(Object.assign({}, STATE.hierMap));
+    // mesmo tratamento pras Justificativas (FCA) — o espelho do GitHub (atualizado de hora em
+    // hora) é a segunda camada de proteção além do Supabase: se a leitura direta do Supabase
+    // falhar (rede bloqueada, instabilidade), essa cópia garante que as justificativas já
+    // sincronizadas continuam aparecendo, sem apagar nenhuma edição local ainda pendente.
+    if (Array.isArray(d.justificativas) && d.justificativas.length) {
+      const justMap = {};
+      d.justificativas.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
+      if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
+      saveJustificativasToStorage();
+    } else if (Object.keys(STATE.justificativasPendente).length) {
+      STATE.justificativas = aplicarJustPendente(Object.assign({}, STATE.justificativas));
+      saveJustificativasToStorage();
+    }
     STATE.usingDefault = false;
     STATE.usingSupabase = true;
     STATE.readSyncFailed = false;
@@ -1773,6 +1786,19 @@ function toHHMMCell(v){
 function normText(v){
   return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : v;
 }
+// ============================================================================================
+// LIMITAÇÃO IMPORTANTE DA BASE, documentada aqui porque já causou bug 2x (ver cálculo de
+// Interjornada em calcularIntervaloInterjornada): a planilha "Base" é um extrato SÓ DE
+// EXCEÇÕES — toda linha que ela traz já tem pelo menos 1 tipo de infração marcado (>7 dias,
+// Interjornada ou >2h extras). Conferido contra a base real de produção em 2026-09-30: das
+// 1165 linhas, ZERO tinham os 3 tipos zerados ao mesmo tempo.
+// Isso significa que um dia de calendário que NÃO aparece na Base pode ser folga OU um dia
+// trabalhado normalmente sem nenhuma infração — não tem como saber qual, porque esse dia
+// simplesmente não foi exportado. Qualquer cálculo que dependa de "o dia anterior/seguinte de
+// verdade" (ex.: interjornada, horas trabalhadas, frequência) SÓ pode confiar em dois registros
+// que sejam DATAREFERENCIA consecutivas uma da outra — nunca "o próximo registro da lista",
+// que pode estar vários dias de calendário à frente sem a gente saber o que aconteceu no meio.
+// ============================================================================================
 async function parseBaseFile(file){
   const wb = await readWorkbook(file);
   const sheet = wb.Sheets[wb.SheetNames[0]];
