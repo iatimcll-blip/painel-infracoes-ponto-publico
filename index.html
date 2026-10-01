@@ -1504,6 +1504,23 @@ function weekOf(dateStr){
     label: shortLabel + ' · ' + fmtDMY(start) + ' a ' + fmtDMY(end)
   };
 }
+// rótulo de uma semana (weekKey = segunda-feira dela) RECORTADO pelos limites do filtro
+// Período — sem isto, a última (e às vezes a primeira) semana de um Período mostra a data da
+// semana de calendário INTEIRA (segunda a domingo), que pode ir além do fim/início escolhidos
+// pelo usuário (ex.: período termina numa segunda-feira, mas o rótulo da semana segue mostrando
+// "até domingo", 6 dias depois do que foi pedido). Só mexe nas pontas que realmente ficam fora
+// do período — uma semana inteiramente dentro dele sai idêntica ao rótulo normal.
+function clipWeekLabelToPeriodo(weekKey, periodoIniISO, periodoFimISO){
+  const start = parseISODate(weekKey);
+  if (!start) return null;
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate()+6);
+  const ini = periodoIniISO ? parseISODate(periodoIniISO) : null;
+  const fim = periodoFimISO ? parseISODate(periodoFimISO) : null;
+  const inicioReal = (ini && ini > start) ? ini : start;
+  const fimReal = (fim && fim < end) ? fim : end;
+  const weekNo = isoWeekNumber(start);
+  return 'S' + pad2(weekNo) + ' · ' + fmtDMY(inicioReal) + ' a ' + fmtDMY(fimReal);
+}
 function prevWeekKey(key){
   const d = parseISODate(key);
   const prev = new Date(d.getFullYear(), d.getMonth(), d.getDate()-7);
@@ -2032,8 +2049,13 @@ function deriveAll(){
   // disponível pra dar pra escolher qualquer uma. Já o que o bloco "Infrações por semana" MOSTRA
   // (gráfico, Excel, apresentação) respeita o filtro Período quando ele está ativo — sem isto, o
   // gráfico continuava trazendo semanas de fora do intervalo escolhido, mesmo com "Período"
-  // aplicado (peça do usuário: "reportar os chamados apenas do período selecionado").
-  const semanasExibicao = period.type === 'periodo' ? distinctSemanas(periodRows) : semanas;
+  // aplicado (peça do usuário: "reportar os chamados apenas do período selecionado"). O RÓTULO de
+  // cada semana também é recortado pelos limites do Período (ver clipWeekLabelToPeriodo) — sem
+  // isto, a semana nas pontas mostrava a data de calendário inteira (ex.: período terminando
+  // numa segunda, mas o rótulo seguia mostrando "até domingo", 6 dias além do escolhido).
+  const semanasExibicao = period.type === 'periodo'
+    ? distinctSemanas(periodRows).map(s => Object.assign({}, s, { label: clipWeekLabelToPeriodo(s.key, STATE.periodoInicio, STATE.periodoFim) }))
+    : semanas;
 
   // agregação por colaborador no período selecionado
   const porColab = groupSum(periodRows, r => r.nome);
@@ -2134,8 +2156,16 @@ function deriveAll(){
     if (wAtual) {
       const rowsAtual = fonte.filter(r=>r.weekKey===wAtual);
       const rowsAnt = wAnt ? fonte.filter(r=>r.weekKey===wAnt) : [];
-      weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : (semanas.find(s=>s.key===wAtual)||{}).label || null;
-      weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
+      if (period.type === 'periodo') {
+        // recorta o rótulo pelos limites do Período (ver clipWeekLabelToPeriodo) — sem isto, a
+        // "semana atual" podia mostrar uma data de calendário além do fim do Período escolhido
+        // (ex.: período terminando numa segunda-feira, rótulo mostrando "até domingo" seguinte).
+        weekAtualLabel = clipWeekLabelToPeriodo(wAtual, STATE.periodoInicio, STATE.periodoFim);
+        weekAntLabel = wAnt ? clipWeekLabelToPeriodo(wAnt, STATE.periodoInicio, STATE.periodoFim) : null;
+      } else {
+        weekAtualLabel = rowsAtual[0] ? rowsAtual[0].weekLabel : (semanas.find(s=>s.key===wAtual)||{}).label || null;
+        weekAntLabel = rowsAnt[0] ? rowsAnt[0].weekLabel : null;
+      }
       const gasSet = new Set([...roster.map(n=>(STATE.hierMap[n]||{}).ga)].filter(ga => ga && !EXCLUDED_GA.has(ga)));
       const sumAtual = groupSum(rowsAtual, r=>r.ga||'SEM HIERARQUIA');
       const sumAnt = groupSum(rowsAnt, r=>r.ga||'SEM HIERARQUIA');
