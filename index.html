@@ -2758,26 +2758,20 @@ const modalSub = document.getElementById('modal-sub');
 const modalRows = document.getElementById('modal-rows');
 let lastFocused = null, currentDerived = null;
 
-// intervalo de INTERJORNADA de verdade: a SAÍDA de um registro até a ENTRADA do registro
-// seguinte, MAS só quando esse registro seguinte é do DIA DE REFERÊNCIA (DATAREFERENCIA)
-// imediatamente depois (ontem -> hoje). A Base só traz dias com alguma infração (não o
-// histórico completo de ponto), então se houver 1+ dia sem registro no meio, não dá pra saber
-// se a pessoa trabalhou ou folgou nesse meio-tempo — medir "saída de um dia" até a "entrada de
-// dias depois" não é interjornada nenhuma. Nesses casos retorna null (mostra "—").
-//
-// A verificação de "é mesmo o dia seguinte" usa DATAREFERENCIA (rec.data/prox.data), não a
-// data bruta do relógio da saída/entrada — em turno que vira a noite, ULTIMA_SAIDA já cai no
-// dia seguinte a DATAREFERENCIA (~5% das linhas da base real fazem isso), então comparar as
-// datas BRUTAS de saída/entrada rejeitaria pares de turnos genuinamente consecutivos. O CÁLCULO
-// em horas, esse sim, usa a data real de cada batida (rec.saidaData/prox.entradaData quando
-// disponível — célula tinha data+hora; cai pra rec.data/prox.data só quando a célula só tinha
-// hora solta, tipo texto "08:00", caso em que não dá pra saber se cruzou a meia-noite).
+// intervalo de interjornada: a SAÍDA de um registro até a ENTRADA do registro seguinte da
+// lista (a "batida inicial do dia posterior", pedido do usuário) — SEMPRE calculado quando
+// existe um próximo registro, mesmo que a Base tenha pulado dias sem infração no meio (ela só
+// traz dias com alguma infração, não o histórico completo de ponto, então "o dia posterior" é
+// o próximo registro mesmo, não necessariamente amanhã). Antes isto só calculava quando o
+// próximo registro era do dia de calendário imediatamente seguinte — só que a imensa maioria
+// dos casos reais tem furos entre os dias listados, e aquela regra apagava o valor (mostrava
+// "—") até pra infrações de Interjornada de verdade. Usa a data REAL de cada batida
+// (rec.saidaData/prox.entradaData quando disponível — célula tinha data+hora; cai pra
+// rec.data/prox.data só quando a célula só tinha hora solta, tipo texto "08:00", caso em que
+// não dá pra saber se cruzou a meia-noite) pra turno que vira a noite não ficar com ~1 dia de
+// erro no cálculo (~5% das linhas da base real têm isso).
 function calcularIntervaloInterjornada(rec, prox){
   if (!rec.saida || !prox.entrada) return null;
-  const dRef1 = parseISODate(rec.data), dRef2 = parseISODate(prox.data);
-  if (!dRef1 || !dRef2) return null;
-  const diasEntreDatasRef = Math.round((dRef2 - dRef1) / 86400000);
-  if (diasEntreDatasRef !== 1) return null;
   const partesSaida = rec.saida.split(':').map(Number);
   const partesEntrada = prox.entrada.split(':').map(Number);
   const dSaida = parseISODate(rec.saidaData || rec.data);
