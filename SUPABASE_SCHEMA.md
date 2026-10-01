@@ -33,6 +33,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | *(pré-existente — sem .sql neste repo)* | `infracoes_registros`, `infracoes_roster`, `infracoes_meta` | antes desta integração começar | Sim (`registros`, `roster`) |
 | [`supabase_auxiliares.sql`](supabase_auxiliares.sql) | `bh_registros`, `dsr_registros`, `feriado_registros` + RPCs `upsert_*` | 2026-09-22 | Não — painéis auxiliares ainda não têm espelho de backup |
 | [`supabase_justificativas.sql`](supabase_justificativas.sql) | `infracoes_justificativas` (chave→texto genérica) + RPC `upsert_infracoes_justificativas` | 2026-09-30 | Sim (`justificativas`, desde 2026-10-01) |
+| [`supabase_auxiliares.sql`](supabase_auxiliares.sql) (tabelas) | `bh_registros`, `dsr_registros`, `feriado_registros` | 2026-09-22 | Sim (`bh_registros`, `dsr_registros`, `feriado_registros`, desde 2026-10-01) |
 
 ## Padrão de segurança usado em toda tabela deste projeto
 
@@ -49,6 +50,5 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 
 ## Pendências conhecidas
 
-- Painéis auxiliares (Banco de Horas, DSR, Feriados) ainda não têm backup no espelho horário —
-  se o Supabase perder esses dados, não há cópia de recuperação além do arquivo original que a
-  pessoa anexou (que normalmente ela ainda tem).
+*(nenhuma no momento — Base, Hierarquia, Justificativas e os 3 painéis auxiliares estão todos
+cobertos pelo espelho horário desde 2026-10-01)*

@@ -5095,12 +5095,10 @@ document.getElementById('file-feriado').addEventListener('change', async evt => 
 });
 
 /* -------- carrega os 3 painéis auxiliares do Supabase (chamado no boot) -------- */
-async function loadAuxPaineis(){
-  const [bh, dsr, feriado] = await Promise.all([
-    loadAuxFromSupabase('bh_registros', 'funcid,nome,bu,subbu,limite_comp,horas,vlr,dias'),
-    loadAuxFromSupabase('dsr_registros', 'data,tipo_dia,funcid,nome,gestor,bu,subbu,hora_inicio,hora_fim,horas,valor'),
-    loadAuxFromSupabase('feriado_registros', 'data,funcid,nome,gestor,bu,subbu,tipo,hora_inicio,hora_fim,horas,valor,tipo_feriado'),
-  ]);
+// mapeia as linhas cruas (do Supabase OU do espelho do GitHub — mesmo formato de colunas nos
+// dois) pros campos que STATE_BH/STATE_DSR/STATE_FERIADO.raw esperam. Função única reaproveitada
+// pelas duas fontes, pra nunca ter 2 versões do mapeamento divergindo entre si.
+function mapearLinhasAux(bh, dsr, feriado){
   if (bh && bh.length) {
     STATE_BH.raw = bh.map(r => ({ funcid:r.funcid, nome:r.nome, bu:r.bu, subbu:r.subbu, limiteComp:r.limite_comp, horasTxt:r.horas, horasDec:parseHHMMSigned(r.horas), vlr:r.vlr||0, dias:r.dias||0 }));
     STATE_BH.usingSupabase = true;
@@ -5112,6 +5110,36 @@ async function loadAuxPaineis(){
   if (feriado && feriado.length) {
     STATE_FERIADO.raw = feriado.map(r => ({ data:r.data, funcid:r.funcid, nome:r.nome, gestor:r.gestor, bu:r.bu, subbu:r.subbu, tipo:r.tipo, horaInicio:hhmm(r.hora_inicio), horaFim:hhmm(r.hora_fim), horas:r.horas||0, valor:r.valor||0, tipoFeriado:r.tipo_feriado }));
     STATE_FERIADO.usingSupabase = true;
+  }
+}
+// espelho do GitHub (dados.json) como fallback pros painéis auxiliares — mesma 2ª camada de
+// proteção que Base/Hierarquia/Justificativas já tinham (ver loadFromGithubMirror), fechando a
+// lacuna identificada na análise: antes, se o Supabase não respondesse, Banco de Horas/DSR/
+// Feriados simplesmente ficavam sem nada novo, sem nenhuma fonte reserva.
+async function loadAuxFromGithubMirror(){
+  try {
+    const res = await fetch('dados.json', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const d = await res.json();
+    if (!d) return false;
+    mapearLinhasAux(d.bh_registros, d.dsr_registros, d.feriado_registros);
+    return true;
+  } catch(e) {
+    console.error('Não foi possível ler os painéis auxiliares da cópia do GitHub.', e);
+    return false;
+  }
+}
+async function loadAuxPaineis(){
+  const [bh, dsr, feriado] = await Promise.all([
+    loadAuxFromSupabase('bh_registros', 'funcid,nome,bu,subbu,limite_comp,horas,vlr,dias'),
+    loadAuxFromSupabase('dsr_registros', 'data,tipo_dia,funcid,nome,gestor,bu,subbu,hora_inicio,hora_fim,horas,valor'),
+    loadAuxFromSupabase('feriado_registros', 'data,funcid,nome,gestor,bu,subbu,tipo,hora_inicio,hora_fim,horas,valor,tipo_feriado'),
+  ]);
+  mapearLinhasAux(bh, dsr, feriado);
+  // nenhum dos 3 painéis conseguiu ler nada do Supabase (offline, instabilidade, etc.) — tenta
+  // o espelho do GitHub antes de desistir, igual Base/Hierarquia/Justificativas já fazem.
+  if ((!bh || !bh.length) && (!dsr || !dsr.length) && (!feriado || !feriado.length)) {
+    await loadAuxFromGithubMirror();
   }
   renderBH(); renderDSR(); renderFeriado();
 }
