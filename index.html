@@ -1268,7 +1268,12 @@ function setVerifEnabled(on){
 const SUPABASE_URL = 'https://ymltjceiviyadckxzbxw.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbHRqY2Vpdml5YWRja3h6Ynh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NzQyNTMsImV4cCI6MjEwNTI1MDI1M30.dCtuE0oKMe29nH5rCV5hVl9A3AzL-PF-G_G5c-spiVg';
 const sb = (typeof supabase !== 'undefined' && supabase.createClient)
-  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      // explícito em vez de confiar em defaults da lib: guarda a sessão entre recarregamentos
+      // (persistSession) e tenta renovar o token sozinha em segundo plano antes de vencer
+      // (autoRefreshToken) — é o que evita pedir a senha de novo só porque passou 1h.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    })
   : null;
 
 function hhmm(v){
@@ -1459,8 +1464,20 @@ function renderSyncTimestamp(){
 
 async function hasSupabaseWriteSession(){
   if (!sb) return false;
-  try { const { data } = await withTimeout(sb.auth.getSession(), 8000, 'verificar sessão'); return !!(data && data.session); }
-  catch(e) { console.error('Não foi possível confirmar a sessão do Supabase a tempo.', e); return false; }
+  try {
+    // 8s era curto demais perto dos 10-20s usados pro resto das chamadas ao Supabase — numa
+    // rede mais lenta, getSession() podia não terminar a tempo de renovar o token sozinho (ela
+    // já tenta isso por dentro quando o token está vencido) e a verificação desistia achando
+    // que a sessão tinha expirado de verdade, quando só estava demorando.
+    const { data } = await withTimeout(sb.auth.getSession(), 15000, 'verificar sessão');
+    if (data && data.session) return true;
+    // getSession() veio sem sessão — ainda tenta uma renovação explícita antes de desistir: se
+    // o token de acesso expirou mas o refresh token continua válido, isto recupera a sessão sem
+    // precisar pedir a senha de novo (mesma ideia do withRetry usado no resto do painel: não
+    // desistir no primeiro sinal de falha quando dá pra tentar de novo sozinho).
+    const { data: refreshed } = await withTimeout(sb.auth.refreshSession(), 15000, 'renovar sessão');
+    return !!(refreshed && refreshed.session);
+  } catch(e) { console.error('Não foi possível confirmar a sessão do Supabase a tempo.', e); return false; }
 }
 // escrita sincronizada é sempre "upsert" (atualiza quem já existe, adiciona quem é novo) —
 // NUNCA apaga linhas em massa. Remover alguém da hierarquia compartilhada é uma ação separada
