@@ -464,6 +464,16 @@
   .just-date-row.just-saved{ animation:just-saved-flash 1.2s ease-out; border-radius:6px; }
   .just-date-label{ flex:none; font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--text-muted); padding-top:8px; min-width:32px; }
   .just-input.just-input-compact{ min-height:34px; max-height:200px; padding:7px 9px; }
+  /* bolinha de status de sincronização — sem isto, a única confirmação de "salvou de verdade"
+     era um toast que some em 3,6s; alguém que não leu a tempo não tinha como saber depois se
+     aquela justificativa já tinha chegado no servidor ou ainda só estava no próprio navegador.
+     Fica invisível (sem cor) enquanto o campo está vazio — só aparece depois que algo é escrito. */
+  .just-sync-dot{ width:7px; height:7px; border-radius:50%; flex:none; margin-top:9px; cursor:help; }
+  .just-sync-dot.empty{ visibility:hidden; }
+  .just-sync-dot.pending{ background:var(--warning); box-shadow:0 0 0 2px var(--warning-tint); }
+  .just-sync-dot.synced{ background:var(--good); box-shadow:0 0 0 2px var(--good-tint); }
+  .just-cell-row{ display:flex; align-items:flex-start; gap:7px; }
+  .just-cell-row .just-sync-dot{ margin-top:10px; }
 
   /* ---------- detail modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
@@ -1201,6 +1211,37 @@ function justificativasConsolidadas(nome, periodType, periodKey, datas){
     .map(x => fmtDM(parseISODate(x.iso)) + ': ' + x.texto)
     .join(' | ');
 }
+// bolinha de status de sincronização ao lado de cada campo de Justificativa — sem isto, a única
+// confirmação de que uma justificativa chegou de verdade no servidor era um toast que some
+// sozinho em poucos segundos; quem não leu a tempo não tinha nenhum jeito de conferir depois se
+// aquilo era só um rascunho local ou já estava protegido/visível em outro dispositivo. Verde =
+// sincronizada, laranja = só neste navegador por enquanto (vai tentar de novo sozinha), nada =
+// campo ainda vazio (não tem o que sincronizar).
+function justSyncDotState(chave){
+  const texto = (STATE.justificativas[chave] || {}).texto;
+  if (!texto) return { cls: 'empty', title: '' };
+  if (STATE.justificativasPendente[chave]) {
+    return { cls: 'pending', title: 'Salva só neste navegador — ainda não sincronizou com outros dispositivos. Vai tentar de novo sozinha.' };
+  }
+  return { cls: 'synced', title: 'Sincronizada — já visível em qualquer dispositivo.' };
+}
+function justSyncDotHTML(chave){
+  const st = justSyncDotState(chave);
+  return '<span class="just-sync-dot '+st.cls+'" data-sync-chave="'+esc(chave)+'" title="'+esc(st.title)+'"></span>';
+}
+// chamado depois de cada tentativa de salvar (sucesso, falha ou sem sessão) pra atualizar a
+// bolinha NA HORA, sem precisar redesenhar a linha/tabela inteira — o campo onde a pessoa
+// acabou de digitar continua com o foco exatamente onde estava. containerEl é sempre a
+// linha/célula de UM campo só (.just-date-row ou .just-cell-row), então o 1º ".just-sync-dot"
+// encontrado dentro dela é sempre o certo.
+function atualizarJustSyncDot(containerEl, chave){
+  if (!containerEl) return;
+  const dot = containerEl.querySelector('.just-sync-dot');
+  if (!dot) return;
+  const st = justSyncDotState(chave);
+  dot.className = 'just-sync-dot ' + st.cls;
+  dot.title = st.title;
+}
 // liga/desliga do bloco "Verificação · Base de dados x Hierarquia" — preferência de tela,
 // por navegador, igual ao tema claro/escuro (não é um dado compartilhado, então não sincroniza
 // pelo Supabase).
@@ -1675,7 +1716,10 @@ async function tentarSincronizarJustPendente(){
       console.error('Não deu pra sincronizar a justificativa pendente de "' + chave + '" agora.', e);
     }
   }
-  if (sincronizadas) showToast(sincronizadas + ' justificativa(s) pendente(s) finalmente sincronizada(s).');
+  // repinta a aba visível pra as bolinhas de status (ver justSyncDotHTML) virarem verdes — os
+  // campos continuam sem foco nenhum neste momento (isto roda sozinho, depois de um login), não
+  // tem o risco de interromper alguém no meio de uma digitação.
+  if (sincronizadas) { rerenderActiveTab(); showToast(sincronizadas + ' justificativa(s) pendente(s) finalmente sincronizada(s).'); }
 }
 function saveToStorage(){
   try {
@@ -3364,10 +3408,12 @@ function renderHierarchy(d){
         // 1 linha de justificativa por data (pedido do usuário) — cada data com infração ganha
         // seu próprio campo, em vez de 1 texto só cobrindo todas as datas do período.
         const justRowsHtml = (c.datas || []).map(iso => {
-          const jTexto = (STATE.justificativas[justificativaKeyData(c.nome, d.periodType, d.periodKey, iso)] || {}).texto || '';
+          const jChave = justificativaKeyData(c.nome, d.periodType, d.periodKey, iso);
+          const jTexto = (STATE.justificativas[jChave] || {}).texto || '';
           const label = fmtDM(parseISODate(iso));
           return '<div class="just-date-row">' +
             '<span class="just-date-label">'+esc(label)+'</span>' +
+            justSyncDotHTML(jChave) +
             '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…">'+esc(jTexto)+'</textarea>' +
           '</div>';
         }).join('');
@@ -3435,10 +3481,12 @@ hierBlocksContainer.addEventListener('focusout', async evt => {
     void flashAlvo.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
     flashAlvo.classList.add('just-saved');
   }
+  atualizarJustSyncDot(flashAlvo, key); // mostra "pendente" (laranja) na hora, antes mesmo de tentar sincronizar
   if (await hasSupabaseWriteSession()) {
     try {
       await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
       limparJustPendente(key);
+      atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
     } catch(syncErr) {
       // sem toast a cada campo bem-sucedido (são muitos campos na tela) — só avisa quando
       // realmente falha, já que aí a pessoa precisa saber que ainda não está protegida em
@@ -4684,10 +4732,12 @@ function wireJustificativaAutosave(containerId){
     marcarJustPendente(key, texto);
     const cell = ta.closest('td');
     if (cell) { cell.classList.remove('just-saved'); void cell.offsetWidth; cell.classList.add('just-saved'); }
+    atualizarJustSyncDot(cell, key); // mostra "pendente" (laranja) na hora
     if (await hasSupabaseWriteSession()) {
       try {
         await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
         limparJustPendente(key);
+        atualizarJustSyncDot(cell, key); // sucesso -> vira "sincronizada" (verde)
       } catch(syncErr) {
         console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
@@ -4747,7 +4797,7 @@ const BH_OPTS = {
       '<td class="num-col num'+(p.vlr<0?' has-infra':'')+'">'+esc(fmtMoeda(p.vlr))+'</td>'+
       '<td class="num-col num'+(p.dias<0?' has-infra':'')+'">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
       '<td>'+esc(datasLimiteLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Consolidado:fmtHorasDecimais(p.consolidado), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -4873,7 +4923,7 @@ const DSR_OPTS = {
       '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -4994,7 +5044,7 @@ const FERIADO_OPTS = {
       '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
