@@ -1376,6 +1376,16 @@ async function loadFromGithubMirror(){
     if (!res.ok) return false;
     const d = await res.json();
     if (!d || !Array.isArray(d.registros) || !d.registros.length) return false;
+    // o espelho só roda de hora em hora — sem esta checagem, uma leitura ao vivo falhando bem na
+    // hora em que alguém tinha acabado de subir uma Base nova (ou só confirmado uma leitura ao
+    // vivo mais recente) fazia o painel "regredir" sozinho pra essa cópia mais velha, sem avisar
+    // (bug relatado como "atualizar o navegador volta pra base antiga"). Só aplica o espelho se
+    // ele for de fato mais novo (ou igual) que a última sincronização já confirmada na tela —
+    // senão é melhor avisar que não deu pra atualizar agora do que mostrar algo mais velho.
+    if (STATE.lastSync && STATE.lastSync.quando && d.gerado_em && new Date(d.gerado_em) < new Date(STATE.lastSync.quando)) {
+      console.warn('Cópia do GitHub (' + d.gerado_em + ') é mais velha que os dados já confirmados na tela (' + STATE.lastSync.quando + ') — ignorando, pra não regredir.');
+      return false;
+    }
 
     STATE.raw = d.registros.map(r => ({
       data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
