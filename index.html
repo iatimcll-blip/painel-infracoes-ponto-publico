@@ -794,7 +794,7 @@
     <div class="hier-toolbar">
       <button type="button" id="hier-expand">Expandir todos</button>
       <button type="button" id="hier-collapse">Recolher todos</button>
-      <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
+      <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -849,7 +849,7 @@
       <div class="hier-toolbar">
         <button type="button" id="bh-hier-expand">Expandir todos</button>
         <button type="button" id="bh-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
       </div>
       <div class="hier-blocks" id="bh-go-blocks"></div>
     </section>
@@ -889,7 +889,7 @@
       <div class="hier-toolbar">
         <button type="button" id="dsr-hier-expand">Expandir todos</button>
         <button type="button" id="dsr-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
       </div>
       <div class="hier-blocks" id="dsr-go-blocks"></div>
     </section>
@@ -929,7 +929,7 @@
       <div class="hier-toolbar">
         <button type="button" id="feriado-hier-expand">Expandir todos</button>
         <button type="button" id="feriado-hier-collapse">Recolher todos</button>
-        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos quando salva por um Administrador com sessão válida — como Usuário Padrão, continua salvando só neste navegador até um Admin entrar.</span>
+        <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
       </div>
       <div class="hier-blocks" id="feriado-go-blocks"></div>
     </section>
@@ -1417,6 +1417,9 @@ async function manualRefreshSync(){
   if (icon) icon.classList.add('spin');
   const ok = await loadFromSupabase();
   recomputeAndRender();
+  // aproveita o clique em "Atualizar dados agora" (disponível pra qualquer usuário) pra também
+  // tentar mandar pro servidor qualquer justificativa que tenha ficado pendente localmente.
+  tentarSincronizarJustPendente();
   if (btn) btn.disabled = false;
   if (icon) icon.classList.remove('spin');
   showToast(ok ? 'Dados atualizados.' : 'Não foi possível buscar os dados agora — tente de novo em instantes.');
@@ -1718,7 +1721,9 @@ function aplicarJustPendente(justMap){
 async function tentarSincronizarJustPendente(){
   const chaves = Object.keys(STATE.justificativasPendente);
   if (!chaves.length) return;
-  if (!(await hasSupabaseWriteSession())) return;
+  // Justificativa sincroniza pra qualquer usuário (ver salvarCampoJustificativa) — só precisa
+  // do cliente Supabase ter carregado, não de uma sessão de Admin válida.
+  if (!sb) return;
   let sincronizadas = 0;
   for (const chave of chaves) {
     try {
@@ -3500,18 +3505,21 @@ async function salvarCampoJustificativa(ta, key, flashAlvo){
     flashAlvo.classList.add('just-saved');
   }
   atualizarJustSyncDot(flashAlvo, key); // mostra "pendente" (laranja) na hora, antes mesmo de tentar sincronizar
-  if (await hasSupabaseWriteSession()) {
-    try {
-      await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
-      limparJustPendente(key);
-      atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
-      return 'sincronizada';
-    } catch(syncErr) {
-      console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
-      return 'pendente-falhou';
-    }
+  // Justificativa sincroniza pra QUALQUER usuário, logado ou não (decisão do usuário,
+  // 2026-10-02 — ver supabase_justificativas.sql): a função no servidor é liberada tanto pra
+  // "anon" quanto pra "authenticated", diferente de Base/Hierarquia/painéis auxiliares, que
+  // continuam exigindo login de Admin. Por isso tenta sincronizar sempre — sem checar
+  // hasSupabaseWriteSession() primeiro — e só a falha de rede/servidor deixa pendente.
+  if (!sb) return 'pendente-falhou'; // lib do Supabase nem carregou (bloqueador, sem internet)
+  try {
+    await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
+    limparJustPendente(key);
+    atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
+    return 'sincronizada';
+  } catch(syncErr) {
+    console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
+    return 'pendente-falhou';
   }
-  return 'pendente-sem-sessao';
 }
 // botão "Salvar" de cada bloco de GA — salva de uma vez só TODOS os campos de Justificativa
 // daquele bloco que tiverem algo digitado e ainda não confirmado, sem precisar clicar fora de
@@ -3522,22 +3530,20 @@ async function salvarTodasJustificativasDoBloco(containerEl, btn){
   const campos = [...containerEl.querySelectorAll('.just-input')];
   if (!campos.length) { showToast('Este bloco não tem nenhum campo de Justificativa.'); return; }
   if (btn) { btn.disabled = true; btn.classList.add('copying'); }
-  let sincronizadas = 0, semSessao = 0, falharam = 0;
+  let sincronizadas = 0, falharam = 0;
   for (const ta of campos) {
     const key = chaveDoJustInput(ta);
     const flashAlvo = ta.closest('.just-date-row') || ta.closest('td');
     const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
     if (resultado === 'sincronizada') sincronizadas++;
     else if (resultado === 'pendente-falhou') falharam++;
-    else if (resultado === 'pendente-sem-sessao') semSessao++;
   }
   if (btn) { btn.disabled = false; btn.classList.remove('copying'); }
-  const alteradas = sincronizadas + falharam + semSessao;
+  const alteradas = sincronizadas + falharam;
   if (!alteradas) { showToast('Nenhuma justificativa nova pra salvar neste bloco — tudo já estava salvo.'); return; }
   const partes = [];
   if (sincronizadas) partes.push(sincronizadas + ' sincronizada(s)');
   if (falharam) partes.push(falharam + ' salva(s) só neste navegador (não deu pra sincronizar agora, vai tentar sozinha)');
-  if (semSessao) partes.push(semSessao + ' salva(s) só neste navegador (' + (isAdmin() ? 'sessão de sincronização expirada' : 'sincroniza quando um Administrador entrar') + ')');
   showToast(partes.join(' · ') + '.');
 }
 
@@ -3556,18 +3562,10 @@ hierBlocksContainer.addEventListener('focusout', async evt => {
   const flashAlvo = ta.dataset.data ? ta.closest('.just-date-row') : ta.closest('td');
   const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
   // sem toast a cada campo bem-sucedido (são muitos campos na tela) — só avisa quando
-  // realmente não sincronizou, já que aí a pessoa precisa saber que ainda não está protegida
-  // em outro dispositivo. Mesma distinção da hierarquia inline (ver he-save): Usuário Padrão
-  // sem sessão é o esperado (nunca teve uma pra começar); Admin sem sessão válida é quem
-  // precisa saber que precisa entrar de novo com a senha.
+  // realmente não sincronizou (falha de rede/servidor — não precisa mais checar login, já que
+  // Justificativa sincroniza pra qualquer usuário, ver salvarCampoJustificativa).
   if (resultado === 'pendente-falhou') {
     showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
-  } else if (resultado === 'pendente-sem-sessao') {
-    if (isAdmin()) {
-      showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
-    } else {
-      showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
-    }
   }
 });
 
@@ -3599,13 +3597,17 @@ function updateRoleBadge(){
 // checa (com timeout — não pode travar o boot) se o Admin local também tem uma sessão de
 // escrita válida no Supabase, e atualiza o aviso no badge. Chamada no boot e depois de login.
 async function checkSupabaseSessionForBadge(){
+  // Justificativa sincroniza pra QUALQUER usuário (anon liberado no Supabase, 2026-10-02), então
+  // esta chamada roda sempre — mesmo pra Usuário Padrão — pra flushar qualquer pendência assim
+  // que a conexão volta (ex.: depois de um login, ou de um "Atualizar dados agora").
+  tentarSincronizarJustPendente();
   if (!isAdmin()) { AUTH.supabaseSessionOk = null; updateRoleBadge(); return; }
   AUTH.supabaseSessionOk = await hasSupabaseWriteSession();
   updateRoleBadge();
   // sessão de escrita disponível de novo: aproveita e manda pro servidor qualquer hierarquia
-  // ou justificativa definida aqui no painel que ficou esperando (ver marcarHierPendente/
-  // marcarJustPendente).
-  if (AUTH.supabaseSessionOk) { tentarSincronizarHierPendente(); tentarSincronizarJustPendente(); }
+  // definida aqui no painel que ficou esperando (ver marcarHierPendente) — Hierarquia continua
+  // exigindo login de Admin pra escrever, diferente de Justificativa.
+  if (AUTH.supabaseSessionOk) tentarSincronizarHierPendente();
 }
 
 function renderSettingsPanel(){
@@ -4798,12 +4800,6 @@ function wireJustificativaAutosave(containerId){
     const resultado = await salvarCampoJustificativa(ta, key, cell);
     if (resultado === 'pendente-falhou') {
       showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
-    } else if (resultado === 'pendente-sem-sessao') {
-      if (isAdmin()) {
-        showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
-      } else {
-        showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
-      }
     }
   });
 }

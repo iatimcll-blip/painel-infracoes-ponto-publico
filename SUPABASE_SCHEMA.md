@@ -33,6 +33,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | *(pré-existente — sem .sql neste repo)* | `infracoes_registros`, `infracoes_roster`, `infracoes_meta` | antes desta integração começar | Sim (`registros`, `roster`) |
 | [`supabase_auxiliares.sql`](supabase_auxiliares.sql) | `bh_registros`, `dsr_registros`, `feriado_registros` + RPCs `upsert_*` | 2026-09-22 | Não — painéis auxiliares ainda não têm espelho de backup |
 | [`supabase_justificativas.sql`](supabase_justificativas.sql) | `infracoes_justificativas` (chave→texto genérica) + RPC `upsert_infracoes_justificativas` | 2026-09-30 | Sim (`justificativas`, desde 2026-10-01) |
+| [`supabase_justificativas.sql`](supabase_justificativas.sql) (grant) | `grant execute ... to authenticated, anon` na RPC `upsert_infracoes_justificativas` (liberando escrita sincronizada também pra quem nunca logou) | 2026-10-02 | — |
 | [`supabase_auxiliares.sql`](supabase_auxiliares.sql) (tabelas) | `bh_registros`, `dsr_registros`, `feriado_registros` | 2026-09-22 | Sim (`bh_registros`, `dsr_registros`, `feriado_registros`, desde 2026-10-01) |
 
 ## Padrão de segurança usado em toda tabela deste projeto
@@ -41,6 +42,11 @@ em arquivo — só passada como variável de ambiente na hora do comando.
   precisar logar.
 - **Escrita só via RPC `security definer`**, `grant execute ... to authenticated` (nunca
   `anon`/`public` direto na função, nunca `GRANT` na tabela em si).
+  **Exceção única e deliberada:** `upsert_infracoes_justificativas` também libera `anon` desde
+  2026-10-02 (decisão explícita do dono do projeto) — Justificativa é uma anotação de texto
+  livre que qualquer usuário (logado ou não) já editava localmente desde que a feature existe;
+  abrir a escrita sincronizada pra `anon` só torna consistente o que já era verdade na prática.
+  Base/Hierarquia/painéis auxiliares continuam exigindo login de Admin pra escrever.
 - **Upsert only** — nenhuma função de DELETE em massa. "Apagar" uma justificativa é um upsert
   com `texto = ''` (o painel já trata texto vazio como "sem justificativa" na leitura); remover
   hierarquia de 1 pessoa continua local-only (ver comentário perto de `he-remove` no

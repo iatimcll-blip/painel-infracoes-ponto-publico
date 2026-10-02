@@ -1,9 +1,14 @@
 -- ============================================================================
 -- Justificativa (FCA) — sincronização entre dispositivos
--- Mesmo padrão das outras tabelas deste projeto:
+-- Padrão deste projeto, com UMA diferença de propósito (ver abaixo):
 --   - leitura pública (qualquer um vê as justificativas, sem login)
---   - escrita só via função upsert (security definer), liberada só pra "authenticated"
---     (a conta compartilhada admin@painel-infracoes.local por trás do Admin do painel)
+--   - escrita via função upsert (security definer) — LIBERADA TANTO PRA "anon" QUANTO PRA
+--     "authenticated": decisão explícita do usuário (2026-10-02) — diferente de Base/
+--     Hierarquia/painéis auxiliares, que continuam exigindo login de Admin pra escrever, a
+--     Justificativa é uma anotação de texto livre, já editável localmente por qualquer um
+--     (Usuário Padrão incluído) desde que a feature existe; abrir a ESCRITA SINCRONIZADA
+--     pra "anon" também só torna consistente o que já era verdade localmente — qualquer
+--     pessoa com o link do painel consegue gravar uma Justificativa sem senha nenhuma.
 --   - upsert only — nunca um DELETE em massa; "apagar" uma justificativa é um upsert com
 --     texto = '' (o painel já trata texto vazio como "sem justificativa" na leitura)
 --
@@ -14,7 +19,8 @@
 -- auxiliares (Banco de Horas, DSR, Feriados) sem qualquer mudança.
 --
 -- Rode isto inteiro de uma vez no SQL Editor do Supabase (Dashboard do projeto
--- ymltjceiviyadckxzbxw > SQL Editor > New query > cola isto > Run).
+-- ymltjceiviyadckxzbxw > SQL Editor > New query > cola isto > Run) — idempotente, pode rodar
+-- de novo em cima de uma instalação já existente pra só aplicar a mudança de grant pro "anon".
 -- ============================================================================
 
 create table if not exists public.infracoes_justificativas (
@@ -41,5 +47,5 @@ begin
     texto = excluded.texto, atualizado_em = now();
 end;
 $$;
-revoke all on function public.upsert_infracoes_justificativas(jsonb) from public, anon;
-grant execute on function public.upsert_infracoes_justificativas(jsonb) to authenticated;
+revoke all on function public.upsert_infracoes_justificativas(jsonb) from public;
+grant execute on function public.upsert_infracoes_justificativas(jsonb) to authenticated, anon;
