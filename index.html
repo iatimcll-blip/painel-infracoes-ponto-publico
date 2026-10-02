@@ -1298,17 +1298,18 @@ async function fetchAllRows(tabela, colunas){
 }
 async function loadFromSupabase(){
   if (!sb) { STATE.readSyncFailed = true; return false; }
-  try {
-    const [regs, roster, metaRes, justs] = await Promise.all([
-      fetchAllRows('infracoes_registros', 'data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
-      fetchAllRows('infracoes_roster', 'nome,ga,go'),
-      withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(), 15000, 'ler meta'),
-      // justificativas não bloqueiam a leitura de Base/Hierarquia se falharem sozinhas — são
-      // um "plus" (anotações do GA), não o dado principal do painel.
-      fetchAllRows('infracoes_justificativas', 'chave,texto').catch(e => { console.error('Não foi possível ler justificativas do Supabase.', e); return null; }),
-    ]);
-    STATE.readSyncFailed = false;
-    if (justs) {
+  // justificativas são lidas EM PARALELO mas tratadas de forma totalmente INDEPENDENTE do
+  // resto — antes, as 4 leituras (registros/roster/meta/justificativas) estavam no mesmo
+  // Promise.all, então se QUALQUER uma rejeitasse (ex.: só a de registros, por uma instabilidade
+  // de rede), a rejeição derrubava as outras 3 JUNTO, e o merge de justificativas nunca
+  // chegava a rodar mesmo quando aquela leitura específica tinha funcionado — confirmado numa
+  // verificação real de ponta a ponta (2 navegadores, Supabase de produção): uma justificativa
+  // salva com sucesso num dispositivo não aparecia no outro sempre que a leitura de Base/
+  // Hierarquia daquele outro dispositivo falhava por qualquer motivo. Justificativa é um "plus"
+  // (anotação do GA), não pode ficar refém do dado principal do painel.
+  const justsPromise = (async () => {
+    try {
+      const justs = await fetchAllRows('infracoes_justificativas', 'chave,texto');
       const justMap = {};
       justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
       // mesma proteção do hierMap: se a leitura vier vazia, não apaga o que já existe local —
@@ -1317,41 +1318,54 @@ async function loadFromSupabase(){
       if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
       else if (Object.keys(STATE.justificativasPendente).length) STATE.justificativas = aplicarJustPendente(Object.assign({}, STATE.justificativas));
       saveJustificativasToStorage();
+    } catch(e) {
+      console.error('Não foi possível ler justificativas do Supabase.', e);
     }
+  })();
+
+  let resultado;
+  try {
+    const [regs, roster, metaRes] = await Promise.all([
+      fetchAllRows('infracoes_registros', 'data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
+      fetchAllRows('infracoes_roster', 'nome,ga,go'),
+      withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(), 15000, 'ler meta'),
+    ]);
+    STATE.readSyncFailed = false;
     if (!regs || !regs.length) {
       // consulta funcionou mas veio vazia (ex.: dados zerados) — não pode deixar "usingSupabase"
       // travado em true de uma sincronização anterior nesta mesma aba, senão o aviso "Dados
       // sincronizados" fica mentindo enquanto o Supabase já não tem nada de verdade.
       STATE.usingSupabase = false;
-      return false;
+      resultado = false;
+    } else {
+      STATE.raw = regs.map(r => ({
+        data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
+        bu: r.bu, subbu: r.subbu, entrada: hhmm(r.entrada), saida: hhmm(r.saida),
+        d7: r.dias7 || 0, interj: r.interj || 0, hex: r.he2 || 0,
+      }));
+      const hierMap = {};
+      (roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
+      // reaplica por cima qualquer hierarquia definida aqui no painel que ainda não foi
+      // confirmada no servidor — sem isto, essa leitura substituiria STATE.hierMap inteiro e
+      // apagaria a correção sem ninguém perceber.
+      if (Object.keys(hierMap).length) STATE.hierMap = aplicarHierPendente(hierMap);
+      else if (Object.keys(STATE.hierMapPendente).length) STATE.hierMap = aplicarHierPendente(Object.assign({}, STATE.hierMap));
+      STATE.usingDefault = false;
+      STATE.usingSupabase = true;
+      STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
+      resultado = true;
     }
-
-    STATE.raw = regs.map(r => ({
-      data: r.data, funcid: r.funcid, nome: r.nome, funcao: r.funcao, ccusto: r.codccusto,
-      bu: r.bu, subbu: r.subbu, entrada: hhmm(r.entrada), saida: hhmm(r.saida),
-      d7: r.dias7 || 0, interj: r.interj || 0, hex: r.he2 || 0,
-    }));
-    const hierMap = {};
-    (roster || []).forEach(r => { hierMap[r.nome] = { ga: r.ga, go: r.go || r.ga || null }; });
-    // reaplica por cima qualquer hierarquia definida aqui no painel que ainda não foi confirmada
-    // no servidor — sem isto, essa leitura substituiria STATE.hierMap inteiro e apagaria a
-    // correção sem ninguém perceber.
-    if (Object.keys(hierMap).length) STATE.hierMap = aplicarHierPendente(hierMap);
-    else if (Object.keys(STATE.hierMapPendente).length) STATE.hierMap = aplicarHierPendente(Object.assign({}, STATE.hierMap));
-    STATE.usingDefault = false;
-    STATE.usingSupabase = true;
-    STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
-    return true;
   } catch (e) {
     console.error('Falha ao ler do Supabase — tentando a cópia publicada no GitHub.', e);
     // fonte reserva: um workflow do GitHub Actions espelha a Base + Hierarquia do Supabase em
     // dados.json dentro do próprio repositório, de hora em hora. Se a leitura do Supabase falhar
     // no aparelho de alguém (rede da empresa bloqueando, instabilidade, etc.), o painel ainda
     // consegue mostrar os dados a partir desse arquivo, servido do mesmo endereço da página.
-    if (await loadFromGithubMirror()) return true;
-    STATE.readSyncFailed = true;
-    return false;
+    if (await loadFromGithubMirror()) resultado = true;
+    else { STATE.readSyncFailed = true; resultado = false; }
   }
+  await justsPromise; // garante que o merge de justificativas terminou antes de devolver
+  return resultado;
 }
 async function loadFromGithubMirror(){
   try {
