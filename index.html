@@ -3694,6 +3694,46 @@ function renderSettingsPanel(){
     showToast('Sessão encerrada — voltou para Usuário Padrão.');
   });
 
+  // sessão de ESCRITA no Supabase expirou (token + refresh token velhos demais pra renovar
+  // sozinhos) — sem isto, o badge "Sincronização expirada" dizia "clique para entrar de novo"
+  // mas quem clicava só via "Conectado como admin / Sair", sem nenhum campo de senha: a única
+  // saída era clicar Sair (perdendo o Admin local) pra só DEPOIS reaparecer o formulário de
+  // login. Aqui dá pra digitar a senha de novo SEM deslogar, renovando só a parte que expirou.
+  if (AUTH.supabaseSessionOk === false) {
+    const relogSec = document.createElement('div');
+    relogSec.className = 'settings-section';
+    relogSec.innerHTML =
+      '<h3>⚠ Sincronização expirada</h3>' +
+      '<p class="settings-note">A sessão que permite gravar no servidor compartilhado (Base, Hierarquia, Justificativa) venceu. Digite a senha de novo pra renovar — continua como <b>' + esc(AUTH.currentUser) + '</b>, não precisa sair.</p>' +
+      '<div class="login-form">' +
+        '<label>Senha<input type="password" id="relogin-pass" autocomplete="current-password"></label>' +
+        '<div class="login-error" id="relogin-error"></div>' +
+        '<div class="settings-btn-row"><button type="button" class="he-btn primary" id="relogin-submit">Renovar sincronização</button></div>' +
+      '</div>';
+    body.appendChild(relogSec);
+    const reloginSubmit = relogSec.querySelector('#relogin-submit');
+    const doRelogin = async () => {
+      const p = relogSec.querySelector('#relogin-pass').value;
+      const errEl = relogSec.querySelector('#relogin-error');
+      errEl.textContent = '';
+      reloginSubmit.disabled = true;
+      const ok = await authLogin(AUTH.currentUser, p);
+      reloginSubmit.disabled = false;
+      if (!ok) { errEl.textContent = 'Senha incorreta.'; return; }
+      await checkSupabaseSessionForBadge();
+      if (AUTH.supabaseSessionOk) {
+        renderSettingsPanel();
+        recomputeAndRender();
+        showToast('Sincronização renovada.');
+      } else {
+        errEl.textContent = 'Senha local certa, mas não deu pra renovar a sincronização agora — tente de novo em instantes.';
+      }
+    };
+    reloginSubmit.addEventListener('click', doRelogin);
+    relogSec.querySelector('#relogin-pass').addEventListener('keydown', evt => { if (evt.key === 'Enter') doRelogin(); });
+    relogSec.querySelector('#relogin-pass').focus();
+  }
+
   const importSec = document.createElement('div');
   importSec.className = 'settings-section';
   const lastSyncWhen = (STATE.usingSupabase && STATE.lastSync) ? fmtSyncTimestamp(STATE.lastSync.quando) : null;
