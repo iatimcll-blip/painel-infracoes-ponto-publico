@@ -3368,6 +3368,10 @@ function renderHierarchy(d){
         '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Infrações</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.reincidentes+'</span><span class="l">Reincid.</span></div>' +
         '<div class="ga-stat total"><span class="n num">'+fmt(block.total)+'</span><span class="l">Total</span></div>' +
+        '<button type="button" class="copy-img-btn ga-save-just-btn" title="Salvar todas as justificativas deste bloco">' +
+          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h8l3 3v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 2.5v3.5h4.5V2.5M5 10h6v3.5H5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
+          'Salvar' +
+        '</button>' +
         '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
           'Excel' +
@@ -3379,10 +3383,12 @@ function renderHierarchy(d){
       '</div>';
     details.appendChild(summary);
 
-    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn)');
+    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn)');
     copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(details, copyBtn, block.ga); });
     const exportGaBtn = summary.querySelector('.ga-export-btn');
     exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportGaBlockToExcel(block, d); });
+    const saveJustBtn = summary.querySelector('.ga-save-just-btn');
+    saveJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); salvarTodasJustificativasDoBloco(details, saveJustBtn); });
 
     const body = document.createElement('div');
     body.className = 'ga-body';
@@ -3453,29 +3459,27 @@ function autoGrowTextarea(ta){
 // (ver he-save): marca pendente ANTES de tentar (protegida até confirmar), e se a sincronização
 // falhar ou não houver sessão de escrita, fica esperando (tentarSincronizarJustPendente tenta de
 // novo sozinha no próximo login válido).
-const hierBlocksContainer = document.getElementById('hier-blocks');
-hierBlocksContainer.addEventListener('input', evt => {
-  if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
-});
-hierBlocksContainer.addEventListener('focusout', async evt => {
-  const ta = evt.target.closest && evt.target.closest('.just-input');
-  if (!ta) return;
-  const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey, dataISO = ta.dataset.data;
-  // com data (linha por data, o caso normal agora) usa a chave específica daquela data;
-  // sem data (não deveria mais acontecer nesta tabela, mas mantém como rede de segurança)
-  // cai na chave antiga, de todo o período.
-  const key = dataISO ? justificativaKeyData(nome, periodType, periodKey, dataISO) : justificativaKey(nome, periodType, periodKey);
+// chave de um campo .just-input qualquer, nos 4 painéis — Infrações por data (tem data-data),
+// painéis auxiliares (tem data-tema), ou a chave antiga sem data (rede de segurança). Função
+// única pra nunca ter essa lógica divergindo entre o autosave e o botão "Salvar" do bloco.
+function chaveDoJustInput(ta){
+  const nome = ta.dataset.nome, periodType = ta.dataset.periodType, periodKey = ta.dataset.periodKey;
+  if (ta.dataset.tema) return justificativaKeyAux(ta.dataset.tema, nome, periodType, periodKey);
+  if (ta.dataset.data) return justificativaKeyData(nome, periodType, periodKey, ta.dataset.data);
+  return justificativaKey(nome, periodType, periodKey);
+}
+// salva (local, sempre) + tenta sincronizar UM campo de Justificativa — usada tanto pelo
+// autosave (perde foco) quanto pelo botão "Salvar" de cada bloco de GA (clique explícito, sem
+// precisar passar campo por campo). Devolve o que aconteceu pra quem chamou decidir o toast:
+// autosave avisa na hora campo a campo, o botão do bloco resume tudo num toast só no final.
+async function salvarCampoJustificativa(ta, key, flashAlvo){
   const texto = ta.value.trim();
   const antes = (STATE.justificativas[key] || {}).texto || '';
-  if (texto === antes) return; // nada mudou — não grava (e não pisca "salvo") à toa
+  if (texto === antes) return 'sem-mudanca'; // nada mudou — não grava (e não pisca "salvo") à toa
   if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
   else delete STATE.justificativas[key];
   saveJustificativasToStorage();
   marcarJustPendente(key, texto);
-  // com data: pisca só a linha daquela data (não a célula inteira, que pode ter várias datas
-  // — sem isto uma edição num dia fazia parecer que TODAS as datas daquele colaborador tinham
-  // sido salvas agora). Sem data (rede de segurança): mantém o comportamento antigo na célula.
-  const flashAlvo = dataISO ? ta.closest('.just-date-row') : ta.closest('td');
   if (flashAlvo) {
     flashAlvo.classList.remove('just-saved');
     void flashAlvo.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
@@ -3487,17 +3491,64 @@ hierBlocksContainer.addEventListener('focusout', async evt => {
       await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
       limparJustPendente(key);
       atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
+      return 'sincronizada';
     } catch(syncErr) {
-      // sem toast a cada campo bem-sucedido (são muitos campos na tela) — só avisa quando
-      // realmente falha, já que aí a pessoa precisa saber que ainda não está protegida em
-      // outro dispositivo.
       console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
-      showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+      return 'pendente-falhou';
     }
-  } else {
-    // mesma distinção da hierarquia inline (ver he-save): Usuário Padrão sem sessão é o
-    // esperado (nunca teve uma pra começar); Admin sem sessão válida é quem precisa saber que
-    // precisa entrar de novo com a senha pra essa justificativa sincronizar.
+  }
+  return 'pendente-sem-sessao';
+}
+// botão "Salvar" de cada bloco de GA — salva de uma vez só TODOS os campos de Justificativa
+// daquele bloco que tiverem algo digitado e ainda não confirmado, sem precisar clicar fora de
+// cada campo um por um (pedido do usuário: "para ficarem gravadas"). containerEl é o <details>
+// do bloco inteiro (Infrações) ou do GA dentro dele (painéis auxiliares) — os únicos lugares
+// onde os campos .just-input daquele GA especificamente vivem.
+async function salvarTodasJustificativasDoBloco(containerEl, btn){
+  const campos = [...containerEl.querySelectorAll('.just-input')];
+  if (!campos.length) { showToast('Este bloco não tem nenhum campo de Justificativa.'); return; }
+  if (btn) { btn.disabled = true; btn.classList.add('copying'); }
+  let sincronizadas = 0, semSessao = 0, falharam = 0;
+  for (const ta of campos) {
+    const key = chaveDoJustInput(ta);
+    const flashAlvo = ta.closest('.just-date-row') || ta.closest('td');
+    const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
+    if (resultado === 'sincronizada') sincronizadas++;
+    else if (resultado === 'pendente-falhou') falharam++;
+    else if (resultado === 'pendente-sem-sessao') semSessao++;
+  }
+  if (btn) { btn.disabled = false; btn.classList.remove('copying'); }
+  const alteradas = sincronizadas + falharam + semSessao;
+  if (!alteradas) { showToast('Nenhuma justificativa nova pra salvar neste bloco — tudo já estava salvo.'); return; }
+  const partes = [];
+  if (sincronizadas) partes.push(sincronizadas + ' sincronizada(s)');
+  if (falharam) partes.push(falharam + ' salva(s) só neste navegador (não deu pra sincronizar agora, vai tentar sozinha)');
+  if (semSessao) partes.push(semSessao + ' salva(s) só neste navegador (' + (isAdmin() ? 'sessão de sincronização expirada' : 'sincroniza quando um Administrador entrar') + ')');
+  showToast(partes.join(' · ') + '.');
+}
+
+const hierBlocksContainer = document.getElementById('hier-blocks');
+hierBlocksContainer.addEventListener('input', evt => {
+  if (evt.target.classList && evt.target.classList.contains('just-input')) autoGrowTextarea(evt.target);
+});
+hierBlocksContainer.addEventListener('focusout', async evt => {
+  const ta = evt.target.closest && evt.target.closest('.just-input');
+  if (!ta) return;
+  const key = chaveDoJustInput(ta);
+  // com data (linha por data, o caso normal agora): pisca só a linha daquela data (não a
+  // célula inteira, que pode ter várias datas — sem isto uma edição num dia fazia parecer que
+  // TODAS as datas daquele colaborador tinham sido salvas agora). Sem data (rede de
+  // segurança): mantém o comportamento antigo na célula.
+  const flashAlvo = ta.dataset.data ? ta.closest('.just-date-row') : ta.closest('td');
+  const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
+  // sem toast a cada campo bem-sucedido (são muitos campos na tela) — só avisa quando
+  // realmente não sincronizou, já que aí a pessoa precisa saber que ainda não está protegida
+  // em outro dispositivo. Mesma distinção da hierarquia inline (ver he-save): Usuário Padrão
+  // sem sessão é o esperado (nunca teve uma pra começar); Admin sem sessão válida é quem
+  // precisa saber que precisa entrar de novo com a senha.
+  if (resultado === 'pendente-falhou') {
+    showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+  } else if (resultado === 'pendente-sem-sessao') {
     if (isAdmin()) {
       showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
     } else {
@@ -4661,6 +4712,10 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
           '<div class="ga-head-text"><div class="ga-name">'+esc(gaBlock.ga)+'</div><div class="go-line">GO: '+esc(gaBlock.go)+'</div></div>' +
         '</div>' +
         '<div class="ga-head-stats">' + statsGa.map(s => '<div class="ga-stat"><span class="n num">'+esc(String(s.n))+'</span><span class="l">'+esc(s.l)+'</span></div>').join('') +
+          '<button type="button" class="copy-img-btn ga-save-just-btn" title="Salvar todas as justificativas deste bloco">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h8l3 3v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 2.5v3.5h4.5V2.5M5 10h6v3.5H5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
+            'Salvar' +
+          '</button>' +
           '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
             '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
             'Excel' +
@@ -4672,10 +4727,12 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
         '</div>';
       gaDetails.appendChild(gaSummary);
 
-      const copyBtn = gaSummary.querySelector('.copy-img-btn:not(.ga-export-btn)');
+      const copyBtn = gaSummary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn)');
       copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(gaDetails, copyBtn, gaBlock.ga); });
       const exportGaBtn = gaSummary.querySelector('.ga-export-btn');
       exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportAuxGaBlockToExcel(gaBlock, opts, ctx); });
+      const saveJustBtn = gaSummary.querySelector('.ga-save-just-btn');
+      saveJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); salvarTodasJustificativasDoBloco(gaDetails, saveJustBtn); });
 
       const gaBody = document.createElement('div');
       gaBody.className = 'ga-body';
@@ -4718,34 +4775,21 @@ function wireJustificativaAutosave(containerId){
   container.addEventListener('focusout', async evt => {
     const ta = evt.target.closest && evt.target.closest('.just-input');
     if (!ta) return;
-    const key = justificativaKeyAux(ta.dataset.tema, ta.dataset.nome, ta.dataset.periodType, ta.dataset.periodKey);
-    const texto = ta.value.trim();
-    const antes = (STATE.justificativas[key] || {}).texto || '';
-    if (texto === antes) return;
-    if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
-    else delete STATE.justificativas[key];
-    saveJustificativasToStorage();
-    // mesmo mecanismo de sincronização da Justificativa (FCA) de Infrações (ver
-    // hierBlocksContainer.focusout) — a tabela no Supabase é chave->texto genérica, então a
-    // mesma função de upsert serve pra qualquer formato de chave, incluindo esta com o prefixo
-    // de tema (bh/dsr/feriado).
-    marcarJustPendente(key, texto);
+    // mesma lógica da Justificativa (FCA) de Infrações (ver hierBlocksContainer.focusout e
+    // salvarCampoJustificativa) — a tabela no Supabase é chave->texto genérica, então a mesma
+    // função de upsert serve pra qualquer formato de chave, incluindo esta com o prefixo de
+    // tema (bh/dsr/feriado), calculada por chaveDoJustInput.
+    const key = chaveDoJustInput(ta);
     const cell = ta.closest('td');
-    if (cell) { cell.classList.remove('just-saved'); void cell.offsetWidth; cell.classList.add('just-saved'); }
-    atualizarJustSyncDot(cell, key); // mostra "pendente" (laranja) na hora
-    if (await hasSupabaseWriteSession()) {
-      try {
-        await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
-        limparJustPendente(key);
-        atualizarJustSyncDot(cell, key); // sucesso -> vira "sincronizada" (verde)
-      } catch(syncErr) {
-        console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
-        showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+    const resultado = await salvarCampoJustificativa(ta, key, cell);
+    if (resultado === 'pendente-falhou') {
+      showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
+    } else if (resultado === 'pendente-sem-sessao') {
+      if (isAdmin()) {
+        showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
+      } else {
+        showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
       }
-    } else if (isAdmin()) {
-      showToast('Justificativa salva neste navegador — sua sessão de sincronização expirou. Fica protegida; entre com a senha de novo em Configurações pra sincronizar.');
-    } else {
-      showToast('Justificativa salva neste navegador — vai sincronizar sozinha quando um Administrador entrar.');
     }
   });
 }
