@@ -54,6 +54,21 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 - A conta compartilhada `admin@painel-infracoes.local` é quem autentica como `authenticated`
   quando alguém loga como Admin no painel (ver `authLogin()`).
 
+## Configuração de Auth (não é schema de tabela, mas afeta a sincronização)
+
+- **`security_refresh_token_reuse_interval`: 60s** (era 10s — aumentado em 2026-10-02). Com
+  rotação de refresh token ativada (`refresh_token_rotation_enabled: true`) e uma única conta
+  compartilhada (`admin@painel-infracoes.local`) usada por vários GAs/dispositivos ao mesmo
+  tempo, 10s de tolerância era pouco: duas abas/dispositivos renovando por perto um do outro
+  faziam o Supabase achar que era reuso de um token já trocado e **revogava a sessão inteira**
+  — aparecia como o badge "Sincronização expirada" pedindo login de novo, sem ninguém ter feito
+  nada de errado. 60s dá mais folga sem abrir mão da rotação. Ajustado via Management API
+  (`PATCH /v1/projects/ymltjceiviyadckxzbxw/config/auth`), não tem arquivo `.sql` (é config do
+  projeto, não schema de tabela).
+- `jwt_exp`: 3600 (1h, padrão) — token de acesso vence em 1h; `hasSupabaseWriteSession()` no
+  `painel2.html` tenta renovar sozinha (`refreshSession()`) antes de mostrar o badge de
+  expirado, cobrindo o caso comum de token vencido + refresh token ainda válido.
+
 ## Pendências conhecidas
 
 *(nenhuma no momento — Base, Hierarquia, Justificativas e os 3 painéis auxiliares estão todos
