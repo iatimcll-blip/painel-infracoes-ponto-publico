@@ -35,6 +35,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | [`supabase_justificativas.sql`](supabase_justificativas.sql) | `infracoes_justificativas` (chave→texto genérica) + RPC `upsert_infracoes_justificativas` | 2026-09-30 | Sim (`justificativas`, desde 2026-10-01) |
 | [`supabase_justificativas.sql`](supabase_justificativas.sql) (grant) | `grant execute ... to authenticated, anon` na RPC `upsert_infracoes_justificativas` (liberando escrita sincronizada também pra quem nunca logou) | 2026-10-02 | — |
 | [`supabase_auxiliares.sql`](supabase_auxiliares.sql) (tabelas) | `bh_registros`, `dsr_registros`, `feriado_registros` | 2026-09-22 | Sim (`bh_registros`, `dsr_registros`, `feriado_registros`, desde 2026-10-01) |
+| [`supabase_limpeza_bases.sql`](supabase_limpeza_bases.sql) | RPCs `limpar_infracoes_registros_fora_de`, `limpar_bh_registros_fora_de`, `limpar_dsr_registros_fora_de`, `limpar_feriado_registros_fora_de` (cada uma com `dry_run`) | 2026-10-07 | — |
 
 ## Padrão de segurança usado em toda tabela deste projeto
 
@@ -47,10 +48,19 @@ em arquivo — só passada como variável de ambiente na hora do comando.
   livre que qualquer usuário (logado ou não) já editava localmente desde que a feature existe;
   abrir a escrita sincronizada pra `anon` só torna consistente o que já era verdade na prática.
   Base/Hierarquia/painéis auxiliares continuam exigindo login de Admin pra escrever.
-- **Upsert only** — nenhuma função de DELETE em massa. "Apagar" uma justificativa é um upsert
-  com `texto = ''` (o painel já trata texto vazio como "sem justificativa" na leitura); remover
-  hierarquia de 1 pessoa continua local-only (ver comentário perto de `he-remove` no
-  `painel2.html` — não existe RPC de delete de 1 linha do roster ainda).
+- **Upsert only (regra geral) — com 1 exceção deliberada:** nenhuma função de DELETE em massa
+  pelas tabelas normais. "Apagar" uma justificativa é um upsert com `texto = ''` (o painel já
+  trata texto vazio como "sem justificativa" na leitura); remover hierarquia de 1 pessoa continua
+  local-only (ver comentário perto de `he-remove` no `painel2.html` — não existe RPC de delete de
+  1 linha do roster ainda). **Exceção:** as 4 RPCs `limpar_*_fora_de` (ver
+  `supabase_limpeza_bases.sql`) SÃO DELETE — existem especificamente porque upload de Base/
+  planilha é sempre upsert e nunca remove quem sumiu do arquivo novo, então dados de uploads
+  antigos ficavam acumulando pra sempre (confirmado em produção: `infracoes_registros` chegou a
+  44.162 linhas em 2026-10-07, quando deveria ter poucos milhares — datas desde 2025-12-15 nunca
+  limpas). Cada uma recebe as chaves de tudo que está na planilha carregada na tela (`mantidos`)
+  e remove do servidor só o que não está nesse conjunto; tem `dry_run` (conta sem apagar) pra o
+  painel mostrar quantas linhas seriam removidas ANTES de perguntar. Botões em Configurações →
+  "Limpar dados de bases anteriores", um por painel (Infrações/BH/DSR/Feriados), authenticated-only.
 - A conta compartilhada `admin@painel-infracoes.local` é quem autentica como `authenticated`
   quando alguém loga como Admin no painel (ver `authLogin()`).
 

@@ -1527,6 +1527,42 @@ async function clearSharedSupabaseData(){
   const { error } = await withTimeout(sb.rpc('clear_infracoes_shared_data'), 20000, 'apagar dados do servidor');
   if (error) throw error;
 }
+// "Limpar dados de bases anteriores" (botões em Configurações) — upload de Base/planilha
+// auxiliar é sempre upsert (nunca apaga quem some do arquivo novo, ver upsertBaseToSupabase/
+// upsertAuxToSupabase), então quem corrigiu uma infração e some da planilha mais recente
+// continuava aparecendo no painel pra sempre, vindo de um upload antigo. Cada botão compara a
+// planilha CARREGADA AGORA NESTA TELA (STATE*.raw) contra o servidor, e remove de lá só o que
+// não está mais nela. Usa dry_run:true pra saber quantas linhas seriam removidas ANTES de
+// perguntar (nunca apaga sem mostrar o número real pra quem está confirmando), e o mesmo
+// parâmetro `mantidos` serve tanto pra conferir quanto pra executar de verdade.
+async function prepararLimpezaBaseAnterior({ tabela, rpc, raw, chaveDe, rotulo, aposLimpar }){
+  if (!sb) { showToast('Supabase não está disponível agora.'); return; }
+  if (!raw || !raw.length) { showToast('Nenhuma planilha de ' + rotulo + ' carregada nesta tela — anexe o arquivo atual primeiro, pra ter o que comparar.'); return; }
+  const mantidos = raw.map(chaveDe);
+  let qtd;
+  try {
+    const { data, error } = await withTimeout(sb.rpc(rpc, { mantidos, dry_run: true }), 25000, 'conferir limpeza de ' + rotulo);
+    if (error) throw error;
+    qtd = data;
+  } catch(e) {
+    console.error('Não foi possível conferir quantas linhas de ' + rotulo + ' seriam removidas.', e);
+    showToast('Não deu pra conferir a limpeza de ' + rotulo + ' agora — tente de novo em instantes.');
+    return;
+  }
+  if (!qtd) { showToast('Nada pra limpar em ' + rotulo + ' — o servidor já está igual à planilha carregada.'); return; }
+  openDangerConfirm({
+    titulo: 'Limpar ' + rotulo + ' antigo',
+    mensagem: 'Isto remove <b>' + qtd + ' linha(s)</b> da tabela <code>' + tabela + '</code> no servidor que não aparecem na planilha de ' + rotulo + ' carregada agora nesta tela — sobras de uploads anteriores. Afeta todo dispositivo. Não tem como desfazer.',
+    botao: 'Remover ' + qtd + ' linha(s)',
+    erro: 'Não foi possível limpar ' + rotulo + ' agora — tente de novo em instantes.',
+    run: async () => {
+      const { data, error } = await withTimeout(sb.rpc(rpc, { mantidos, dry_run: false }), 30000, 'limpar ' + rotulo);
+      if (error) throw error;
+      showToast((data || 0) + ' linha(s) de ' + rotulo + ' removida(s) do servidor.');
+      await aposLimpar();
+    },
+  });
+}
 
 const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
 const WEEKDAY_LABELS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -3170,7 +3206,17 @@ document.getElementById('img-preview-overlay').addEventListener('click', evt => 
 const dangerOverlay = document.getElementById('danger-confirm-overlay');
 const dangerInput = document.getElementById('danger-confirm-input');
 const dangerSubmit = document.getElementById('danger-confirm-submit');
-function openDangerConfirm(){
+const dangerTitleEl = dangerOverlay.querySelector('.m-name');
+const dangerMsgEl = dangerOverlay.querySelector('.modal-body .settings-note');
+// ação atual do modal — generalizado pra servir tanto o "apagar tudo" quanto os novos botões de
+// "limpar base anterior" (cada um com seu próprio título/mensagem/callback), em vez de ficar
+// preso a um único clearSharedSupabaseData() hardcoded.
+let dangerConfirmAction = null;
+function openDangerConfirm(opts){
+  dangerConfirmAction = opts;
+  dangerTitleEl.textContent = opts.titulo;
+  dangerMsgEl.innerHTML = opts.mensagem;
+  dangerSubmit.textContent = opts.botao || 'Apagar definitivamente';
   dangerInput.value = '';
   dangerSubmit.disabled = true;
   dangerOverlay.classList.add('show');
@@ -3178,6 +3224,7 @@ function openDangerConfirm(){
 }
 function closeDangerConfirm(){
   dangerOverlay.classList.remove('show');
+  dangerConfirmAction = null;
 }
 dangerInput.addEventListener('input', () => { dangerSubmit.disabled = dangerInput.value !== 'APAGAR'; });
 dangerInput.addEventListener('keydown', evt => { if (evt.key === 'Enter' && !dangerSubmit.disabled) dangerSubmit.click(); });
@@ -3185,17 +3232,15 @@ document.getElementById('danger-confirm-cancel').addEventListener('click', close
 document.getElementById('danger-confirm-close').addEventListener('click', closeDangerConfirm);
 dangerOverlay.addEventListener('click', evt => { if (evt.target.id === 'danger-confirm-overlay') closeDangerConfirm(); });
 dangerSubmit.addEventListener('click', async () => {
-  if (dangerInput.value !== 'APAGAR') return;
+  if (dangerInput.value !== 'APAGAR' || !dangerConfirmAction) return;
+  const acao = dangerConfirmAction;
   dangerSubmit.disabled = true;
   try {
-    await clearSharedSupabaseData();
+    await acao.run();
     closeDangerConfirm();
-    showToast('Dados do servidor apagados.');
-    await loadFromSupabase();
-    recomputeAndRender();
   } catch(err) {
-    console.error('Falha ao apagar dados do servidor.', err);
-    showToast('Não foi possível apagar os dados do servidor — tente de novo em instantes.');
+    console.error('Falha na ação de risco do painel.', err);
+    showToast(acao.erro || 'Não foi possível completar a ação — tente de novo em instantes.');
     dangerSubmit.disabled = false;
   }
 });
@@ -3752,6 +3797,39 @@ function renderSettingsPanel(){
   body.appendChild(importSec);
   importSec.querySelector('#reset-data-inline').addEventListener('click', resetData);
 
+  const limpezaSec = document.createElement('div');
+  limpezaSec.className = 'settings-section danger-zone';
+  limpezaSec.innerHTML =
+    '<h3>Limpar dados de bases anteriores</h3>' +
+    '<p class="settings-note">O upload de uma Base/planilha nova só ADICIONA/atualiza — nunca remove quem não está mais nela (ex.: alguém cuja infração foi corrigida some do arquivo novo, mas continuava aparecendo no painel, vindo de um upload anterior). Cada botão abaixo remove do servidor só o que está sobrando: o que já não existe mais na planilha carregada agora nesta tela — e avisa quantas linhas seriam removidas antes de confirmar.</p>' +
+    '<div class="settings-btn-row" style="flex-wrap:wrap;">' +
+      '<button type="button" class="danger-btn" id="limpar-infracoes" style="background:var(--surface-raised);color:var(--critical);border:1px solid var(--critical);">Limpar Infrações antigas</button>' +
+      '<button type="button" class="danger-btn" id="limpar-bh" style="background:var(--surface-raised);color:var(--critical);border:1px solid var(--critical);">Limpar Banco de Horas antigo</button>' +
+      '<button type="button" class="danger-btn" id="limpar-dsr" style="background:var(--surface-raised);color:var(--critical);border:1px solid var(--critical);">Limpar DSR antigo</button>' +
+      '<button type="button" class="danger-btn" id="limpar-feriado" style="background:var(--surface-raised);color:var(--critical);border:1px solid var(--critical);">Limpar Feriados antigos</button>' +
+    '</div>';
+  body.appendChild(limpezaSec);
+  limpezaSec.querySelector('#limpar-infracoes').addEventListener('click', () => prepararLimpezaBaseAnterior({
+    tabela: 'infracoes_registros', rpc: 'limpar_infracoes_registros_fora_de',
+    raw: STATE.raw, chaveDe: r => ({ data: r.data, funcid: r.funcid }),
+    rotulo: 'Infrações', aposLimpar: async () => { await loadFromSupabase(); recomputeAndRender(); },
+  }));
+  limpezaSec.querySelector('#limpar-bh').addEventListener('click', () => prepararLimpezaBaseAnterior({
+    tabela: 'bh_registros', rpc: 'limpar_bh_registros_fora_de',
+    raw: STATE_BH.raw, chaveDe: r => ({ funcid: r.funcid, limite_comp: r.limiteComp }),
+    rotulo: 'Banco de Horas', aposLimpar: async () => { await loadAuxPaineis(); renderBH(); },
+  }));
+  limpezaSec.querySelector('#limpar-dsr').addEventListener('click', () => prepararLimpezaBaseAnterior({
+    tabela: 'dsr_registros', rpc: 'limpar_dsr_registros_fora_de',
+    raw: STATE_DSR.raw, chaveDe: r => ({ funcid: r.funcid, data: r.data, hora_inicio: r.horaInicio || null }),
+    rotulo: 'DSR', aposLimpar: async () => { await loadAuxPaineis(); renderDSR(); },
+  }));
+  limpezaSec.querySelector('#limpar-feriado').addEventListener('click', () => prepararLimpezaBaseAnterior({
+    tabela: 'feriado_registros', rpc: 'limpar_feriado_registros_fora_de',
+    raw: STATE_FERIADO.raw, chaveDe: r => ({ funcid: r.funcid, data: r.data, hora_inicio: r.horaInicio || null }),
+    rotulo: 'Feriados', aposLimpar: async () => { await loadAuxPaineis(); renderFeriado(); },
+  }));
+
   const dangerSec = document.createElement('div');
   dangerSec.className = 'settings-section danger-zone';
   dangerSec.innerHTML =
@@ -3761,7 +3839,18 @@ function renderSettingsPanel(){
   body.appendChild(dangerSec);
   dangerSec.querySelector('#danger-clear-server').addEventListener('click', () => {
     if (!sb) { showToast('Supabase não está disponível agora.'); return; }
-    openDangerConfirm();
+    openDangerConfirm({
+      titulo: 'Apagar dados do servidor',
+      mensagem: 'Isto apaga <b>permanentemente</b> todos os dados compartilhados no Supabase (Base + Hierarquia), em todos os dispositivos, incluindo o que qualquer outro processo tenha gravado lá. Não tem como desfazer.',
+      botao: 'Apagar definitivamente',
+      erro: 'Não foi possível apagar os dados do servidor — tente de novo em instantes.',
+      run: async () => {
+        await clearSharedSupabaseData();
+        showToast('Dados do servidor apagados.');
+        await loadFromSupabase();
+        recomputeAndRender();
+      },
+    });
   });
 
   const usersSec = document.createElement('div');
