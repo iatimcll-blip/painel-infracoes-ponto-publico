@@ -3624,9 +3624,14 @@ function renderHierarchy(d){
   currentDerived = d;
   const wrap = document.getElementById('hier-blocks');
   clear(wrap);
-  document.getElementById('hier-total-hint').textContent = d.roster + ' colaboradores no total · ' + d.hierBlocks.length + ' GA(s)';
+  // GA logado só vê o próprio bloco de colaboradores — pedido do usuário ("ele verá apenas o
+  // bloco com seu nome com sua hierarquia"). KPIs/gráficos/ranking continuam mostrando a empresa
+  // inteira (decisão explícita: só esta listagem de colaboradores fica restrita).
+  const hierBlocksVisiveis = isGA() ? d.hierBlocks.filter(b => b.ga === currentGaNome()) : d.hierBlocks;
+  const totalColaboradoresVisiveis = isGA() ? hierBlocksVisiveis.reduce((s,b) => s+b.equipe, 0) : d.roster;
+  document.getElementById('hier-total-hint').textContent = totalColaboradoresVisiveis + ' colaboradores no total · ' + hierBlocksVisiveis.length + ' GA(s)';
 
-  d.hierBlocks.forEach(block => {
+  hierBlocksVisiveis.forEach(block => {
     const details = document.createElement('details');
     details.className = 'ga-block';
     details.open = true;
@@ -5204,6 +5209,13 @@ function buildGoGaBlocks(pessoas){
 function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
   const wrap = document.getElementById(containerId);
   clear(wrap);
+  // mesmo filtro de "só o próprio bloco" de renderHierarchy (Infrações) — GA logado só vê a
+  // própria área nos 3 painéis auxiliares também (pedido do usuário: vale pros 4 painéis).
+  if (isGA()) {
+    blocks = blocks
+      .map(goBlock => ({ ...goBlock, gas: goBlock.gas.filter(g => g.ga === currentGaNome()) }))
+      .filter(goBlock => goBlock.gas.length);
+  }
   if (!blocks.length) {
     wrap.innerHTML = '<p style="font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0;">Sem dados no período selecionado.</p>';
     return;
