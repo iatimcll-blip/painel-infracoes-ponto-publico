@@ -518,6 +518,11 @@
     background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:9px 11px;
   }
   .login-form input:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .bulk-import-textarea{
+    width:100%; min-height:140px; font-family:var(--mono); font-size:12px; color:var(--text-primary);
+    background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:9px 11px; resize:vertical;
+  }
+  .bulk-import-textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
   .login-error{ font-size:12px; color:var(--critical); min-height:16px; }
   .admin-welcome{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:var(--good-tint); border-radius:9px; margin-bottom:16px; }
   .admin-welcome span{ font-size:12.5px; font-weight:600; color:var(--good); }
@@ -1189,6 +1194,27 @@ async function authAddUser(username, password, opts){
   AUTH.users.push(novo);
   saveAuthUsers();
   return { ok:true };
+}
+// cadastro de vários GAs de uma vez (botão "Importar em massa" em Configurações) — sem isto,
+// cadastrar 10+ GAs significava preencher o formulário de 1 em 1, repetindo o mesmo processo
+// dezenas de vezes. Uma linha por usuário, "usuario;senha;GA"; linhas em branco são ignoradas.
+// Continua até o fim mesmo se alguma linha falhar (nome repetido, GA vazio, etc.) — devolve o
+// que deu certo e o que não deu, pra nunca a pessoa descobrir só depois que só metade entrou.
+async function authAddUsersBulk(texto){
+  const linhas = (texto || '').split('\n').map(l => l.trim()).filter(Boolean);
+  let ok = 0;
+  const falhas = [];
+  for (const linha of linhas) {
+    const partes = linha.split(';').map(s => (s||'').trim());
+    const [username, password, gaNome] = partes;
+    if (partes.length < 3 || !username || !password || !gaNome) {
+      falhas.push(linha + ' — formato esperado: usuario;senha;GA');
+      continue;
+    }
+    const res = await authAddUser(username, password, { role: 'ga', gaNome });
+    if (res.ok) ok++; else falhas.push(linha + ' — ' + res.msg);
+  }
+  return { ok, falhas, total: linhas.length };
 }
 function authRemoveUser(username){
   // só usuários ADMIN contam pra regra "precisa sobrar pelo menos um" — um painel só com GAs e
@@ -4139,6 +4165,40 @@ function renderSettingsPanel(){
     showToast('Usuário de GA ' + name + ' (' + gaNome + ') adicionado.');
   });
   body.appendChild(gaSec);
+
+  // importação em massa — cadastrar GA por GA no formulário acima fica repetitivo quando são
+  // muitos (ex.: 1 por área da empresa inteira). Cola a lista toda de uma vez, "usuario;senha;GA"
+  // por linha, e cadastra todos num clique só.
+  const bulkSec = document.createElement('div');
+  bulkSec.className = 'settings-section';
+  bulkSec.innerHTML =
+    '<h3>Importar usuários de GA em massa</h3>' +
+    '<p class="settings-note">Cole 1 linha por usuário, no formato <code>usuario;senha;GA</code>. Exemplo: <code>ga.miguel;SenhaForte123;MIGUEL BARROS DE CARVALHO JUNIOR</code></p>' +
+    '<textarea class="bulk-import-textarea" id="ga-bulk-textarea" placeholder="usuario;senha;GA&#10;usuario2;senha2;OUTRO GA"></textarea>' +
+    '<div class="settings-btn-row" style="margin-top:10px;"><button type="button" class="he-btn primary" id="ga-bulk-import-btn">Importar lista</button></div>' +
+    '<div class="settings-note" id="ga-bulk-result" style="margin-top:8px;white-space:pre-line;"></div>';
+  body.appendChild(bulkSec);
+  bulkSec.querySelector('#ga-bulk-import-btn').addEventListener('click', async () => {
+    const texto = bulkSec.querySelector('#ga-bulk-textarea').value;
+    const btn = bulkSec.querySelector('#ga-bulk-import-btn');
+    const resultEl = bulkSec.querySelector('#ga-bulk-result');
+    if (!texto.trim()) { showToast('Cole a lista antes de importar.'); return; }
+    btn.disabled = true;
+    const res = await authAddUsersBulk(texto);
+    btn.disabled = false;
+    const msg = res.ok + ' de ' + res.total + ' usuário(s) importado(s) com sucesso.' + (res.falhas.length ? ('\nFalhas:\n' + res.falhas.join('\n')) : '');
+    if (res.ok) {
+      // renderSettingsPanel() reconstrói o painel inteiro (pra os novos usuários aparecerem nas
+      // listas acima) — isso recria #ga-bulk-result do zero, então a mensagem só fica visível
+      // se reaplicada DEPOIS do re-render, não antes.
+      renderSettingsPanel();
+      const resultElNovo = document.getElementById('ga-bulk-result');
+      if (resultElNovo) resultElNovo.textContent = msg;
+      showToast(res.ok + ' usuário(s) de GA importado(s).');
+    } else {
+      resultEl.textContent = msg;
+    }
+  });
 }
 
 document.getElementById('settings-btn').addEventListener('click', () => {
