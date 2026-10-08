@@ -56,7 +56,7 @@ registros = buscar_tudo(
     "data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2",
 )
 roster = buscar_tudo("infracoes_roster", "nome,ga,go")
-justificativas = buscar_tudo_opcional("infracoes_justificativas", "chave,texto")
+justificativas = buscar_tudo_opcional("infracoes_justificativas", "chave,texto,autor")
 bh_registros = buscar_tudo_opcional(
     "bh_registros", "funcid,nome,bu,subbu,limite_comp,horas,vlr,dias"
 )

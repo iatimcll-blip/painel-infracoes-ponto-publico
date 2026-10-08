@@ -460,7 +460,7 @@
      onde o texto DELE precisar (compact = bem mais baixo que o .just-input "cheio" das abas
      auxiliares, que continua 1 texto só pro período inteiro). */
   .just-date-rows{ display:flex; flex-direction:column; gap:6px; }
-  .just-date-row{ display:flex; align-items:flex-start; gap:8px; }
+  .just-date-row{ display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap; }
   .just-date-row.just-saved{ animation:just-saved-flash 1.2s ease-out; border-radius:6px; }
   .just-date-label{ flex:none; font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--text-muted); padding-top:8px; min-width:32px; }
   .just-input.just-input-compact{ min-height:34px; max-height:200px; padding:7px 9px; }
@@ -472,8 +472,13 @@
   .just-sync-dot.empty{ visibility:hidden; }
   .just-sync-dot.pending{ background:var(--warning); box-shadow:0 0 0 2px var(--warning-tint); }
   .just-sync-dot.synced{ background:var(--good); box-shadow:0 0 0 2px var(--good-tint); }
-  .just-cell-row{ display:flex; align-items:flex-start; gap:7px; }
+  .just-cell-row{ display:flex; align-items:flex-start; gap:7px; flex-wrap:wrap; }
   .just-cell-row .just-sync-dot{ margin-top:10px; }
+  /* quem escreveu cada Justificativa — só aparece quando salva por um usuário logado (Admin ou
+     GA); Usuário Padrão continua editando sem registrar autor, como sempre. flex-basis:100% põe
+     numa linha própria embaixo do campo, nunca espremido ao lado do textarea. */
+  .just-autor{ flex-basis:100%; font-size:10px; color:var(--text-muted); font-style:italic; padding-left:2px; }
+  .just-input:disabled{ opacity:.55; cursor:not-allowed; background:var(--grid); }
 
   /* ---------- detail modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
@@ -1088,7 +1093,34 @@ async function loadAuth(){
     if (session && AUTH.users.some(u => u.username === session)) AUTH.currentUser = session;
   } catch(e) {}
 }
-function isAdmin(){ return !!AUTH.currentUser; }
+// usuário logado atual, no array AUTH.users (undefined se "Usuário Padrão", sem login).
+function currentAuthUser(){ return AUTH.users.find(u => u.username === AUTH.currentUser); }
+// "role" não existia antes desta feature — todo usuário salvo sem o campo é tratado como
+// 'admin' (comportamento de sempre, preservado pra quem já tinha conta criada).
+function currentUserRole(){ const u = currentAuthUser(); return u ? (u.role || 'admin') : null; }
+function isAdmin(){ return currentUserRole() === 'admin'; }
+// GA (Gestor de Área) — login próprio, só pra escrever Justificativa com autoria registrada,
+// restrito aos colaboradores da PRÓPRIA área (ver campoJustEhEditavelPara). Não é Admin: não
+// anexa Base/Hierarquia, não apaga nada — pedido explícito do usuário ("só Justificativa").
+function isGA(){ return currentUserRole() === 'ga'; }
+function currentGaNome(){ const u = currentAuthUser(); return (u && u.gaNome) || null; }
+// true pra Admin e Usuário Padrão (continuam editando qualquer Justificativa, como sempre) —
+// só um GA logado fica restrito aos colaboradores da PRÓPRIA área (ver STATE.hierMap, campo
+// "ga" — compartilhado pelos 4 painéis). É uma trava de fluxo de trabalho client-side, mesmo
+// espírito do resto da autenticação local deste painel: não é segurança de verdade (a RPC de
+// Justificativa continua liberada pra "anon"), é só o caminho normal da tela já vir certo.
+function campoJustEhEditavelPara(nome){
+  if (!isGA()) return true;
+  const h = STATE.hierMap[nome];
+  return !!h && h.ga === currentGaNome();
+}
+function justDisabledAttr(nome){ return campoJustEhEditavelPara(nome) ? '' : ' disabled title="Só o GA desta área (ou um Administrador) pode editar esta Justificativa."'; }
+// legenda pequena de quem escreveu a Justificativa — sem isto, o Admin não tinha como saber
+// QUEM registrou cada uma (pedido do usuário: "...e o usuario Admin verifica todas").
+function justAutorHtml(chave){
+  const autor = (STATE.justificativas[chave] || {}).autor;
+  return autor ? '<span class="just-autor">— '+esc(autor)+'</span>' : '';
+}
 // identidade única no Supabase por trás de qualquer Admin local — as regras de escrita das
 // tabelas exigem um usuário autenticado de verdade, e sem um backend próprio não dá pra validar
 // cada usuário local individualmente contra o Supabase. Por isso NENHUMA senha fica gravada
@@ -1125,7 +1157,11 @@ async function authLogin(username, password){
   if (hash !== user.hash) return false;
   AUTH.currentUser = user.username;
   try { localStorage.setItem(AUTH_SESSION_KEY, user.username); } catch(e) {}
-  if (sb) {
+  // só Admin precisa da sessão de escrita compartilhada no Supabase (Base/Hierarquia/apagar
+  // dados) — GA só escreve Justificativa, que já é liberada pra "anon" (ver
+  // supabase_justificativas.sql), então nem tenta: a senha do GA nunca vai bater com a da conta
+  // compartilhada "admin@painel-infracoes.local", só geraria um erro inútil no console.
+  if (sb && (user.role || 'admin') === 'admin') {
     try { await withTimeout(sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }), 10000, 'login Supabase'); }
     catch(e) { console.error('Não foi possível autenticar no Supabase — escrita sincronizada fica indisponível.', e); }
   }
@@ -1136,18 +1172,32 @@ function authLogout(){
   try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
   if (sb) withTimeout(sb.auth.signOut(), 5000, 'logout Supabase').catch(() => {});
 }
-async function authAddUser(username, password){
+// opts: { role: 'admin'|'ga', gaNome } — role omitida/'admin' preserva o comportamento de
+// sempre (usuário administrador completo). role:'ga' exige gaNome (qual área esse login
+// representa) e grava role+gaNome no registro, pra isAdmin()/isGA()/currentGaNome() lerem depois.
+async function authAddUser(username, password, opts){
   const u = (username||'').trim();
+  const role = (opts && opts.role) || 'admin';
+  const gaNome = (opts && opts.gaNome || '').trim();
   if (!u || !password) return { ok:false, msg:'Preencha usuário e senha.' };
+  if (role === 'ga' && !gaNome) return { ok:false, msg:'Escolha o GA (área) desse usuário.' };
   if (AUTH.users.some(x => x.username.toLowerCase() === u.toLowerCase())) return { ok:false, msg:'Já existe um usuário com esse nome.' };
   const salt = randomHex(16);
   const hash = await sha256Hex(salt + password);
-  AUTH.users.push({ username: u, salt, hash });
+  const novo = { username: u, salt, hash };
+  if (role === 'ga') { novo.role = 'ga'; novo.gaNome = gaNome; }
+  AUTH.users.push(novo);
   saveAuthUsers();
   return { ok:true };
 }
 function authRemoveUser(username){
-  if (AUTH.users.length <= 1) return { ok:false, msg:'Precisa sobrar pelo menos um administrador.' };
+  // só usuários ADMIN contam pra regra "precisa sobrar pelo menos um" — um painel só com GAs e
+  // nenhum Admin fica sem ninguém pra anexar Base/Hierarquia/gerenciar usuários.
+  const admins = AUTH.users.filter(x => (x.role || 'admin') === 'admin');
+  const alvo = AUTH.users.find(x => x.username === username);
+  if (alvo && (alvo.role || 'admin') === 'admin' && admins.length <= 1) {
+    return { ok:false, msg:'Precisa sobrar pelo menos um administrador.' };
+  }
   AUTH.users = AUTH.users.filter(x => x.username !== username);
   saveAuthUsers();
   if (AUTH.currentUser === username) authLogout();
@@ -1307,9 +1357,9 @@ async function fetchAllRows(tabela, colunas){
 // porque alguém escreveu uma Justificativa.
 async function syncJustificativasFromServer(){
   try {
-    const justs = await fetchAllRows('infracoes_justificativas', 'chave,texto');
+    const justs = await fetchAllRows('infracoes_justificativas', 'chave,texto,autor');
     const justMap = {};
-    justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
+    justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto, autor: j.autor || null }; });
     // mesma proteção do hierMap: se a leitura vier vazia, não apaga o que já existe local —
     // só reaplica o que estiver pendente (evita uma leitura vazia/transitória apagando
     // justificativas reais por engano). Não-vazia: servidor manda, pendente sobrepõe por cima.
@@ -1412,7 +1462,7 @@ async function loadFromGithubMirror(){
     // sincronizadas continuam aparecendo, sem apagar nenhuma edição local ainda pendente.
     if (Array.isArray(d.justificativas) && d.justificativas.length) {
       const justMap = {};
-      d.justificativas.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
+      d.justificativas.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto, autor: j.autor || null }; });
       if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
       saveJustificativasToStorage();
     } else if (Object.keys(STATE.justificativasPendente).length) {
@@ -1520,8 +1570,8 @@ async function upsertSingleHierEntryToSupabase(nome, ga, go){
 // justificativa (FCA): chave já carrega nome+período+data embutidos (ver justificativaKeyData/
 // justificativaKeyAux), então o servidor só guarda chave->texto — 1 tabela genérica, sem
 // precisar decompor a chave nem acoplar o schema ao formato dela.
-async function upsertSingleJustificativaToSupabase(chave, texto){
-  const { error } = await withTimeout(sb.rpc('upsert_infracoes_justificativas', { novos: [{ chave, texto }] }), 10000, 'gravar justificativa');
+async function upsertSingleJustificativaToSupabase(chave, texto, autor){
+  const { error } = await withTimeout(sb.rpc('upsert_infracoes_justificativas', { novos: [{ chave, texto, autor: autor || null }] }), 10000, 'gravar justificativa');
   if (error) throw error;
 }
 // APAGA de vez os dados compartilhados no Supabase (registros + hierarquia) — afeta TODO
@@ -1825,8 +1875,8 @@ function saveJustPendenteToStorage(){
 // mesmo padrão de marcarHierPendente/limparHierPendente/aplicarHierPendente: marca uma
 // justificativa como "ainda não confirmada no servidor" ANTES de tentar sincronizar, protegida
 // contra ser apagada por uma leitura do Supabase que chegue no meio da tentativa.
-function marcarJustPendente(chave, texto){
-  STATE.justificativasPendente[chave] = { texto, atualizadoEm: new Date().toISOString() };
+function marcarJustPendente(chave, texto, autor){
+  STATE.justificativasPendente[chave] = { texto, atualizadoEm: new Date().toISOString(), autor: autor || null };
   saveJustPendenteToStorage();
 }
 function limparJustPendente(chave){
@@ -1850,7 +1900,7 @@ async function tentarSincronizarJustPendente(){
   let sincronizadas = 0;
   for (const chave of chaves) {
     try {
-      await upsertSingleJustificativaToSupabase(chave, STATE.justificativasPendente[chave].texto);
+      await upsertSingleJustificativaToSupabase(chave, STATE.justificativasPendente[chave].texto, STATE.justificativasPendente[chave].autor);
       delete STATE.justificativasPendente[chave];
       saveJustPendenteToStorage();
       sincronizadas++;
@@ -3571,7 +3621,8 @@ function renderHierarchy(d){
           return '<div class="just-date-row">' +
             '<span class="just-date-label">'+esc(label)+'</span>' +
             justSyncDotHTML(jChave) +
-            '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…">'+esc(jTexto)+'</textarea>' +
+            '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…"'+justDisabledAttr(c.nome)+'>'+esc(jTexto)+'</textarea>' +
+            justAutorHtml(jChave) +
           '</div>';
         }).join('');
         tr.innerHTML =
@@ -3624,13 +3675,20 @@ function chaveDoJustInput(ta){
 // precisar passar campo por campo). Devolve o que aconteceu pra quem chamou decidir o toast:
 // autosave avisa na hora campo a campo, o botão do bloco resume tudo num toast só no final.
 async function salvarCampoJustificativa(ta, key, flashAlvo){
+  // trava defensiva — a tela já deixa o campo "disabled" pra um GA fora da própria área (ver
+  // justDisabledAttr), então na prática isto nunca deveria disparar sozinho; é só uma segunda
+  // camada contra algum jeito futuro do campo ficar editável por engano.
+  if (!campoJustEhEditavelPara(ta.dataset.nome)) return 'sem-permissao';
   const texto = ta.value.trim();
   const antes = (STATE.justificativas[key] || {}).texto || '';
   if (texto === antes) return 'sem-mudanca'; // nada mudou — não grava (e não pisca "salvo") à toa
-  if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString() };
+  // autor: nome de quem está logado (Admin ou GA) — fica em branco se for Usuário Padrão sem
+  // login, exatamente como já era antes desta feature (não é obrigatório logar pra editar).
+  const autor = AUTH.currentUser || null;
+  if (texto) STATE.justificativas[key] = { texto, atualizadoEm: new Date().toISOString(), autor };
   else delete STATE.justificativas[key];
   saveJustificativasToStorage();
-  marcarJustPendente(key, texto);
+  marcarJustPendente(key, texto, autor);
   if (flashAlvo) {
     flashAlvo.classList.remove('just-saved');
     void flashAlvo.offsetWidth; // força reiniciar a animação CSS se o campo for editado de novo rápido
@@ -3644,7 +3702,7 @@ async function salvarCampoJustificativa(ta, key, flashAlvo){
   // hasSupabaseWriteSession() primeiro — e só a falha de rede/servidor deixa pendente.
   if (!sb) return 'pendente-falhou'; // lib do Supabase nem carregou (bloqueador, sem internet)
   try {
-    await withRetry(() => upsertSingleJustificativaToSupabase(key, texto), 3, 2000);
+    await withRetry(() => upsertSingleJustificativaToSupabase(key, texto, autor), 3, 2000);
     limparJustPendente(key);
     atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
     return 'sincronizada';
@@ -3720,6 +3778,13 @@ function updateRoleBadge(){
       badge.classList.remove('needs-relogin');
       badge.title = '';
     }
+  } else if (isGA()) {
+    // GA não depende de sessão de escrita no Supabase (Justificativa já sincroniza pra
+    // qualquer um) — por isso não entra no caminho needs-relogin acima, que é só pra Admin.
+    badge.textContent = 'GA: ' + currentGaNome();
+    badge.classList.add('is-admin'); // reaproveita o estilo "logado" (verde) — é um login válido, só não é Admin
+    badge.classList.remove('needs-relogin');
+    badge.title = 'Logado como ' + AUTH.currentUser + ' — escreve Justificativa só dos colaboradores de "' + currentGaNome() + '".';
   } else {
     badge.textContent = 'Usuário Padrão';
     badge.classList.remove('is-admin', 'needs-relogin');
@@ -3746,12 +3811,12 @@ function renderSettingsPanel(){
   const body = document.getElementById('settings-body');
   clear(body);
 
-  if (!isAdmin()) {
+  if (!AUTH.currentUser) {
     const sec = document.createElement('div');
     sec.className = 'settings-section';
     sec.innerHTML =
-      '<h3>Entrar como administrador</h3>' +
-      '<p class="settings-note">Você está navegando como <b>Usuário Padrão</b>: pode ver todos os blocos, filtros, indicadores e ciclos, e também editar a hierarquia — só não pode anexar novas bases. Entre como administrador para liberar essa ação e gerenciar usuários.</p>' +
+      '<h3>Entrar</h3>' +
+      '<p class="settings-note">Você está navegando como <b>Usuário Padrão</b>: pode ver todos os blocos, filtros, indicadores e ciclos, e também editar a hierarquia e Justificativas — só não pode anexar novas bases. Entre como administrador (acesso completo) ou como GA (só Justificativa da própria área, com autoria registrada).</p>' +
       '<div class="login-form">' +
         '<label>Usuário<input type="text" id="login-user" autocomplete="username"></label>' +
         '<label>Senha<input type="password" id="login-pass" autocomplete="current-password"></label>' +
@@ -3774,8 +3839,8 @@ function renderSettingsPanel(){
         updateRoleBadge();
         renderSettingsPanel();
         recomputeAndRender();
-        showToast('Entrou como administrador: ' + AUTH.currentUser + '.');
-        checkSupabaseSessionForBadge(); // authLogin() acabou de tentar renovar a sessão no Supabase com a senha atual
+        showToast(isGA() ? ('Entrou como GA: ' + currentGaNome() + '.') : ('Entrou como administrador: ' + AUTH.currentUser + '.'));
+        checkSupabaseSessionForBadge(); // authLogin() acabou de tentar renovar a sessão no Supabase com a senha atual (só se for Admin)
       } else {
         errEl.textContent = 'Usuário ou senha incorretos.';
       }
@@ -3783,6 +3848,28 @@ function renderSettingsPanel(){
     submit.addEventListener('click', doLogin);
     sec.querySelector('#login-pass').addEventListener('keydown', evt => { if (evt.key === 'Enter') doLogin(); });
     sec.querySelector('#login-user').focus();
+    return;
+  }
+
+  if (isGA()) {
+    // GA não tem acesso a nada dos blocos abaixo (anexar Base/Hierarquia, apagar dados,
+    // gerenciar usuários) — só confirma quem é, a área, e deixa sair. O resto do trabalho dele
+    // (escrever Justificativa) acontece direto nos painéis, não aqui em Configurações.
+    const sec = document.createElement('div');
+    sec.className = 'admin-welcome';
+    sec.innerHTML = '<span>Logado como GA: ' + esc(currentGaNome()) + ' (' + esc(AUTH.currentUser) + ')</span><button type="button" class="he-btn" id="logout-btn">Sair</button>';
+    body.appendChild(sec);
+    sec.querySelector('#logout-btn').addEventListener('click', () => {
+      authLogout();
+      updateRoleBadge();
+      renderSettingsPanel();
+      recomputeAndRender();
+      showToast('Sessão encerrada — voltou para Usuário Padrão.');
+    });
+    const nota = document.createElement('div');
+    nota.className = 'settings-section';
+    nota.innerHTML = '<p class="settings-note">Como GA, você só edita a Justificativa (FCA) dos colaboradores de <b>' + esc(currentGaNome()) + '</b> — os campos de outras áreas ficam bloqueados pra edição. Toda Justificativa que você salvar registra seu nome como autor.</p>';
+    body.appendChild(nota);
     return;
   }
 
@@ -3956,18 +4043,21 @@ function renderSettingsPanel(){
     });
   });
 
+  const admins = AUTH.users.filter(u => (u.role || 'admin') === 'admin');
+  const gaUsers = AUTH.users.filter(u => (u.role || 'admin') === 'ga');
+
   const usersSec = document.createElement('div');
   usersSec.className = 'settings-section';
   usersSec.innerHTML = '<h3>Usuários administradores</h3>';
   const list = document.createElement('div');
   list.className = 'user-list';
-  AUTH.users.forEach(u => {
+  admins.forEach(u => {
     const row = document.createElement('div');
     row.className = 'user-row';
     const isYou = u.username === AUTH.currentUser;
     row.innerHTML =
       '<span class="un">' + esc(u.username) + (isYou ? '<span class="you-tag">você</span>' : '') + '</span>' +
-      '<button type="button"' + (AUTH.users.length <= 1 ? ' disabled title="precisa sobrar pelo menos um administrador"' : '') + '>Remover</button>';
+      '<button type="button"' + (admins.length <= 1 ? ' disabled title="precisa sobrar pelo menos um administrador"' : '') + '>Remover</button>';
     row.querySelector('button').addEventListener('click', () => {
       const res = authRemoveUser(u.username);
       if (!res.ok) { showToast(res.msg); return; }
@@ -3998,6 +4088,57 @@ function renderSettingsPanel(){
     showToast('Usuário ' + name + ' adicionado.');
   });
   body.appendChild(usersSec);
+
+  // "Usuários por GA" — login restrito: só escreve Justificativa, só dos colaboradores da
+  // própria área (ver campoJustEhEditavelPara), com o nome do GA gravado como autor de cada
+  // edição. Pedido do usuário: "criar um usuario para cada GA... e o Admin verifica todas".
+  const gaSec = document.createElement('div');
+  gaSec.className = 'settings-section';
+  gaSec.innerHTML = '<h3>Usuários por GA</h3><p class="settings-note">Login restrito só pra escrever Justificativa (FCA) — não anexa Base/Hierarquia, não apaga nada. Só edita os colaboradores da área escolhida abaixo, e cada edição grava o nome do GA como autor.</p>';
+  const gaList = document.createElement('div');
+  gaList.className = 'user-list';
+  gaUsers.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    const isYou = u.username === AUTH.currentUser;
+    row.innerHTML =
+      '<span class="un">' + esc(u.username) + ' <span class="you-tag" style="color:var(--text-muted)">(' + esc(u.gaNome) + ')</span>' + (isYou ? '<span class="you-tag">você</span>' : '') + '</span>' +
+      '<button type="button">Remover</button>';
+    row.querySelector('button').addEventListener('click', () => {
+      const res = authRemoveUser(u.username);
+      if (!res.ok) { showToast(res.msg); return; }
+      updateRoleBadge();
+      renderSettingsPanel();
+      showToast('Usuário ' + u.username + ' removido.');
+    });
+    gaList.appendChild(row);
+  });
+  gaSec.appendChild(gaList);
+
+  const gaAddForm = document.createElement('div');
+  gaAddForm.className = 'add-user-form';
+  const gasConhecidos = new Set();
+  Object.values(STATE.hierMap).forEach(h => { if (h.ga) gasConhecidos.add(h.ga); });
+  gaAddForm.innerHTML =
+    '<label>Novo usuário<input type="text" id="new-ga-user-name" autocomplete="off"></label>' +
+    '<label>Senha<input type="password" id="new-ga-user-pass" autocomplete="new-password"></label>' +
+    '<label>GA (área)<input type="text" id="new-ga-user-ga" list="new-ga-user-ga-list" autocomplete="off"></label>' +
+    '<datalist id="new-ga-user-ga-list">' + [...gasConhecidos].sort().map(g => '<option value="' + esc(g) + '">').join('') + '</datalist>' +
+    '<button type="button" class="he-btn primary" id="new-ga-user-add">Adicionar</button>';
+  gaSec.appendChild(gaAddForm);
+  gaAddForm.querySelector('#new-ga-user-add').addEventListener('click', async () => {
+    const name = gaAddForm.querySelector('#new-ga-user-name').value;
+    const pass = gaAddForm.querySelector('#new-ga-user-pass').value;
+    const gaNome = gaAddForm.querySelector('#new-ga-user-ga').value;
+    const btn = gaAddForm.querySelector('#new-ga-user-add');
+    btn.disabled = true;
+    const res = await authAddUser(name, pass, { role: 'ga', gaNome });
+    btn.disabled = false;
+    if (!res.ok) { showToast(res.msg); return; }
+    renderSettingsPanel();
+    showToast('Usuário de GA ' + name + ' (' + gaNome + ') adicionado.');
+  });
+  body.appendChild(gaSec);
 }
 
 document.getElementById('settings-btn').addEventListener('click', () => {
@@ -5110,7 +5251,7 @@ const BH_OPTS = {
       '<td class="num-col num'+(p.vlr<0?' has-infra':'')+'">'+esc(fmtMoeda(p.vlr))+'</td>'+
       '<td class="num-col num'+(p.dias<0?' has-infra':'')+'">'+fmt(Math.round(p.dias*10)/10)+'</td>'+
       '<td>'+esc(datasLimiteLabel(p))+'</td>'+
-      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…"'+justDisabledAttr(p.nome)+'>'+esc(justTexto)+'</textarea>'+justAutorHtml(justKey)+'</div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Horas:fmtHorasDecimais(p.horasDec), Consolidado:fmtHorasDecimais(p.consolidado), Valor:p.vlr, Dias:Math.round(p.dias*10)/10, 'Data Limite':datasLimiteLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -5236,7 +5377,7 @@ const DSR_OPTS = {
       '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…"'+justDisabledAttr(p.nome)+'>'+esc(justTexto)+'</textarea>'+justAutorHtml(justKey)+'</div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
@@ -5357,7 +5498,7 @@ const FERIADO_OPTS = {
       '<td class="num-col num'+(p.consolidado<0?' has-infra':'')+'" title="Total geral, independente do filtro selecionado">'+esc(fmtHorasSoltas(p.consolidado))+'</td>'+
       '<td class="num-col num'+(p.valor<0?' has-infra':'')+'">'+esc(fmtMoeda(p.valor))+'</td>'+
       '<td>'+esc(datasHorariosLabel(p))+'</td>'+
-      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…">'+esc(justTexto)+'</textarea></div></td>';
+      '<td class="just-col"><div class="just-cell-row">'+justSyncDotHTML(justKey)+'<textarea class="just-input" rows="3" data-nome="'+esc(p.nome)+'" data-tema="'+esc(ctx.tema)+'" data-period-type="'+esc(ctx.periodType)+'" data-period-key="'+esc(ctx.periodKey)+'" placeholder="Justificar (FCA)…"'+justDisabledAttr(p.nome)+'>'+esc(justTexto)+'</textarea>'+justAutorHtml(justKey)+'</div></td>';
   },
   exportRow: (p, go, ga, ctx) => ({ GO:go, GA:ga, Colaborador:p.nome, Tipo:[...p.tipos].join(', '), 'Ocorrências':p.ocorrencias, Horas:Math.round(p.horas*100)/100, Consolidado:Math.round(p.consolidado*100)/100, Valor:p.valor, 'Data / Horário':datasHorariosLabel(p),
     'Justificativa (FCA)': (STATE.justificativas[justificativaKeyAux(ctx.tema, p.nome, ctx.periodType, ctx.periodKey)] || {}).texto || '' }),
