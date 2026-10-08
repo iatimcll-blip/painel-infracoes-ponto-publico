@@ -38,11 +38,17 @@ alter table public.painel_usuarios enable row level security;
 
 -- valida usuário+senha SEM NUNCA devolver salt/hash — só confirma "bateu" e, se sim, o papel
 -- (role) e a área (ga_nome) pra authLogin() montar a sessão local.
+-- search_path inclui "extensions" de propósito: no Supabase o pgcrypto (função digest(), usada
+-- abaixo) é instalado nesse schema, não em "public" — com search_path só "public" a função dava
+-- erro 42883 "function digest(text, unknown) does not exist" em QUALQUER chamada que chegasse a
+-- usá-la (confirmado em produção: toda tentativa de login de um usuário que REALMENTE existia na
+-- tabela falhava com esse erro — só não aparecia pra usuário inexistente, que retorna antes de
+-- chegar no digest()).
 create or replace function public.painel_validar_login(p_username text, p_password text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   u record;

@@ -40,6 +40,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | [`supabase_apagar_so_infracoes.sql`](supabase_apagar_so_infracoes.sql) | RPC `clear_infracoes_registros_only` (apaga só `infracoes_registros`, preserva `infracoes_roster`/Hierarquia) | 2026-10-08 | — |
 | [`supabase_justificativa_autor.sql`](supabase_justificativa_autor.sql) | Coluna `autor` em `infracoes_justificativas` + atualiza `upsert_infracoes_justificativas` pra gravá-la | 2026-10-08 | Sim (campo `autor` incluso no espelho desde 2026-10-08) |
 | [`supabase_usuarios_sync.sql`](supabase_usuarios_sync.sql) | Tabela `painel_usuarios` (sem policy de leitura — só via RPC) + RPCs `painel_validar_login` (anon+authenticated), `painel_sincronizar_usuario`/`painel_remover_usuario_sync` (authenticated-only) — login de GA/Admin extra passa a funcionar em qualquer dispositivo, não só no navegador onde foi criado | 2026-10-08 | — |
+| [`supabase_usuarios_sync.sql`](supabase_usuarios_sync.sql) (fix) | `painel_validar_login`: `search_path` passa a incluir `extensions` (schema onde o Supabase instala o pgcrypto) — sem isto, `digest()` dava erro 42883 em QUALQUER login de usuário que realmente existisse na tabela (confirmado em produção: todos os 14 GAs recém-sincronizados ficaram impossíveis de logar até este fix) | 2026-10-08 | — |
 
 ## Padrão de segurança usado em toda tabela deste projeto
 
