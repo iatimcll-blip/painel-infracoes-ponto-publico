@@ -3918,8 +3918,17 @@ function renderSettingsPanel(){
       erro: 'Não foi possível apagar as Infrações — tente de novo em instantes.',
       run: async () => {
         await clearInfracoesRegistrosOnly();
+        // NÃO chama loadFromSupabase() aqui — ela ignora leituras vazias DE PROPÓSITO (pra uma
+        // falha transitória de rede não apagar dados reais da tela por engano), então depois de
+        // um apagamento DELIBERADO a tela continuava mostrando os dados antigos em cache,
+        // parecendo que nada tinha acontecido. Zera a tela direto — é exatamente isso que acabou
+        // de virar verdade no servidor.
+        STATE.raw = [];
+        STATE.usingDefault = false;
+        STATE.usingSupabase = true;
+        STATE.readSyncFailed = false;
+        saveToStorage();
         showToast('Infrações apagadas do servidor — Hierarquia preservada.');
-        await loadFromSupabase();
         recomputeAndRender();
       },
     });
@@ -3933,8 +3942,15 @@ function renderSettingsPanel(){
       erro: 'Não foi possível apagar os dados do servidor — tente de novo em instantes.',
       run: async () => {
         await clearSharedSupabaseData();
+        // mesmo motivo do botão "Apagar só Infrações" acima — loadFromSupabase() não reflete
+        // uma leitura vazia por design, então zera a tela direto em vez de confiar nela aqui.
+        STATE.raw = [];
+        STATE.hierMap = {};
+        STATE.usingDefault = false;
+        STATE.usingSupabase = true;
+        STATE.readSyncFailed = false;
+        saveToStorage();
         showToast('Dados do servidor apagados.');
-        await loadFromSupabase();
         recomputeAndRender();
       },
     });
