@@ -1532,6 +1532,15 @@ async function clearSharedSupabaseData(){
   const { error } = await withTimeout(sb.rpc('clear_infracoes_shared_data'), 20000, 'apagar dados do servidor');
   if (error) throw error;
 }
+// apaga só infracoes_registros, preserva infracoes_roster (Hierarquia) — pedido explícito do
+// usuário: "apagar as informações internas pra que os dados novos sejam importados" só pra
+// Infrações, sem perder o vínculo GA/GO já configurado de cada colaborador. clear_infracoes_
+// shared_data (botão "Apagar Base + Hierarquia" logo acima) apaga os dois juntos; esta função é
+// a versão restrita, numa RPC separada (authenticated-only, igual todo o resto).
+async function clearInfracoesRegistrosOnly(){
+  const { error } = await withTimeout(sb.rpc('clear_infracoes_registros_only'), 20000, 'apagar só Infrações');
+  if (error) throw error;
+}
 // "Limpar dados de bases anteriores" (botões em Configurações) — upload de Base/planilha
 // auxiliar é sempre upsert (nunca apaga quem some do arquivo novo, ver upsertBaseToSupabase/
 // upsertAuxToSupabase), então quem corrigiu uma infração e some da planilha mais recente
@@ -3894,9 +3903,27 @@ function renderSettingsPanel(){
   dangerSec.className = 'settings-section danger-zone';
   dangerSec.innerHTML =
     '<h3>Zona de perigo</h3>' +
-    '<p class="settings-note">Apaga de vez os dados compartilhados no Supabase (Base + Hierarquia). Afeta <b>todo dispositivo</b> que sincronizar com este painel, e qualquer outro processo que também escreva nessa base. Não tem como desfazer.</p>' +
-    '<button type="button" class="danger-btn" id="danger-clear-server">Apagar dados do servidor</button>';
+    '<p class="settings-note">Apaga de vez os dados compartilhados no Supabase. Afeta <b>todo dispositivo</b> que sincronizar com este painel, e qualquer outro processo que também escreva nessa base. Não tem como desfazer.</p>' +
+    '<div class="settings-btn-row" style="flex-wrap:wrap;">' +
+      '<button type="button" class="danger-btn" id="danger-clear-registros">Apagar só Infrações (mantém Hierarquia)</button>' +
+      '<button type="button" class="danger-btn" id="danger-clear-server">Apagar Base + Hierarquia</button>' +
+    '</div>';
   body.appendChild(dangerSec);
+  dangerSec.querySelector('#danger-clear-registros').addEventListener('click', () => {
+    if (!sb) { showToast('Supabase não está disponível agora.'); return; }
+    openDangerConfirm({
+      titulo: 'Apagar só Infrações',
+      mensagem: 'Isto apaga <b>permanentemente</b> todos os registros de Infrações (<code>infracoes_registros</code>) do Supabase — zera tudo pra importar uma Base nova do zero. A Hierarquia (vínculo GA/GO de cada colaborador) <b>não é afetada</b>. Afeta todo dispositivo. Não tem como desfazer.',
+      botao: 'Apagar só Infrações',
+      erro: 'Não foi possível apagar as Infrações — tente de novo em instantes.',
+      run: async () => {
+        await clearInfracoesRegistrosOnly();
+        showToast('Infrações apagadas do servidor — Hierarquia preservada.');
+        await loadFromSupabase();
+        recomputeAndRender();
+      },
+    });
+  });
   dangerSec.querySelector('#danger-clear-server').addEventListener('click', () => {
     if (!sb) { showToast('Supabase não está disponível agora.'); return; }
     openDangerConfirm({
