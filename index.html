@@ -3297,9 +3297,19 @@ function gaCellHTML(nome, ga){
 function renderTop(d){
   const tbody = document.getElementById('top-rows');
   clear(tbody);
-  document.getElementById('afetados-hint').textContent = d.afetadosCount + ' de ' + d.roster + ' colaboradores afetados';
-  const maxTotal = Math.max(...d.topColaboradores.map(t=>t.total), 1);
-  d.topColaboradores.forEach((t, i) => {
+  // mesma restrição do bloco "Colaboradores por hierarquia" (ver renderHierarchy) — esta tabela
+  // lista pessoas INDIVIDUAIS de qualquer GA, com link pro detalhe de cada uma; sem filtrar
+  // aqui também, um GA logado continuava vendo nome de gente de outra área, só que numa tabela
+  // diferente — exatamente o vazamento que o usuário reportou.
+  const topVisiveis = isGA() ? d.topColaboradores.filter(t => t.ga === currentGaNome()) : d.topColaboradores;
+  // "X de Y afetados" pro GA usa o tamanho da PRÓPRIA equipe como Y (não o roster da empresa
+  // inteira, que não teria sentido nenhum misturado com um X só da área dele).
+  const equipeGa = isGA() ? (d.hierBlocks.find(b => b.ga === currentGaNome()) || { equipe: topVisiveis.length }).equipe : null;
+  document.getElementById('afetados-hint').textContent = isGA()
+    ? (topVisiveis.length + ' de ' + equipeGa + ' colaboradores afetados')
+    : (d.afetadosCount + ' de ' + d.roster + ' colaboradores afetados');
+  const maxTotal = Math.max(...topVisiveis.map(t=>t.total), 1);
+  topVisiveis.forEach((t, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td class="rank">'+(i+1)+'</td>' +
