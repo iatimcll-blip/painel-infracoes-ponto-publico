@@ -1379,6 +1379,39 @@ function justificativaKey(nome, periodType, periodKey){
 function justificativaKeyData(nome, periodType, periodKey, dataISO){
   return justificativaKey(nome, periodType, periodKey) + '|' + dataISO;
 }
+// BUG real reportado pelo usuário: "quando estou selecionado o periodo as informações que estão
+// que constam neste periodo somem" — a Justificativa (FCA) de 1 data específica usava o
+// periodType/periodKey do FILTRO ATIVO NA TELA (ciclo/semana/Período) na hora de montar a chave,
+// então o mesmo texto salvo vendo "por ciclo" ficava invisível ao olhar a MESMA data vendo "por
+// semana" ou "por Período" — a chave mudava mesmo a data sendo idêntica. Uma data só pertence a
+// UM ciclo de pagamento (sempre o mesmo, não importa qual filtro a pessoa está olhando agora),
+// então toda chave de Justificativa por data passa a usar sempre esse ciclo canônico — nunca o
+// periodType/periodKey do filtro selecionado.
+function periodoCanonicoDaData(dataISO){
+  const c = cicloOf(dataISO);
+  return { periodType: 'ciclo', periodKey: c ? c.key : dataISO };
+}
+// recupera texto que ficou "preso" numa chave não-canônica por causa do bug acima, de ANTES
+// deste fix (alguém escreveu vendo por semana/Período, a chave gravou esse periodType/periodKey
+// em vez do ciclo da data) — sem isto, quem já foi afetado pelo bug continuaria sem ver o que
+// escreveu mesmo depois do fix, porque o texto existe mas sob uma chave "órfã" diferente da
+// canônica. Migra (copia pra a canônica, remove a antiga, marca pendente pra sincronizar de
+// novo sob a chave nova) só quando a canônica ainda está vazia — nunca sobrescreve algo que já
+// foi digitado/salvo direto na canônica.
+function migrarJustificativaOrfaDaData(nome, iso, chaveCanonica){
+  if ((STATE.justificativas[chaveCanonica] || {}).texto) return;
+  const prefixo = nome + '::', sufixo = '|' + iso;
+  for (const k of Object.keys(STATE.justificativas)) {
+    if (k === chaveCanonica || !k.startsWith(prefixo) || !k.endsWith(sufixo)) continue;
+    const v = STATE.justificativas[k];
+    if (!v || !v.texto) continue;
+    STATE.justificativas[chaveCanonica] = v;
+    delete STATE.justificativas[k];
+    marcarJustPendente(chaveCanonica, v.texto, v.autor || null);
+    saveJustificativasToStorage();
+    break; // não deveria existir mais de 1 órfã pra mesma pessoa+data — migra só a primeira achada
+  }
+}
 // antes desta mudança existia só 1 justificativa por colaborador+período (chave sem a data).
 // Se essa chave antiga ainda tiver texto e nenhuma das datas já tiver sido preenchida, joga o
 // texto antigo pra primeira data (não perde o que o GA já tinha escrito) — roda 1x por pessoa,
@@ -1397,8 +1430,16 @@ function migrarJustificativaAntigaSeNecessario(nome, periodType, periodKey, data
 // exportações (Excel/PPT), que mostram 1 célula por colaborador, não 1 linha por data como a
 // tela agora mostra.
 function justificativasConsolidadas(nome, periodType, periodKey, datas){
+  // periodType/periodKey ficam só por compatibilidade de assinatura — a chave de verdade usa
+  // sempre o ciclo canônico de CADA data (ver periodoCanonicoDaData), nunca o filtro ativo na
+  // tela no momento da exportação (mesmo bug de chave que afetava a tela, ver o comentário ali).
   return (datas || [])
-    .map(iso => ({ iso, texto: (STATE.justificativas[justificativaKeyData(nome, periodType, periodKey, iso)] || {}).texto || '' }))
+    .map(iso => {
+      const pc = periodoCanonicoDaData(iso);
+      const chave = justificativaKeyData(nome, pc.periodType, pc.periodKey, iso);
+      migrarJustificativaOrfaDaData(nome, iso, chave);
+      return { iso, texto: (STATE.justificativas[chave] || {}).texto || '' };
+    })
     .filter(x => x.texto)
     .map(x => fmtDM(parseISODate(x.iso)) + ': ' + x.texto)
     .join(' | ');
@@ -3962,13 +4003,19 @@ function renderHierarchy(d){
         // 1 linha de justificativa por data (pedido do usuário) — cada data com infração ganha
         // seu próprio campo, em vez de 1 texto só cobrindo todas as datas do período.
         const justRowsHtml = (c.datas || []).map(iso => {
-          const jChave = justificativaKeyData(c.nome, d.periodType, d.periodKey, iso);
+          // chave canônica pelo ciclo da PRÓPRIA data (ver periodoCanonicoDaData) — nunca
+          // d.periodType/d.periodKey do filtro ativo na tela, senão a mesma Justificativa
+          // "desaparece" ao trocar entre ciclo/semana/Período vendo a mesma data (bug real
+          // reportado pelo usuário, ver o comentário em periodoCanonicoDaData).
+          const pc = periodoCanonicoDaData(iso);
+          const jChave = justificativaKeyData(c.nome, pc.periodType, pc.periodKey, iso);
+          migrarJustificativaOrfaDaData(c.nome, iso, jChave);
           const jTexto = (STATE.justificativas[jChave] || {}).texto || '';
           const label = fmtDM(parseISODate(iso));
           return '<div class="just-date-row">' +
             '<span class="just-date-label">'+esc(label)+'</span>' +
             justSyncDotHTML(jChave) +
-            '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(d.periodType)+'" data-period-key="'+esc(d.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…"'+justDisabledAttr(c.nome)+'>'+esc(jTexto)+'</textarea>' +
+            '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(pc.periodType)+'" data-period-key="'+esc(pc.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…"'+justDisabledAttr(c.nome)+'>'+esc(jTexto)+'</textarea>' +
             justAutorHtml(jChave) +
           '</div>';
         }).join('');
