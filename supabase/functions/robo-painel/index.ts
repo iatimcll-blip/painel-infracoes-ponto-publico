@@ -36,7 +36,12 @@ async function pg(path: string, init: RequestInit = {}) {
     },
   });
   if (!resp.ok) throw new Error('PostgREST ' + resp.status + ': ' + (await resp.text()));
-  return resp.json();
+  // bug real encontrado: um POST/PATCH sem "Prefer: return=representation" volta 2xx com corpo
+  // VAZIO (padrão do PostgREST) — chamar resp.json() nesse caso sempre quebrava com "Unexpected
+  // end of JSON input", disfarçado de "falha interna" pro usuário (runSalvarJustificativa nunca
+  // conseguia terminar com sucesso, mesmo quando o INSERT/UPSERT já tinha sido feito).
+  const texto = await resp.text();
+  return texto ? JSON.parse(texto) : null;
 }
 
 // mesma regra de ciclo de pagamento (15 a 14) de cicloOf() em painel2.html, reimplementada aqui
@@ -70,9 +75,22 @@ async function runConsultarInfracoes(input: any, ctx: Contexto) {
     porNome[r.nome].hex += r.he2 || 0;
     porNome[r.nome].datas.push(r.data);
   }
-  const porColaborador = Object.values(porNome).map((c: any) => ({ ...c, total: c.d7 + c.interj + c.hex }));
+  const porColaborador = Object.values(porNome).map((c: any) => ({ nome: c.nome, ga: c.ga, go: c.go, d7: c.d7, interj: c.interj, hex: c.hex, total: c.d7 + c.interj + c.hex }));
   porColaborador.sort((a: any, b: any) => b.total - a.total);
-  return { ciclo_inicio, ga_filtrado: gaFiltro, total_colaboradores_com_infracao: porColaborador.length, colaboradores: porColaborador.slice(0, 60) };
+  // soma geral já pronta (não obriga o modelo a somar dezenas de colaboradores "de cabeça" pra
+  // responder "quantas infrações no total") — e a lista fica mais enxuta (sem o array `datas`,
+  // que só importa pra detalhar UM colaborador, não pra uma visão geral) e MENOR (top 25, não
+  // 60): um ciclo com 80+ colaboradores gerava um resultado tão grande que o modelo gastava todo
+  // o orçamento de "pensamento estendido" só processando aquilo, sem sobrar nada pra responder
+  // (bug real: stop_reason "max_tokens" com resposta vazia — ver também o aumento de max_tokens
+  // em chamarAnthropic).
+  const totalGeral = porColaborador.reduce((s: number, c: any) => s + c.total, 0);
+  return {
+    ciclo_inicio, ga_filtrado: gaFiltro,
+    total_colaboradores_com_infracao: porColaborador.length,
+    total_infracoes_geral: totalGeral,
+    top_colaboradores: porColaborador.slice(0, 25),
+  };
 }
 
 async function runConsultarPendencias(input: any, ctx: Contexto) {
@@ -82,14 +100,22 @@ async function runConsultarPendencias(input: any, ctx: Contexto) {
   let path = 'infracoes_registros?select=data,nome,ga&ciclo_inicio=eq.' + encodeURIComponent(ciclo_inicio) + '&limit=3000';
   if (gaFiltro) path += '&ga=eq.' + encodeURIComponent(gaFiltro);
   const linhas = await pg(path);
-  if (!linhas.length) return { ciclo_inicio, ga_filtrado: gaFiltro, pendentes: [] };
-  const chaves = linhas.map((r: any) => justificativaKeyData(r.nome, ciclo_inicio, r.data));
-  const justs: any[] = await pg('infracoes_justificativas?select=chave,texto&chave=in.(' + chaves.map((c: string) => '"' + c.replace(/"/g, '\\"') + '"').join(',') + ')');
+  if (!linhas.length) return { ciclo_inicio, ga_filtrado: gaFiltro, total_pendentes: 0, pendentes: [] };
+  // bug real encontrado: construir um filtro in.("chave1","chave2",...) com uma chave por LINHA
+  // (às vezes 300+) sem url-encode em cada uma (chave tem espaço, acento, : e | — nenhum deles
+  // seguro cru numa query string) gerava uma URL inválida/gigante e o pg() sempre falhava. Em vez
+  // disso, busca TODAS as justificativas desse ciclo de uma vez só com "like" (chave sempre
+  // termina em "::ciclo:<início>|<data>" — o início do ciclo aparece sempre nesse formato), 1
+  // request só, sem depender de quantas linhas a Base tem.
+  const likePattern = encodeURIComponent('*::ciclo:' + ciclo_inicio + '|*');
+  const justs: any[] = await pg('infracoes_justificativas?select=chave,texto&chave=like.' + likePattern);
   const comTexto = new Set(justs.filter(j => (j.texto || '').trim()).map(j => j.chave));
   const pendentes = linhas
     .filter((r: any) => !comTexto.has(justificativaKeyData(r.nome, ciclo_inicio, r.data)))
     .map((r: any) => ({ nome: r.nome, ga: r.ga, data: r.data }));
-  return { ciclo_inicio, ga_filtrado: gaFiltro, total_pendentes: pendentes.length, pendentes: pendentes.slice(0, 80) };
+  // mesmo cuidado de tamanho de runConsultarInfracoes — devolve o total certo sempre, mas só
+  // lista até 30 linhas (o modelo já sabe, pelo total_pendentes, que a lista pode estar cortada).
+  return { ciclo_inicio, ga_filtrado: gaFiltro, total_pendentes: pendentes.length, pendentes: pendentes.slice(0, 30) };
 }
 
 async function runSalvarJustificativa(input: any, ctx: Contexto) {
@@ -111,7 +137,12 @@ async function runSalvarJustificativa(input: any, ctx: Contexto) {
   }
   const cicloInicio = cicloInicioISO(data);
   const chave = justificativaKeyData(nome, cicloInicio, data);
-  await pg('infracoes_justificativas', {
+  // bug real encontrado: sem "on_conflict=chave" na URL, o PostgREST não sabe qual coluna usar
+  // como alvo do upsert e tenta um INSERT puro — que batia na constraint única toda vez que já
+  // existia uma justificativa pra esse colaborador+data (erro 23505 "duplicate key value"),
+  // disfarçado de "falha interna" pro usuário. "chave" já tem UNIQUE (ver
+  // infracoes_justificativas_chave_key) — é o mesmo alvo que upsert_infracoes_justificativas usa.
+  await pg('infracoes_justificativas?on_conflict=chave', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates' },
     body: JSON.stringify([{ chave, texto, autor: ctx.username, atualizado_em: new Date().toISOString() }]),
@@ -204,7 +235,11 @@ async function chamarAnthropic(mensagens: any[], ctx: Contexto) {
       },
       body: JSON.stringify({
         model: MODELO,
-        max_tokens: 1024,
+        // 1024 era pouco: com um resultado de ferramenta grande (ex.: ciclo com 80+
+        // colaboradores), o "pensamento estendido" do modelo sozinho já consumia o limite
+        // inteiro, sem sobrar nada pra resposta final — stop_reason virava "max_tokens" com
+        // texto vazio (bug real, reproduzido e confirmado). 4096 dá folga pra pensar E responder.
+        max_tokens: 4096,
         system: montarSystemPrompt(ctx),
         tools: FERRAMENTAS,
         messages: historico,
@@ -218,7 +253,15 @@ async function chamarAnthropic(mensagens: any[], ctx: Contexto) {
     const data = await resp.json();
     historico.push({ role: 'assistant', content: data.content });
     if (data.stop_reason !== 'tool_use') {
-      const textoFinal = (data.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim() || '(sem resposta)';
+      let textoFinal = (data.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+      if (!textoFinal) {
+        // rede de segurança (não deveria mais acontecer com max_tokens:4096, mas se um dia um
+        // resultado de ferramenta vier gigante de novo, melhor essa mensagem clara do que
+        // "(sem resposta)" sem explicação nenhuma).
+        textoFinal = data.stop_reason === 'max_tokens'
+          ? 'A resposta ficou grande demais pra processar de uma vez — tente perguntar de um jeito mais específico (ex.: só um GA, ou um resumo em vez da lista completa).'
+          : '(sem resposta)';
+      }
       return { resposta: textoFinal, alterou_dados: alterouDados };
     }
     const usosDeFerramenta = (data.content || []).filter((b: any) => b.type === 'tool_use');
@@ -237,14 +280,14 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   try {
     const { mensagens, contexto } = await req.json();
-    if (!Array.isArray(mensagens) || !mensagens.length) {
-      return new Response(JSON.stringify({ erro: 'mensagens vazio' }), { status: 400, headers: CORS_HEADERS });
-    }
     const ctx: Contexto = {
       username: contexto?.username ?? null,
       role: contexto?.role ?? null,
       gaNome: contexto?.gaNome ?? null,
     };
+    if (!Array.isArray(mensagens) || !mensagens.length) {
+      return new Response(JSON.stringify({ erro: 'mensagens vazio' }), { status: 400, headers: CORS_HEADERS });
+    }
     const resultado = await chamarAnthropic(mensagens, ctx);
     return new Response(JSON.stringify(resultado), { headers: { ...CORS_HEADERS, 'content-type': 'application/json' } });
   } catch (e) {
