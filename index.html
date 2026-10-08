@@ -1067,7 +1067,12 @@ const AUTH_SESSION_KEY = 'painelInfracoes.auth.session.v1';
 // via "como Administrador" e mesmo assim toda sincronização falhava, sem nenhuma pista do
 // motivo (era literalmente o que o usuário reportou: "erro ao anexar a base, dados não sobem
 // e não sincronizam").
-const AUTH = { users: [], currentUser: null, supabaseSessionOk: null };
+// currentRole/currentGaNome vivem NA SESSÃO (não são mais derivados de procurar AUTH.currentUser
+// dentro de AUTH.users) — motivo: um GA criado no navegador do Admin e sincronizado pro servidor
+// (ver painel_sincronizar_usuario) loga em QUALQUER outro navegador validando direto no
+// servidor (painel_validar_login), sem nunca ter entrado no AUTH.users LOCAL daquele aparelho.
+// Guardar role/gaNome na própria sessão evita depender de uma cópia local que pode não existir.
+const AUTH = { users: [], currentUser: null, currentRole: null, currentGaNome: null, supabaseSessionOk: null };
 
 async function sha256Hex(text){
   const enc = new TextEncoder().encode(text);
@@ -1082,6 +1087,14 @@ function randomHex(bytes){
 function saveAuthUsers(){
   try { localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(AUTH.users)); } catch(e) {}
 }
+function setAuthSession(username, role, gaNome){
+  AUTH.currentUser = username; AUTH.currentRole = role; AUTH.currentGaNome = gaNome || null;
+  try { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ username, role, gaNome: gaNome || null })); } catch(e) {}
+}
+function clearAuthSession(){
+  AUTH.currentUser = null; AUTH.currentRole = null; AUTH.currentGaNome = null;
+  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
+}
 async function loadAuth(){
   try {
     const raw = localStorage.getItem(AUTH_USERS_KEY);
@@ -1090,25 +1103,29 @@ async function loadAuth(){
   if (!AUTH.users.length) {
     const salt = randomHex(16);
     const hash = await sha256Hex(salt + 'Alloha@2026');
-    AUTH.users = [{ username: 'admin', salt, hash }];
+    AUTH.users = [{ username: 'admin', salt, hash, role: 'admin' }];
     saveAuthUsers();
   }
   try {
-    const session = localStorage.getItem(AUTH_SESSION_KEY);
-    if (session && AUTH.users.some(u => u.username === session)) AUTH.currentUser = session;
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (raw) {
+      // formato antigo (de antes desta mudança) era só o username cru, não um JSON — se
+      // JSON.parse falhar, trata como esse formato velho e procura o papel em AUTH.users.
+      let sess;
+      try { sess = JSON.parse(raw); } catch(e2) {
+        const u = AUTH.users.find(x => x.username === raw);
+        sess = u ? { username: u.username, role: u.role || 'admin', gaNome: u.gaNome || null } : null;
+      }
+      if (sess && sess.username) { AUTH.currentUser = sess.username; AUTH.currentRole = sess.role; AUTH.currentGaNome = sess.gaNome || null; }
+    }
   } catch(e) {}
 }
-// usuário logado atual, no array AUTH.users (undefined se "Usuário Padrão", sem login).
-function currentAuthUser(){ return AUTH.users.find(u => u.username === AUTH.currentUser); }
-// "role" não existia antes desta feature — todo usuário salvo sem o campo é tratado como
-// 'admin' (comportamento de sempre, preservado pra quem já tinha conta criada).
-function currentUserRole(){ const u = currentAuthUser(); return u ? (u.role || 'admin') : null; }
-function isAdmin(){ return currentUserRole() === 'admin'; }
+function isAdmin(){ return AUTH.currentRole === 'admin'; }
 // GA (Gestor de Área) — login próprio, só pra escrever Justificativa com autoria registrada,
 // restrito aos colaboradores da PRÓPRIA área (ver campoJustEhEditavelPara). Não é Admin: não
 // anexa Base/Hierarquia, não apaga nada — pedido explícito do usuário ("só Justificativa").
-function isGA(){ return currentUserRole() === 'ga'; }
-function currentGaNome(){ const u = currentAuthUser(); return (u && u.gaNome) || null; }
+function isGA(){ return AUTH.currentRole === 'ga'; }
+function currentGaNome(){ return AUTH.currentGaNome; }
 // true pra Admin e Usuário Padrão (continuam editando qualquer Justificativa, como sempre) —
 // só um GA logado fica restrito aos colaboradores da PRÓPRIA área (ver STATE.hierMap, campo
 // "ga" — compartilhado pelos 4 painéis). É uma trava de fluxo de trabalho client-side, mesmo
@@ -1156,30 +1173,47 @@ async function withRetry(fn, attempts, delayMs){
 }
 async function authLogin(username, password){
   const u = (username||'').trim();
-  const user = AUTH.users.find(x => x.username.toLowerCase() === u.toLowerCase());
-  if (!user) return false;
-  const hash = await sha256Hex(user.salt + password);
-  if (hash !== user.hash) return false;
-  AUTH.currentUser = user.username;
-  try { localStorage.setItem(AUTH_SESSION_KEY, user.username); } catch(e) {}
+  const local = AUTH.users.find(x => x.username.toLowerCase() === u.toLowerCase());
+  if (local) {
+    const hash = await sha256Hex(local.salt + password);
+    if (hash !== local.hash) return false;
+    setAuthSession(local.username, local.role || 'admin', local.gaNome || null);
+  } else if (sb) {
+    // não existe NESTE navegador — pode ter sido criado em outro (ex.: Admin importou os GAs no
+    // próprio navegador, e cada GA loga pela primeira vez no dele). Confere direto no servidor
+    // (painel_validar_login, security definer — nunca expõe salt/hash, só confirma se bateu e
+    // devolve role+gaNome). Sem isto, um GA só conseguia logar no MESMO aparelho de quem criou
+    // o usuário, inutilizando a importação em massa pra qualquer um fora dali.
+    let resultado = null;
+    try {
+      const { data, error } = await withTimeout(sb.rpc('painel_validar_login', { p_username: u, p_password: password }), 10000, 'validar login');
+      if (!error && data && data.ok) resultado = data;
+    } catch(e) { console.error('Não foi possível validar o login no servidor.', e); }
+    if (!resultado) return false;
+    setAuthSession(resultado.username, resultado.role, resultado.ga_nome);
+  } else {
+    return false; // nem local nem servidor disponível (sem Supabase carregado) — não dá pra confirmar
+  }
   // só Admin precisa da sessão de escrita compartilhada no Supabase (Base/Hierarquia/apagar
   // dados) — GA só escreve Justificativa, que já é liberada pra "anon" (ver
   // supabase_justificativas.sql), então nem tenta: a senha do GA nunca vai bater com a da conta
   // compartilhada "admin@painel-infracoes.local", só geraria um erro inútil no console.
-  if (sb && (user.role || 'admin') === 'admin') {
+  if (sb && AUTH.currentRole === 'admin') {
     try { await withTimeout(sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }), 10000, 'login Supabase'); }
     catch(e) { console.error('Não foi possível autenticar no Supabase — escrita sincronizada fica indisponível.', e); }
   }
   return true;
 }
 function authLogout(){
-  AUTH.currentUser = null;
-  try { localStorage.removeItem(AUTH_SESSION_KEY); } catch(e) {}
+  clearAuthSession();
   if (sb) withTimeout(sb.auth.signOut(), 5000, 'logout Supabase').catch(() => {});
 }
 // opts: { role: 'admin'|'ga', gaNome } — role omitida/'admin' preserva o comportamento de
 // sempre (usuário administrador completo). role:'ga' exige gaNome (qual área esse login
 // representa) e grava role+gaNome no registro, pra isAdmin()/isGA()/currentGaNome() lerem depois.
+// Devolve também `synced` (true/false) — se a sincronização pro servidor falhar (sessão de
+// escrita expirada, rede, etc.), o usuário continua criado AQUI mas só funciona NESTE navegador
+// até sincronizar de verdade; quem chama decide como avisar disso.
 async function authAddUser(username, password, opts){
   const u = (username||'').trim();
   const role = (opts && opts.role) || 'admin';
@@ -1189,20 +1223,31 @@ async function authAddUser(username, password, opts){
   if (AUTH.users.some(x => x.username.toLowerCase() === u.toLowerCase())) return { ok:false, msg:'Já existe um usuário com esse nome.' };
   const salt = randomHex(16);
   const hash = await sha256Hex(salt + password);
-  const novo = { username: u, salt, hash };
-  if (role === 'ga') { novo.role = 'ga'; novo.gaNome = gaNome; }
+  const novo = { username: u, salt, hash, role };
+  if (role === 'ga') novo.gaNome = gaNome;
   AUTH.users.push(novo);
   saveAuthUsers();
-  return { ok:true };
+  // sincroniza pro servidor pra esse usuário conseguir logar em QUALQUER dispositivo — não só
+  // neste navegador onde foi criado (ver authLogin, fallback pro servidor quando não acha
+  // localmente). Reusa o MESMO salt+hash já calculados acima — a senha em texto puro nunca é
+  // mandada pra essa RPC, só pro login de verdade (painel_validar_login).
+  let synced = false;
+  if (sb) {
+    try {
+      const { error } = await withTimeout(sb.rpc('painel_sincronizar_usuario', { p_username: u, p_salt: salt, p_hash: hash, p_role: role, p_ga_nome: gaNome || null }), 15000, 'sincronizar usuário');
+      if (!error) synced = true; else console.error('Usuário criado neste navegador, mas não sincronizou com o servidor.', error);
+    } catch(e) { console.error('Usuário criado neste navegador, mas não deu pra sincronizar com o servidor — só funciona aqui por enquanto.', e); }
+  }
+  return { ok:true, synced };
 }
 // cadastro de vários GAs de uma vez (botão "Importar em massa" em Configurações) — sem isto,
 // cadastrar 10+ GAs significava preencher o formulário de 1 em 1, repetindo o mesmo processo
 // dezenas de vezes. Uma linha por usuário, "usuario;senha;GA"; linhas em branco são ignoradas.
 // Continua até o fim mesmo se alguma linha falhar (nome repetido, GA vazio, etc.) — devolve o
-// que deu certo e o que não deu, pra nunca a pessoa descobrir só depois que só metade entrou.
+// que deu certo, o que falhou, e quantos sincronizaram pro servidor de verdade (synced).
 async function authAddUsersBulk(texto){
   const linhas = (texto || '').split('\n').map(l => l.trim()).filter(Boolean);
-  let ok = 0;
+  let ok = 0, sincronizados = 0;
   const falhas = [];
   for (const linha of linhas) {
     const partes = linha.split(';').map(s => (s||'').trim());
@@ -1212,11 +1257,11 @@ async function authAddUsersBulk(texto){
       continue;
     }
     const res = await authAddUser(username, password, { role: 'ga', gaNome });
-    if (res.ok) ok++; else falhas.push(linha + ' — ' + res.msg);
+    if (res.ok) { ok++; if (res.synced) sincronizados++; } else falhas.push(linha + ' — ' + res.msg);
   }
-  return { ok, falhas, total: linhas.length };
+  return { ok, sincronizados, falhas, total: linhas.length };
 }
-function authRemoveUser(username){
+async function authRemoveUser(username){
   // só usuários ADMIN contam pra regra "precisa sobrar pelo menos um" — um painel só com GAs e
   // nenhum Admin fica sem ninguém pra anexar Base/Hierarquia/gerenciar usuários.
   const admins = AUTH.users.filter(x => (x.role || 'admin') === 'admin');
@@ -1227,6 +1272,12 @@ function authRemoveUser(username){
   AUTH.users = AUTH.users.filter(x => x.username !== username);
   saveAuthUsers();
   if (AUTH.currentUser === username) authLogout();
+  // remove do servidor também — sem isto, alguém removido localmente continuava conseguindo
+  // logar em QUALQUER outro dispositivo via o fallback de authLogin() pro servidor.
+  if (sb) {
+    try { await withTimeout(sb.rpc('painel_remover_usuario_sync', { p_username: username }), 15000, 'remover usuário sincronizado'); }
+    catch(e) { console.error('Usuário removido neste navegador, mas não deu pra remover do servidor — pode continuar logando em outros dispositivos.', e); }
+  }
   return { ok:true };
 }
 
@@ -4084,8 +4135,8 @@ function renderSettingsPanel(){
     row.innerHTML =
       '<span class="un">' + esc(u.username) + (isYou ? '<span class="you-tag">você</span>' : '') + '</span>' +
       '<button type="button"' + (admins.length <= 1 ? ' disabled title="precisa sobrar pelo menos um administrador"' : '') + '>Remover</button>';
-    row.querySelector('button').addEventListener('click', () => {
-      const res = authRemoveUser(u.username);
+    row.querySelector('button').addEventListener('click', async () => {
+      const res = await authRemoveUser(u.username);
       if (!res.ok) { showToast(res.msg); return; }
       updateRoleBadge();
       renderSettingsPanel();
@@ -4130,8 +4181,8 @@ function renderSettingsPanel(){
     row.innerHTML =
       '<span class="un">' + esc(u.username) + ' <span class="you-tag" style="color:var(--text-muted)">(' + esc(u.gaNome) + ')</span>' + (isYou ? '<span class="you-tag">você</span>' : '') + '</span>' +
       '<button type="button">Remover</button>';
-    row.querySelector('button').addEventListener('click', () => {
-      const res = authRemoveUser(u.username);
+    row.querySelector('button').addEventListener('click', async () => {
+      const res = await authRemoveUser(u.username);
       if (!res.ok) { showToast(res.msg); return; }
       updateRoleBadge();
       renderSettingsPanel();
@@ -4162,7 +4213,9 @@ function renderSettingsPanel(){
     btn.disabled = false;
     if (!res.ok) { showToast(res.msg); return; }
     renderSettingsPanel();
-    showToast('Usuário de GA ' + name + ' (' + gaNome + ') adicionado.');
+    showToast(res.synced
+      ? ('Usuário de GA ' + name + ' (' + gaNome + ') adicionado e sincronizado — já loga em qualquer dispositivo.')
+      : ('Usuário de GA ' + name + ' criado, mas NÃO sincronizou com o servidor — só funciona neste navegador por enquanto. Confira sua sessão de escrita e tente de novo.'));
   });
   body.appendChild(gaSec);
 
@@ -4186,7 +4239,7 @@ function renderSettingsPanel(){
     btn.disabled = true;
     const res = await authAddUsersBulk(texto);
     btn.disabled = false;
-    const msg = res.ok + ' de ' + res.total + ' usuário(s) importado(s) com sucesso.' + (res.falhas.length ? ('\nFalhas:\n' + res.falhas.join('\n')) : '');
+    const msg = res.ok + ' de ' + res.total + ' usuário(s) importado(s) — ' + res.sincronizados + ' já sincronizado(s) com o servidor (logam em qualquer dispositivo)' + (res.ok > res.sincronizados ? ', ' + (res.ok - res.sincronizados) + ' só funcionando neste navegador por enquanto (falha ao sincronizar — confira sua sessão de escrita e tente de novo)' : '') + '.' + (res.falhas.length ? ('\nFalhas:\n' + res.falhas.join('\n')) : '');
     if (res.ok) {
       // renderSettingsPanel() reconstrói o painel inteiro (pra os novos usuários aparecerem nas
       // listas acima) — isso recria #ga-bulk-result do zero, então a mensagem só fica visível

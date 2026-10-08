@@ -39,6 +39,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | [`supabase_realtime.sql`](supabase_realtime.sql) | Liga as 7 tabelas (`infracoes_registros`, `infracoes_roster`, `infracoes_meta`, `infracoes_justificativas`, `bh_registros`, `dsr_registros`, `feriado_registros`) na publicação `supabase_realtime`, pro painel sincronizar sozinho entre dispositivos via websocket (ver `wireRealtimeSync()`) | 2026-10-08 | — |
 | [`supabase_apagar_so_infracoes.sql`](supabase_apagar_so_infracoes.sql) | RPC `clear_infracoes_registros_only` (apaga só `infracoes_registros`, preserva `infracoes_roster`/Hierarquia) | 2026-10-08 | — |
 | [`supabase_justificativa_autor.sql`](supabase_justificativa_autor.sql) | Coluna `autor` em `infracoes_justificativas` + atualiza `upsert_infracoes_justificativas` pra gravá-la | 2026-10-08 | Sim (campo `autor` incluso no espelho desde 2026-10-08) |
+| [`supabase_usuarios_sync.sql`](supabase_usuarios_sync.sql) | Tabela `painel_usuarios` (sem policy de leitura — só via RPC) + RPCs `painel_validar_login` (anon+authenticated), `painel_sincronizar_usuario`/`painel_remover_usuario_sync` (authenticated-only) — login de GA/Admin extra passa a funcionar em qualquer dispositivo, não só no navegador onde foi criado | 2026-10-08 | — |
 
 ## Padrão de segurança usado em toda tabela deste projeto
 
@@ -66,13 +67,18 @@ em arquivo — só passada como variável de ambiente na hora do comando.
   "Limpar dados de bases anteriores", um por painel (Infrações/BH/DSR/Feriados), authenticated-only.
 - A conta compartilhada `admin@painel-infracoes.local` é quem autentica como `authenticated`
   quando alguém loga como Admin no painel (ver `authLogin()`).
-- **Usuários por GA (2026-10-08):** login local (mesmo mecanismo do Admin, mas `role:'ga'` +
-  `gaNome`) que só edita Justificativa dos colaboradores da própria área — client-side apenas
-  (`campoJustEhEditavelPara()` no `painel2.html`), não muda nada no servidor: a RPC de
-  Justificativa continua liberada pra `authenticated` E `anon`. Não tenta a sessão de escrita
+- **Usuários por GA (2026-10-08):** login (mesmo mecanismo do Admin, mas `role:'ga'` + `gaNome`)
+  que só edita Justificativa dos colaboradores da própria área — a RESTRIÇÃO de quem pode editar
+  o quê é client-side (`campoJustEhEditavelPara()` no `painel2.html`): a RPC de Justificativa
+  continua liberada pra `authenticated` E `anon`, não muda. GA não tenta a sessão de escrita
   compartilhada no Supabase (não precisa — Justificativa já é anon-writable). O campo `autor`
   (ver `supabase_justificativa_autor.sql`) é só um registro informativo de quem salvou, não uma
   trava de acesso de verdade.
+  **O CADASTRO do usuário em si, porém, É sincronizado** (ver `supabase_usuarios_sync.sql`,
+  2026-10-08) — sem isto, um GA só conseguia logar no MESMO navegador de quem criou o usuário
+  (bug real reportado: "as senhas não estão dando corretas", um GA tentando logar no PRÓPRIO
+  aparelho pela primeira vez). `authLogin()` tenta local primeiro, cai pro servidor
+  (`painel_validar_login`) se não achar — nunca expõe salt/hash, só confirma se bateu.
 
 ## Configuração de Auth (não é schema de tabela, mas afeta a sincronização)
 
