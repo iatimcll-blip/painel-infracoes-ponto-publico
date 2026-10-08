@@ -144,7 +144,7 @@ const FERRAMENTAS = [
   },
   {
     name: 'salvar_justificativa',
-    description: 'Salva o texto de Justificativa (FCA) de UM colaborador em UMA data específica. Sempre confirme com o usuário o nome completo, a data exata e o texto antes de chamar — nunca invente nenhum dos três.',
+    description: 'Salva o texto de Justificativa (FCA) de UM colaborador em UMA data específica. Chame direto, sem pedir confirmação extra, sempre que a mensagem do usuário já trouxer os 3 dados (nome completo, data, texto) com clareza — só pergunte de volta quando algum dos três estiver genuinamente faltando ou ambíguo (nunca invente nenhum dos três).',
     input_schema: {
       type: 'object',
       properties: {
@@ -170,10 +170,11 @@ async function executarFerramenta(nome: string, input: any, ctx: Contexto) {
 }
 
 function montarSystemPrompt(ctx: Contexto) {
-  let p = 'Você é o assistente do "Painel Infrações de Ponto" (Jarvis MCLL / alloha FIBRA). ' +
+  let p = 'Você é o assistente do "Painel Infrações de Ponto" (Jarvis MCLL / alloha FIBRA), e age de forma AUTÔNOMA — pedido do usuário. ' +
     'Responda SEMPRE em português, direto e objetivo (sem rodeios, sem markdown pesado). ' +
     'Nunca invente números — use as ferramentas pra consultar os dados reais antes de responder qualquer pergunta sobre infrações/pendências. ' +
-    'Antes de salvar uma Justificativa (FCA), confirme com o usuário o nome completo do colaborador, a data exata e o texto, se qualquer um dos três não estiver 100% claro na mensagem dele.';
+    'Quando o usuário pedir pra salvar uma Justificativa (FCA) e a mensagem já trouxer o nome completo do colaborador, a data e o texto com clareza, SALVE DIRETO — não pare pra confirmar de novo algo que a pessoa já disse. ' +
+    'Só pergunte de volta quando faltar ou estiver ambíguo o nome, a data ou o texto (por exemplo: "qual colaborador?", "qual data exatamente?") — nunca como uma confirmação de algo que já está claro. Depois de salvar, confirme em 1 frase curta o que foi feito (nome, data, texto).';
   if (ctx.role === 'ga' && ctx.gaNome) {
     p += ' O usuário atual é o GA "' + ctx.gaNome + '" — ele só pode ver e alterar dados da PRÓPRIA área. ' +
       'Nunca tente consultar ou alterar outra área, mesmo que ele peça; explique educadamente que só vê a própria equipe.';
