@@ -1758,40 +1758,91 @@ function ehLinhaDeAbaVazia(linha){
   const chaves = Object.keys(linha);
   return chaves.length === 1 && chaves[0] === 'aviso';
 }
-// "Importar" (botão ao lado de "Salvar" em cada bloco de GA) — lê a aba infracoes_justificativas
-// do MESMO .xlsx que "Baixar backup completo" gera (o resto do arquivo é ignorado: Base/
-// Hierarquia/painéis auxiliares não entram por aqui) e aplica só nos campos DESTE bloco — pedido
-// do usuário: "importar bases baixadas no padrão do painel infrações e as informações sobem
-// para as justificativas", com o botão "em cada bloco do GA". Casa cada chave do arquivo com a
-// chave real de cada .just-input visível no bloco (chaveDoJustInput) — colaborador de fora
-// deste bloco nunca é tocado, mesmo que a planilha tenha a linha dele. Reaproveita
-// salvarCampoJustificativa() pra cada campo mudado, então autoria/permissão de GA/sincronização
-// com o servidor funcionam exatamente como uma edição manual.
+// modelo "amigável" que o botão "Excel" de cada bloco gera (aba "Colaboradores": GO/GA/
+// Colaborador/Data(s) da infração/>7 dias/Interjornada/>2h extras/Total/Reincidente/
+// Justificativa (FCA) — 1 linha por pessoa, todas as datas do período juntas) — pedido do
+// usuário: poder reanexar ESSE arquivo (o que baixa pra conferir/editar fora do painel, "o
+// modelo da base") e as justificativas voltarem pros campos certos, por data. É o inverso exato
+// de justificativasConsolidadas()+fmtDM: cada trecho "DD/MM: texto" (separados por " | ") é
+// casado com a data cheia (DD/MM/YYYY) de mesmo dia/mês que aparece em "Data(s) da infração" na
+// MESMA linha, pra recuperar o ano (a célula "Justificativa (FCA)" não guarda ano nenhum).
+function parseModeloColaboradoresParaJustificativas(linhas){
+  const porNomeData = {}; // nome -> { 'YYYY-MM-DD': texto }
+  (linhas || []).forEach(l => {
+    if (ehLinhaDeAbaVazia(l)) return;
+    const nome = normText(l['Colaborador']);
+    if (!nome) return;
+    const datasPorDiaMes = {}; // 'DD/MM' -> 'YYYY-MM-DD'
+    (l['Data(s) da infração'] || '').toString().split(',').forEach(parte => {
+      const m = parte.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (m) datasPorDiaMes[m[1] + '/' + m[2]] = m[3] + '-' + m[2] + '-' + m[1];
+    });
+    (l['Justificativa (FCA)'] || '').toString().split('|').forEach(segmento => {
+      const m = segmento.trim().match(/^(\d{2})\/(\d{2}):\s*([\s\S]*)$/);
+      if (!m) return;
+      const dataISO = datasPorDiaMes[m[1] + '/' + m[2]];
+      const texto = m[3].trim();
+      if (!dataISO || !texto) return;
+      if (!porNomeData[nome]) porNomeData[nome] = {};
+      porNomeData[nome][dataISO] = texto;
+    });
+  });
+  return porNomeData;
+}
+// "Importar" (botão ao lado de "Salvar" em cada bloco de GA) — lê um .xlsx em 1 de 2 formatos
+// (o resto do arquivo é ignorado: Base/Hierarquia/painéis auxiliares não entram por aqui) e
+// aplica só nos campos DESTE bloco — pedido do usuário: "importar bases baixadas no padrão do
+// painel infrações e as informações sobem para as justificativas", com o botão "em cada bloco
+// do GA", e depois: "usar o modelo da base ... com as respectivas datas e colaboradores
+// conforme a base, quando importar" — ou seja, aceitar também o arquivo que o próprio GA baixa
+// pra conferir (botão "Excel"), não só o backup cru:
+//  1) aba "infracoes_justificativas" (o .xlsx de "Baixar backup completo"): casa pela chave
+//     exata de cada .just-input (chaveDoJustInput).
+//  2) aba "Colaboradores" (o .xlsx do botão "Excel" de um bloco, ou um editado a partir dele
+//     mantendo as mesmas colunas): casa por nome + data (ver
+//     parseModeloColaboradoresParaJustificativas).
+// Nos dois casos, colaborador de fora deste bloco nunca é tocado, mesmo que a planilha tenha a
+// linha dele — e reaproveita salvarCampoJustificativa() pra cada campo mudado, então autoria/
+// permissão de GA/sincronização com o servidor funcionam exatamente como uma edição manual.
 async function importarJustificativasDoBloco(containerEl, btn, file){
   if (btn) btn.disabled = true;
   try {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
-    if (!wb.SheetNames.includes('infracoes_justificativas')) {
-      showToast('Esse arquivo não tem uma aba "infracoes_justificativas" — confira se é um backup gerado por "Baixar backup completo".');
-      return;
-    }
-    const porChave = {};
-    XLSX.utils.sheet_to_json(wb.Sheets['infracoes_justificativas']).forEach(l => {
-      if (!ehLinhaDeAbaVazia(l) && l.chave) porChave[l.chave] = (l.texto || '').toString();
-    });
     const campos = [...containerEl.querySelectorAll('.just-input')];
     let aplicadas = 0, falharam = 0, semCorrespondencia = 0;
-    for (const ta of campos) {
-      const key = chaveDoJustInput(ta);
-      if (!(key in porChave)) { semCorrespondencia++; continue; }
-      const novoTexto = porChave[key];
-      if (ta.value.trim() === novoTexto.trim()) continue; // já está igual — não mexe, não pisca "salvo" à toa
-      ta.value = novoTexto;
-      const flashAlvo = ta.dataset.data ? ta.closest('.just-date-row') : ta.closest('td');
-      const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
-      if (resultado === 'sincronizada' || resultado === 'pendente-falhou') aplicadas++;
-      else if (resultado === 'sem-permissao') falharam++;
+    if (wb.SheetNames.includes('infracoes_justificativas')) {
+      const porChave = {};
+      XLSX.utils.sheet_to_json(wb.Sheets['infracoes_justificativas']).forEach(l => {
+        if (!ehLinhaDeAbaVazia(l) && l.chave) porChave[l.chave] = (l.texto || '').toString();
+      });
+      for (const ta of campos) {
+        const key = chaveDoJustInput(ta);
+        if (!(key in porChave)) { semCorrespondencia++; continue; }
+        const novoTexto = porChave[key];
+        if (ta.value.trim() === novoTexto.trim()) continue; // já está igual — não mexe, não pisca "salvo" à toa
+        ta.value = novoTexto;
+        const flashAlvo = ta.dataset.data ? ta.closest('.just-date-row') : ta.closest('td');
+        const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
+        if (resultado === 'sincronizada' || resultado === 'pendente-falhou') aplicadas++;
+        else if (resultado === 'sem-permissao') falharam++;
+      }
+    } else if (wb.SheetNames.includes('Colaboradores')) {
+      const porNomeData = parseModeloColaboradoresParaJustificativas(XLSX.utils.sheet_to_json(wb.Sheets['Colaboradores']));
+      for (const ta of campos) {
+        const porData = porNomeData[normText(ta.dataset.nome)];
+        const novoTexto = (ta.dataset.data && porData) ? porData[ta.dataset.data] : null;
+        if (novoTexto == null) { semCorrespondencia++; continue; }
+        if (ta.value.trim() === novoTexto.trim()) continue;
+        const key = chaveDoJustInput(ta);
+        ta.value = novoTexto;
+        const resultado = await salvarCampoJustificativa(ta, key, ta.closest('.just-date-row'));
+        if (resultado === 'sincronizada' || resultado === 'pendente-falhou') aplicadas++;
+        else if (resultado === 'sem-permissao') falharam++;
+      }
+    } else {
+      showToast('Esse arquivo não tem uma aba "infracoes_justificativas" (backup) nem "Colaboradores" (exportado pelo botão Excel de um bloco) — confira o arquivo.');
+      return;
     }
     const partes = [];
     if (aplicadas) partes.push(aplicadas + ' justificativa(s) importada(s)');
@@ -1800,7 +1851,7 @@ async function importarJustificativasDoBloco(containerEl, btn, file){
     showToast(partes.length ? partes.join(' · ') + '.' : 'Nenhuma linha do arquivo bateu com os campos deste bloco.');
   } catch(e) {
     console.error('Falha ao importar justificativas do bloco.', e);
-    showToast('Não foi possível ler esse arquivo — confira se é um .xlsx de backup gerado por este painel.');
+    showToast('Não foi possível ler esse arquivo — confira se é um .xlsx de backup ou exportado por este painel.');
   } finally {
     if (btn) btn.disabled = false;
   }
