@@ -576,6 +576,43 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
+  /* ---------- robô assistente (chat embutido, pedido do usuário: "agente de atualização e
+     interação do painel") ---------- */
+  .robo-fab{
+    position:fixed; right:20px; bottom:20px; z-index:190; width:52px; height:52px; border-radius:50%;
+    background:var(--s1); color:#fff; border:none; cursor:pointer; display:none; align-items:center;
+    justify-content:center; box-shadow:0 10px 26px rgba(0,0,0,.28); transition:transform .15s;
+  }
+  .robo-fab:hover{ transform:scale(1.06); }
+  .robo-fab.show{ display:flex; }
+  .robo-panel{
+    position:fixed; right:20px; bottom:84px; z-index:190; width:360px; max-width:calc(100vw - 32px);
+    height:480px; max-height:calc(100vh - 120px); background:var(--surface-raised); border:1px solid var(--border);
+    border-radius:14px; box-shadow:0 24px 64px rgba(0,0,0,.3); display:none; flex-direction:column; overflow:hidden;
+  }
+  .robo-panel.show{ display:flex; }
+  .robo-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid var(--grid); flex:none; }
+  .robo-head .m-name{ font-size:13px; font-weight:700; }
+  .robo-head .m-sub{ font-size:10.5px; color:var(--text-muted); margin-top:1px; }
+  .robo-msgs{ flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+  .robo-msg{ max-width:88%; font-size:12.5px; line-height:1.5; padding:8px 11px; border-radius:11px; white-space:pre-wrap; }
+  .robo-msg.user{ align-self:flex-end; background:var(--s1); color:#fff; border-bottom-right-radius:3px; }
+  .robo-msg.bot{ align-self:flex-start; background:var(--surface); color:var(--text-primary); border:1px solid var(--grid); border-bottom-left-radius:3px; }
+  .robo-msg.bot.erro{ color:var(--critical); border-color:var(--critical); }
+  .robo-msg.bot.robo-typing-msg{ color:var(--text-muted); font-style:italic; }
+  .robo-form{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--grid); flex:none; }
+  .robo-form textarea{
+    flex:1; resize:none; font-family:var(--sans); font-size:12.5px; color:var(--text-primary); background:var(--surface);
+    border:1px solid var(--border); border-radius:9px; padding:8px 10px; max-height:72px;
+  }
+  .robo-form textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .robo-send-btn{
+    flex:none; width:36px; height:36px; border-radius:9px; background:var(--s1); color:#fff; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .robo-send-btn:disabled{ opacity:.5; cursor:not-allowed; }
+  @media (max-width:480px){ .robo-panel{ right:16px; left:16px; width:auto; bottom:80px; } .robo-fab{ right:16px; } }
+
   /* ---------- verificação base x hierarquia ---------- */
   .verif-summary{ margin:0 0 10px; font-size:12.5px; color:var(--text-secondary); }
   .verif-ok{ margin:0; font-size:12.5px; color:var(--good); font-weight:600; }
@@ -950,6 +987,33 @@
 
 <div class="tooltip" id="tooltip"></div>
 <div class="toast" id="toast"></div>
+
+<button type="button" class="robo-fab" id="robo-fab" title="Assistente do painel" aria-label="Abrir assistente do painel">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="4" y="7" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/>
+    <circle cx="9" cy="13" r="1.4" fill="currentColor"/>
+    <circle cx="15" cy="13" r="1.4" fill="currentColor"/>
+    <path d="M12 7V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>
+</button>
+<div class="robo-panel" id="robo-panel">
+  <div class="robo-head">
+    <div>
+      <div class="m-name">Assistente do painel</div>
+      <div class="m-sub" id="robo-sub"></div>
+    </div>
+    <button type="button" class="modal-close" id="robo-close" aria-label="Fechar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <div class="robo-msgs" id="robo-msgs"></div>
+  <form class="robo-form" id="robo-form">
+    <textarea id="robo-input" rows="1" placeholder="Pergunte sobre infrações, pendências, ou peça pra salvar uma Justificativa…"></textarea>
+    <button type="submit" class="robo-send-btn" id="robo-send" aria-label="Enviar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-4 6 4 6-12-6z" fill="currentColor"/></svg>
+    </button>
+  </form>
+</div>
 
 <div class="hier-editor" id="hier-editor">
   <div class="he-title" id="he-title">Definir hierarquia</div>
@@ -4073,6 +4137,10 @@ function updateRoleBadge(){
     badge.classList.remove('is-admin', 'needs-relogin');
     badge.title = '';
   }
+  // o botão do "robozinho" (ver seção ROBOZINHO perto do boot()) depende do mesmo estado de
+  // login — atualiza aqui pra nunca precisar lembrar de chamar nos ~12 lugares que já chamam
+  // updateRoleBadge() depois de login/logout.
+  atualizarRoboVisibilidade();
 }
 // checa (com timeout — não pode travar o boot) se o Admin local também tem uma sessão de
 // escrita válida no Supabase, e atualiza o aviso no badge. Chamada no boot e depois de login.
@@ -6177,6 +6245,87 @@ function wireRealtimeSync(){
     console.error('Não foi possível inicializar o Realtime do Supabase.', e);
   }
 }
+
+// ============================================================================================
+// "ROBOZINHO" — assistente de chat embutido no painel (pedido do usuário: "criar um robozinho
+// no qual ele será o agente de atualização e interação do painel"). O painel NUNCA fala direto
+// com a API de IA — só com a Edge Function "robo-painel" do Supabase, que guarda a chave de IA
+// em segredo no servidor e faz as consultas/gravações reais (ver
+// supabase/functions/robo-painel/index.ts e SUPABASE_SCHEMA.md "Robô do painel"). Isto também
+// significa que, sem a Edge Function implantada (e a ANTHROPIC_API_KEY configurada), o botão
+// aparece mas qualquer mensagem só volta com um erro amigável — a UI já fica pronta pro dia que
+// a função for implantada, sem precisar de outro deploy do painel em si.
+// Só aparece pra quem está logado (Admin/GA/Usuário Padrão autenticado via authLogin) — os
+// dados que ele pode revelar/alterar já são tão sensíveis quanto o resto da tela, então não faz
+// sentido oferecer o chat pra quem nem entrou com usuário/senha.
+const ROBO_HISTORICO = [];
+let roboEnviando = false;
+function atualizarRoboVisibilidade(){
+  const fab = document.getElementById('robo-fab');
+  if (!fab) return;
+  const logado = !!(sb && AUTH.currentUser);
+  fab.classList.toggle('show', logado);
+  if (!logado) document.getElementById('robo-panel').classList.remove('show');
+  const sub = document.getElementById('robo-sub');
+  if (sub) sub.textContent = isAdmin() ? 'Vê todas as áreas' : (isGA() ? 'Área: ' + currentGaNome() : '');
+}
+function roboAppendMsg(role, texto, extraCls){
+  const box = document.getElementById('robo-msgs');
+  const div = document.createElement('div');
+  div.className = 'robo-msg ' + (role === 'user' ? 'user' : 'bot') + (extraCls ? ' ' + extraCls : '');
+  div.textContent = texto;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+function abrirRobo(){
+  document.getElementById('robo-panel').classList.add('show');
+  if (!ROBO_HISTORICO.length) {
+    roboAppendMsg('bot', 'Oi! Posso consultar infrações, listar pendências de Justificativa, ou salvar uma Justificativa (FCA) pra você — só pedir.');
+  }
+  document.getElementById('robo-input').focus();
+}
+function fecharRobo(){ document.getElementById('robo-panel').classList.remove('show'); }
+async function enviarMensagemRobo(texto){
+  roboAppendMsg('user', texto);
+  ROBO_HISTORICO.push({ role: 'user', content: texto });
+  roboEnviando = true;
+  document.getElementById('robo-send').disabled = true;
+  const typing = roboAppendMsg('bot', 'digitando…', 'robo-typing-msg');
+  try {
+    const { data, error } = await withTimeout(sb.functions.invoke('robo-painel', {
+      body: { mensagens: ROBO_HISTORICO, contexto: { username: AUTH.currentUser, role: AUTH.currentRole, gaNome: AUTH.currentGaNome } },
+    }), 45000, 'falar com o assistente');
+    typing.remove();
+    if (error || !data || data.erro) throw new Error((data && data.erro) || (error && error.message) || 'falha desconhecida');
+    roboAppendMsg('bot', data.resposta || '(sem resposta)');
+    ROBO_HISTORICO.push({ role: 'assistant', content: data.resposta || '' });
+    // alterou_dados vem da própria Edge Function (true só se salvar_justificativa gravou de
+    // verdade) — mais confiável que tentar adivinhar pelo texto livre da resposta.
+    if (data.alterou_dados && sb) { await loadFromSupabase(); recomputeAndRender(); }
+  } catch(e) {
+    typing.remove();
+    console.error('Falha ao falar com o assistente do painel.', e);
+    roboAppendMsg('bot', 'Não consegui falar com o assistente agora — tente de novo em instantes.', 'erro');
+  } finally {
+    roboEnviando = false;
+    document.getElementById('robo-send').disabled = false;
+  }
+}
+document.getElementById('robo-fab').addEventListener('click', abrirRobo);
+document.getElementById('robo-close').addEventListener('click', fecharRobo);
+document.getElementById('robo-form').addEventListener('submit', evt => {
+  evt.preventDefault();
+  if (roboEnviando) return;
+  const input = document.getElementById('robo-input');
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = '';
+  enviarMensagemRobo(texto);
+});
+document.getElementById('robo-input').addEventListener('keydown', evt => {
+  if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); document.getElementById('robo-form').requestSubmit(); }
+});
 
 (async function boot(){
   enhanceSections();

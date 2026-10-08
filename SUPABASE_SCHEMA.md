@@ -96,7 +96,48 @@ em arquivo — só passada como variável de ambiente na hora do comando.
   `painel2.html` tenta renovar sozinha (`refreshSession()`) antes de mostrar o badge de
   expirado, cobrindo o caso comum de token vencido + refresh token ainda válido.
 
+## Robô do painel (Edge Function, não é schema de tabela)
+
+Pedido do usuário (2026-10-08): "Criar um robozinho no qual ele será o agente de atualização e
+interação do painel" — um assistente de chat embutido no `painel2.html` (botão flutuante no
+canto inferior direito, só visível pra quem está logado), que usa IA (Anthropic) pra responder
+perguntas sobre os dados reais (infrações, pendências de Justificativa) e pra salvar uma
+Justificativa (FCA) que o usuário dite em linguagem natural.
+
+- **Nunca fala direto com a API de IA pelo navegador** — a chave de API não pode existir no
+  `painel2.html` (qualquer um com DevTools a roubaria). Em vez disso, o cliente chama a Edge
+  Function `robo-painel` (`sb.functions.invoke('robo-painel', {...})`), que roda no servidor do
+  Supabase, guarda a `ANTHROPIC_API_KEY` como segredo, e é quem de fato chama a Anthropic.
+  Código-fonte: [`supabase/functions/robo-painel/index.ts`](supabase/functions/robo-painel/index.ts).
+- **Ferramentas (tool-use) que o modelo pode chamar:** `consultar_infracoes`, `consultar_pendencias`
+  (ambas leem `infracoes_registros`/`infracoes_justificativas` direto via `service_role`, que
+  ignora RLS — a autorização de quem pode ver o quê é feita NO CÓDIGO da função, não delegada
+  pro banco) e `salvar_justificativa` (reconfere no servidor, via `infracoes_roster`, que um GA
+  só está salvando dentro da própria área — mesma trava de `campoJustEhEditavelPara()` do
+  painel, só que reimplementada aqui porque é uma chamada separada, não passa pelo
+  `painel2.html`). Grava em `infracoes_justificativas` com a MESMA chave
+  (`nome::ciclo:<início>|<data>`) que o painel usa — uma edição manual depois encontra e
+  atualiza a mesma linha, nunca cria uma segunda solta.
+- **Segredos necessários** (`supabase secrets set`, ou via Management API — ver deploy abaixo):
+  `ANTHROPIC_API_KEY`. `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` já existem automaticamente em
+  toda Edge Function, não precisam ser configurados.
+- **Deploy:** sem Supabase CLI instalada no ambiente onde isto foi desenvolvido — a implantação
+  real (criar a função + definir o segredo) ainda não foi feita até a escrita desta nota.
+  Quando for feita, usar a Management API (`POST/PATCH .../v1/projects/<ref>/functions/<slug>`
+  pro código da função, `POST .../v1/projects/<ref>/secrets` pro segredo) com uma PAT temporária
+  — mesmo padrão de "Via PAT temporária" no topo deste arquivo: nunca gravada em disco, revogada
+  depois de usar. Alternativa mais simples se/quando a CLI estiver disponível:
+  `supabase functions deploy robo-painel` + `supabase secrets set ANTHROPIC_API_KEY=...`.
+- **Cliente (`painel2.html`):** botão `#robo-fab` + painel `#robo-panel`, visibilidade ligada a
+  `atualizarRoboVisibilidade()` (chamada de dentro de `updateRoleBadge()`, então acompanha login/
+  logout automaticamente). Enquanto a Edge Function não estiver implantada, o botão aparece
+  normalmente mas qualquer mensagem volta com um erro amigável — não exige outro deploy do
+  painel quando a função for implantada depois.
+
 ## Pendências conhecidas
 
-*(nenhuma no momento — Base, Hierarquia, Justificativas e os 3 painéis auxiliares estão todos
-cobertos pelo espelho horário desde 2026-10-01)*
+- **Robô do painel ainda não está no ar:** a UI (botão + chat) já está publicada, mas a Edge
+  Function `robo-painel` em si (e a `ANTHROPIC_API_KEY`) ainda não foram implantadas — falta (1)
+  o usuário gerar uma chave em console.anthropic.com e (2) uma PAT temporária da Management API
+  pra fazer o deploy. Até lá, o botão aparece mas o chat responde só com "assistente ainda não
+  configurado".
