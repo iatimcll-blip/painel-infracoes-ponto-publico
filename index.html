@@ -693,7 +693,7 @@
 
   <input type="file" id="file-base" accept=".xlsx" hidden>
   <input type="file" id="file-hier" accept=".xlsx" hidden>
-  <input type="file" id="file-restaurar-backup" accept=".xlsx" hidden>
+  <input type="file" id="file-importar-just-bloco" accept=".xlsx" hidden>
 
   <section data-export="kpi">
     <div class="section-head"><h2 id="kpi-section-title">Indicadores do ciclo selecionado</h2></div>
@@ -1751,59 +1751,69 @@ async function fazerBackupCompleto(){
     if (btn) btn.disabled = false;
   }
 }
-// "Importar backup" (botão ao lado de "Baixar backup completo") — lê o MESMO .xlsx gerado por
-// fazerBackupCompleto() (1 aba por tabela) e reenvia cada linha pra RPC de upsert certa. Cada
-// RPC já seleciona só os campos que espera de dentro do jsonb (ver os arquivos supabase_*.sql) —
-// por isso nenhuma transformação é necessária aqui: campos extras da aba (id, atualizado_em)
-// são simplesmente ignorados pelo servidor, sem precisar filtrar nada no cliente.
-// "infracoes_meta" fica de fora de propósito — é só o timestamp/autor da última sincronização,
-// não faz sentido "restaurar" isso por cima do que está acontecendo agora.
-const ABAS_RESTAURAVEIS = [
-  { aba: 'infracoes_registros', rpc: 'upsert_infracoes_registros', rotulo: 'Infrações' },
-  { aba: 'infracoes_roster', rpc: 'upsert_infracoes_roster', rotulo: 'Hierarquia' },
-  { aba: 'infracoes_justificativas', rpc: 'upsert_infracoes_justificativas', rotulo: 'Justificativas' },
-  { aba: 'bh_registros', rpc: 'upsert_bh_registros', rotulo: 'Banco de Horas' },
-  { aba: 'dsr_registros', rpc: 'upsert_dsr_registros', rotulo: 'DSR' },
-  { aba: 'feriado_registros', rpc: 'upsert_feriado_registros', rotulo: 'Feriados' },
-];
 // fazerBackupCompleto() grava essa única linha quando uma tabela está vazia (pra aba não ficar
-// muda, sem cabeçalho nenhum) — sem esta checagem, restaurar um backup assim mandaria 1 linha
-// de lixo (sem nenhum dos campos de verdade) pra dentro da RPC, virando um registro fantasma.
+// muda, sem cabeçalho nenhum) — sem esta checagem, importar um backup assim tentaria aplicar 1
+// linha de lixo (sem chave/texto de verdade) como se fosse uma justificativa real.
 function ehLinhaDeAbaVazia(linha){
   const chaves = Object.keys(linha);
   return chaves.length === 1 && chaves[0] === 'aviso';
 }
-// lê o arquivo primeiro (só leitura, rápido) e devolve quantas linhas cada aba reconhecida tem —
-// usado pra montar a mensagem de confirmação ANTES de mandar qualquer coisa pro servidor, pra
-// quem está restaurando saber exatamente o tamanho do que está prestes a sobrescrever.
-async function prepararRestauracaoBackup(file){
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
-  const abas = ABAS_RESTAURAVEIS
-    .filter(a => wb.SheetNames.includes(a.aba))
-    .map(a => {
-      const linhas = XLSX.utils.sheet_to_json(wb.Sheets[a.aba]).filter(l => !ehLinhaDeAbaVazia(l));
-      return { ...a, linhas };
-    })
-    .filter(a => a.linhas.length);
-  return { wb, abas };
-}
-async function restaurarBackupCompleto(abas){
-  const resultados = [];
-  for (const { aba, rpc, rotulo, linhas } of abas) {
-    try {
-      for (let i = 0; i < linhas.length; i += 500) {
-        const lote = linhas.slice(i, i + 500);
-        const { error } = await withTimeout(sb.rpc(rpc, { novos: lote }), 30000, 'restaurar ' + aba);
-        if (error) throw error;
-      }
-      resultados.push(rotulo + ': ' + linhas.length + ' linha(s) restaurada(s)');
-    } catch(e) {
-      console.error('Falha ao restaurar ' + aba + ' do backup.', e);
-      resultados.push(rotulo + ': FALHOU (' + (e.message || e) + ')');
+// "Importar" (botão ao lado de "Salvar" em cada bloco de GA) — lê a aba infracoes_justificativas
+// do MESMO .xlsx que "Baixar backup completo" gera (o resto do arquivo é ignorado: Base/
+// Hierarquia/painéis auxiliares não entram por aqui) e aplica só nos campos DESTE bloco — pedido
+// do usuário: "importar bases baixadas no padrão do painel infrações e as informações sobem
+// para as justificativas", com o botão "em cada bloco do GA". Casa cada chave do arquivo com a
+// chave real de cada .just-input visível no bloco (chaveDoJustInput) — colaborador de fora
+// deste bloco nunca é tocado, mesmo que a planilha tenha a linha dele. Reaproveita
+// salvarCampoJustificativa() pra cada campo mudado, então autoria/permissão de GA/sincronização
+// com o servidor funcionam exatamente como uma edição manual.
+async function importarJustificativasDoBloco(containerEl, btn, file){
+  if (btn) btn.disabled = true;
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    if (!wb.SheetNames.includes('infracoes_justificativas')) {
+      showToast('Esse arquivo não tem uma aba "infracoes_justificativas" — confira se é um backup gerado por "Baixar backup completo".');
+      return;
     }
+    const porChave = {};
+    XLSX.utils.sheet_to_json(wb.Sheets['infracoes_justificativas']).forEach(l => {
+      if (!ehLinhaDeAbaVazia(l) && l.chave) porChave[l.chave] = (l.texto || '').toString();
+    });
+    const campos = [...containerEl.querySelectorAll('.just-input')];
+    let aplicadas = 0, falharam = 0, semCorrespondencia = 0;
+    for (const ta of campos) {
+      const key = chaveDoJustInput(ta);
+      if (!(key in porChave)) { semCorrespondencia++; continue; }
+      const novoTexto = porChave[key];
+      if (ta.value.trim() === novoTexto.trim()) continue; // já está igual — não mexe, não pisca "salvo" à toa
+      ta.value = novoTexto;
+      const flashAlvo = ta.dataset.data ? ta.closest('.just-date-row') : ta.closest('td');
+      const resultado = await salvarCampoJustificativa(ta, key, flashAlvo);
+      if (resultado === 'sincronizada' || resultado === 'pendente-falhou') aplicadas++;
+      else if (resultado === 'sem-permissao') falharam++;
+    }
+    const partes = [];
+    if (aplicadas) partes.push(aplicadas + ' justificativa(s) importada(s)');
+    if (falharam) partes.push(falharam + ' fora da sua área (não aplicada(s))');
+    if (semCorrespondencia) partes.push(semCorrespondencia + ' sem correspondência no arquivo');
+    showToast(partes.length ? partes.join(' · ') + '.' : 'Nenhuma linha do arquivo bateu com os campos deste bloco.');
+  } catch(e) {
+    console.error('Falha ao importar justificativas do bloco.', e);
+    showToast('Não foi possível ler esse arquivo — confira se é um .xlsx de backup gerado por este painel.');
+  } finally {
+    if (btn) btn.disabled = false;
   }
-  return resultados;
+}
+// clicar em "Importar" só abre o seletor de arquivo — guarda QUAL bloco pediu a importação (o
+// mesmo <input type=file> é compartilhado por todos os blocos dos 4 painéis) pro listener de
+// "change" (ver mais abaixo) saber onde aplicar o resultado.
+let blocoAlvoImportacaoJust = null;
+let botaoAlvoImportacaoJust = null;
+function abrirImportacaoJustificativasDoBloco(containerEl, btn){
+  blocoAlvoImportacaoJust = containerEl;
+  botaoAlvoImportacaoJust = btn;
+  document.getElementById('file-importar-just-bloco').click();
 }
 
 const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (fn => setTimeout(fn, 16));
@@ -2315,41 +2325,16 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     if (document.getElementById('settings-overlay').classList.contains('show')) renderSettingsPanel();
   } catch(err) { showToast('Erro ao importar Hierarquia — ' + err.message); }
 });
-// "Importar backup" (Configurações, ao lado de "Baixar backup completo") — lê o MESMO .xlsx que
-// o backup gera e reenvia tudo pro servidor. Pedido do usuário: "importar bases baixadas no
-// padrão do painel infrações e as informações sobem para as justificativas" — upsert em todas
-// as tabelas que a aba cobrir, Justificativas incluída. Confirma ANTES de escrever (reaproveita
-// o mesmo modal de risco do resto do painel), mostrando quantas linhas de cada tabela serão
-// restauradas — é upsert, nunca apaga nada sozinho, mas pode SOBRESCREVER dados mais novos com
-// os do backup (ex.: uma Justificativa editada depois que o backup foi tirado), por isso avisa.
-document.getElementById('file-restaurar-backup').addEventListener('change', async evt => {
+// input oculto compartilhado por TODOS os botões "Importar" (um em cada bloco de GA, nos 4
+// painéis) — abrirImportacaoJustificativasDoBloco() guarda em blocoAlvoImportacaoJust/
+// botaoAlvoImportacaoJust qual bloco pediu, antes de abrir o seletor de arquivo.
+document.getElementById('file-importar-just-bloco').addEventListener('change', async evt => {
   const file = evt.target.files[0];
   evt.target.value = '';
-  if (!file) return;
-  if (!isAdmin()) { showToast('Só administradores podem restaurar um backup — entre em Configurações.'); return; }
-  if (!sb) { showToast('Supabase não está disponível agora.'); return; }
-  let prep;
-  try {
-    prep = await prepararRestauracaoBackup(file);
-  } catch(e) {
-    showToast('Não foi possível ler esse arquivo — confira se é um .xlsx de backup gerado por este painel.');
-    return;
-  }
-  if (!prep.abas.length) { showToast('Nenhuma aba reconhecida nesse arquivo — confira se é um backup gerado por "Baixar backup completo".'); return; }
-  const resumo = prep.abas.map(a => a.rotulo + ': ' + a.linhas.length + ' linha(s)').join('<br>');
-  openDangerConfirm({
-    titulo: 'Importar backup',
-    mensagem: 'Isto reenvia pro servidor tudo que estiver nas abas reconhecidas de "' + esc(file.name) + '":<br><b>' + resumo + '</b><br><br>É upsert (atualiza quem já existe, nunca apaga nada sozinho) — mas pode <b>sobrescrever</b> dados mais novos do que o backup com os valores de quando ele foi tirado. Afeta todo dispositivo. Não tem como desfazer.',
-    botao: 'Restaurar backup',
-    erro: 'Não foi possível restaurar o backup — tente de novo em instantes.',
-    run: async () => {
-      const resultados = await restaurarBackupCompleto(prep.abas);
-      showToast(resultados.join(' · '));
-      await loadFromSupabase();
-      recomputeAndRender();
-      await loadAuxPaineis();
-    },
-  });
+  const containerEl = blocoAlvoImportacaoJust, btn = botaoAlvoImportacaoJust;
+  blocoAlvoImportacaoJust = null; botaoAlvoImportacaoJust = null;
+  if (!file || !containerEl) return;
+  await importarJustificativasDoBloco(containerEl, btn, file);
 });
 
 function resetData(){
@@ -3756,6 +3741,10 @@ function renderHierarchy(d){
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h8l3 3v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 2.5v3.5h4.5V2.5M5 10h6v3.5H5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
           'Salvar' +
         '</button>' +
+        '<button type="button" class="copy-img-btn ga-import-just-btn" title="Importar justificativas deste bloco de um backup (.xlsx)">' +
+          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7m0 0L5.5 6.5M8 9l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 10.5V13a1 1 0 001 1h9a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
+          'Importar' +
+        '</button>' +
         '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
           'Excel' +
@@ -3767,12 +3756,14 @@ function renderHierarchy(d){
       '</div>';
     details.appendChild(summary);
 
-    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn)');
+    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn):not(.ga-import-just-btn)');
     copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(details, copyBtn, block.ga); });
     const exportGaBtn = summary.querySelector('.ga-export-btn');
     exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportGaBlockToExcel(block, d); });
     const saveJustBtn = summary.querySelector('.ga-save-just-btn');
     saveJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); salvarTodasJustificativasDoBloco(details, saveJustBtn); });
+    const importJustBtn = summary.querySelector('.ga-import-just-btn');
+    importJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); abrirImportacaoJustificativasDoBloco(details, importJustBtn); });
 
     const body = document.createElement('div');
     body.className = 'ga-body';
@@ -4131,11 +4122,8 @@ function renderSettingsPanel(){
   backupSec.className = 'settings-section';
   backupSec.innerHTML =
     '<h3>Backup</h3>' +
-    '<p class="settings-note">Baixa TUDO que está no servidor agora (Base, Hierarquia, Justificativas, Banco de Horas, DSR, Feriados) num arquivo .xlsx — 1 aba por tabela, igual veio do banco. Útil antes de qualquer ação de risco (limpeza de bases, apagar dados do servidor), ou só pra guardar uma cópia local de vez em quando. "Importar backup" lê esse MESMO arquivo de volta e reenvia tudo pro servidor (upsert — atualiza quem já existe, nunca apaga nada sozinho).</p>' +
-    '<div class="settings-btn-row" style="flex-wrap:wrap;">' +
-      '<button type="button" class="upload-btn secondary" id="fazer-backup-btn"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 11V2m0 9l-3.5-3.5M8 11l3.5-3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Baixar backup completo (.xlsx)</button>' +
-      '<label class="upload-btn secondary" for="file-restaurar-backup"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9m0 0l-3.5-3.5M8 11l3.5-3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Importar backup (.xlsx)</label>' +
-    '</div>';
+    '<p class="settings-note">Baixa TUDO que está no servidor agora (Base, Hierarquia, Justificativas, Banco de Horas, DSR, Feriados) num arquivo .xlsx — 1 aba por tabela, igual veio do banco. Útil antes de qualquer ação de risco (limpeza de bases, apagar dados do servidor), ou só pra guardar uma cópia local de vez em quando. Pra IMPORTAR justificativas de um backup de volta, use o botão "Importar" dentro de cada bloco de GA (ao lado de "Salvar").</p>' +
+    '<button type="button" class="upload-btn secondary" id="fazer-backup-btn"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 11V2m0 9l-3.5-3.5M8 11l3.5-3.5M2.5 11v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Baixar backup completo (.xlsx)</button>';
   body.appendChild(backupSec);
   backupSec.querySelector('#fazer-backup-btn').addEventListener('click', fazerBackupCompleto);
 
@@ -5361,6 +5349,10 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
             '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h8l3 3v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 2.5v3.5h4.5V2.5M5 10h6v3.5H5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
             'Salvar' +
           '</button>' +
+          '<button type="button" class="copy-img-btn ga-import-just-btn" title="Importar justificativas deste bloco de um backup (.xlsx)">' +
+            '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7m0 0L5.5 6.5M8 9l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 10.5V13a1 1 0 001 1h9a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
+            'Importar' +
+          '</button>' +
           '<button type="button" class="copy-img-btn ga-export-btn" title="Exportar este GA para Excel">' +
             '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5.5 7.5M8 10l2.5-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.5V13a1 1 0 001 1h8a1 1 0 001-1v-2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>' +
             'Excel' +
@@ -5372,12 +5364,14 @@ function renderAuxGoGaBlocks(containerId, blocks, opts, ctx){
         '</div>';
       gaDetails.appendChild(gaSummary);
 
-      const copyBtn = gaSummary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn)');
+      const copyBtn = gaSummary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn):not(.ga-import-just-btn)');
       copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(gaDetails, copyBtn, gaBlock.ga); });
       const exportGaBtn = gaSummary.querySelector('.ga-export-btn');
       exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportAuxGaBlockToExcel(gaBlock, opts, ctx); });
       const saveJustBtn = gaSummary.querySelector('.ga-save-just-btn');
       saveJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); salvarTodasJustificativasDoBloco(gaDetails, saveJustBtn); });
+      const importJustBtn = gaSummary.querySelector('.ga-import-just-btn');
+      importJustBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); abrirImportacaoJustificativasDoBloco(gaDetails, importJustBtn); });
 
       const gaBody = document.createElement('div');
       gaBody.className = 'ga-body';
