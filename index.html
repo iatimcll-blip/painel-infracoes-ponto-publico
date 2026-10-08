@@ -2177,6 +2177,19 @@ function normText(v){
 // que sejam DATAREFERENCIA consecutivas uma da outra — nunca "o próximo registro da lista",
 // que pode estar vários dias de calendário à frente sem a gente saber o que aconteceu no meio.
 // ============================================================================================
+// coluna de Justificativa DENTRO da própria Base — opcional, pedido do usuário: "quando anexar
+// a base as informações refletirão nas justificativas". Aceita alguns nomes de cabeçalho
+// comuns (acesso por colchete é exato/sensível a maiúsculas, por isso tenta cada variante em
+// vez de confiar numa só) — se a planilha não tiver nenhuma dessas colunas, fica null e nada
+// muda no fluxo de sempre.
+const COLUNAS_JUSTIFICATIVA_BASE = ['JUSTIFICATIVA', 'JUSTIFICATIVA (FCA)', 'JUSTIFICATIVA(FCA)', 'OBSERVACAO', 'OBSERVAÇÃO'];
+function justificativaDaLinhaBase(row){
+  for (const col of COLUNAS_JUSTIFICATIVA_BASE) {
+    const v = normText(row[col]);
+    if (v) return v;
+  }
+  return null;
+}
 async function parseBaseFile(file){
   const wb = await readWorkbook(file);
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -2203,6 +2216,7 @@ async function parseBaseFile(file){
     d7: Number(row['>7 DIAS TRAB']) || 0,
     interj: Number(row['INTERJORNADA']) || 0,
     hex: Number(row['> 2 HORAS EXTRAS']) || 0,
+    justificativa: justificativaDaLinhaBase(row),
   })).filter(r => r.nome && r.data);
   if (!validas.length) throw new Error('Nenhuma linha válida — confira se as colunas seguem o modelo (DATAREFERENCIA, NOME, >7 DIAS TRAB, INTERJORNADA, > 2 HORAS EXTRAS...).');
   // mesma pessoa + mesmo dia duas vezes na planilha (comum quando a base vem de uma
@@ -2212,6 +2226,46 @@ async function parseBaseFile(file){
   validas.forEach(r => porChave.set(r.data + '|' + r.funcid, r));
   const rows = [...porChave.values()];
   return { rows, totalLidas, descartadas: totalLidas - validas.length, duplicadas: validas.length - rows.length };
+}
+// aplica a coluna de Justificativa da própria Base (ver justificativaDaLinhaBase) depois de
+// anexar — pedido do usuário: "quando anexar a base as informações refletirão nas
+// justificativas". A chave usa sempre periodType 'ciclo' (o ciclo de pagamento onde a DATA da
+// linha cai, via cicloOf) — é o mesmo tipo de período que a tela usa pra esse mesmo campo
+// quando alguém está vendo/editando por ciclo (o modo mais comum), então uma edição manual
+// depois encontra e atualiza a MESMA chave em vez de criar uma segunda, solta.
+// Processa em lote (até 500 por chamada) em vez de 1 requisição de rede por linha — uma Base
+// com milhares de linhas não pode significar milhares de chamadas separadas.
+async function aplicarJustificativasDaBase(rows){
+  const autor = AUTH.currentUser || null;
+  const paraSincronizar = [];
+  let aplicadas = 0;
+  for (const r of rows) {
+    if (!r.justificativa) continue;
+    const c = cicloOf(r.data);
+    if (!c) continue;
+    const key = justificativaKeyData(r.nome, 'ciclo', c.key, r.data);
+    const antes = (STATE.justificativas[key] || {}).texto || '';
+    if (antes === r.justificativa) continue; // já está igual — não mexe, não gera tráfego à toa
+    STATE.justificativas[key] = { texto: r.justificativa, atualizadoEm: new Date().toISOString(), autor };
+    marcarJustPendente(key, r.justificativa, autor);
+    paraSincronizar.push({ chave: key, texto: r.justificativa, autor: autor || null });
+    aplicadas++;
+  }
+  if (!aplicadas) return 0;
+  saveJustificativasToStorage();
+  if (sb) {
+    for (let i = 0; i < paraSincronizar.length; i += 500) {
+      const lote = paraSincronizar.slice(i, i + 500);
+      try {
+        const { error } = await withTimeout(sb.rpc('upsert_infracoes_justificativas', { novos: lote }), 30000, 'sincronizar justificativas da base');
+        if (error) throw error;
+        lote.forEach(j => limparJustPendente(j.chave));
+      } catch(e) {
+        console.error('Algumas justificativas da Base ficaram pendentes — vão tentar sincronizar sozinhas depois.', e);
+      }
+    }
+  }
+  return aplicadas;
 }
 async function parseHierFile(file){
   const wb = await readWorkbook(file);
@@ -2246,6 +2300,10 @@ document.getElementById('file-base').addEventListener('change', async evt => {
     const ressalvas = [];
     if (parsed.descartadas) ressalvas.push(parsed.descartadas + ' linha(s) sem nome/data ignorada(s)');
     if (parsed.duplicadas) ressalvas.push(parsed.duplicadas + ' linha(s) duplicada(s) (mesma pessoa e dia) unificada(s)');
+    // Justificativa é um "plus" independente do dado principal (mesmo espírito do resto do
+    // painel) — aplica/sincroniza sozinha aqui, sem depender de a Base em si ter sincronizado.
+    const aplicadasJust = await aplicarJustificativasDaBase(parsed.rows);
+    if (aplicadasJust) ressalvas.push(aplicadasJust + ' justificativa(s) da coluna da planilha aplicada(s)');
     const sufixoFidelidade = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
     if (await hasSupabaseWriteSession()) {
       try {
