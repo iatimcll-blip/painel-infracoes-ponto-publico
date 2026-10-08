@@ -36,6 +36,7 @@ em arquivo — só passada como variável de ambiente na hora do comando.
 | [`supabase_justificativas.sql`](supabase_justificativas.sql) (grant) | `grant execute ... to authenticated, anon` na RPC `upsert_infracoes_justificativas` (liberando escrita sincronizada também pra quem nunca logou) | 2026-10-02 | — |
 | [`supabase_auxiliares.sql`](supabase_auxiliares.sql) (tabelas) | `bh_registros`, `dsr_registros`, `feriado_registros` | 2026-09-22 | Sim (`bh_registros`, `dsr_registros`, `feriado_registros`, desde 2026-10-01) |
 | [`supabase_limpeza_bases.sql`](supabase_limpeza_bases.sql) | RPCs `limpar_infracoes_registros_fora_de`, `limpar_bh_registros_fora_de`, `limpar_dsr_registros_fora_de`, `limpar_feriado_registros_fora_de` (cada uma com `dry_run`) | 2026-10-07 | — |
+| [`supabase_realtime.sql`](supabase_realtime.sql) | Liga as 7 tabelas (`infracoes_registros`, `infracoes_roster`, `infracoes_meta`, `infracoes_justificativas`, `bh_registros`, `dsr_registros`, `feriado_registros`) na publicação `supabase_realtime`, pro painel sincronizar sozinho entre dispositivos via websocket (ver `wireRealtimeSync()`) | 2026-10-08 | — |
 
 ## Padrão de segurança usado em toda tabela deste projeto
 

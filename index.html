@@ -1301,6 +1301,25 @@ async function fetchAllRows(tabela, colunas){
     if (!data || data.length < SUPABASE_PAGE) return todas;
   }
 }
+// extraído de loadFromSupabase() pra poder ser chamada sozinha — o realtime (ver
+// wireRealtimeSync) dispara isto quando SÓ infracoes_justificativas muda, sem precisar reler
+// Base+Hierarquia inteiras (caras agora que a tabela tem dezenas de milhares de linhas) só
+// porque alguém escreveu uma Justificativa.
+async function syncJustificativasFromServer(){
+  try {
+    const justs = await fetchAllRows('infracoes_justificativas', 'chave,texto');
+    const justMap = {};
+    justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
+    // mesma proteção do hierMap: se a leitura vier vazia, não apaga o que já existe local —
+    // só reaplica o que estiver pendente (evita uma leitura vazia/transitória apagando
+    // justificativas reais por engano). Não-vazia: servidor manda, pendente sobrepõe por cima.
+    if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
+    else if (Object.keys(STATE.justificativasPendente).length) STATE.justificativas = aplicarJustPendente(Object.assign({}, STATE.justificativas));
+    saveJustificativasToStorage();
+  } catch(e) {
+    console.error('Não foi possível ler justificativas do Supabase.', e);
+  }
+}
 async function loadFromSupabase(){
   if (!sb) { STATE.readSyncFailed = true; return false; }
   // justificativas são lidas EM PARALELO mas tratadas de forma totalmente INDEPENDENTE do
@@ -1312,21 +1331,7 @@ async function loadFromSupabase(){
   // salva com sucesso num dispositivo não aparecia no outro sempre que a leitura de Base/
   // Hierarquia daquele outro dispositivo falhava por qualquer motivo. Justificativa é um "plus"
   // (anotação do GA), não pode ficar refém do dado principal do painel.
-  const justsPromise = (async () => {
-    try {
-      const justs = await fetchAllRows('infracoes_justificativas', 'chave,texto');
-      const justMap = {};
-      justs.forEach(j => { if (j.texto) justMap[j.chave] = { texto: j.texto }; });
-      // mesma proteção do hierMap: se a leitura vier vazia, não apaga o que já existe local —
-      // só reaplica o que estiver pendente (evita uma leitura vazia/transitória apagando
-      // justificativas reais por engano). Não-vazia: servidor manda, pendente sobrepõe por cima.
-      if (Object.keys(justMap).length) STATE.justificativas = aplicarJustPendente(justMap);
-      else if (Object.keys(STATE.justificativasPendente).length) STATE.justificativas = aplicarJustPendente(Object.assign({}, STATE.justificativas));
-      saveJustificativasToStorage();
-    } catch(e) {
-      console.error('Não foi possível ler justificativas do Supabase.', e);
-    }
-  })();
+  const justsPromise = syncJustificativasFromServer();
 
   let resultado;
   try {
@@ -5541,6 +5546,67 @@ document.getElementById('role-badge').addEventListener('click', () => {
   document.getElementById('settings-overlay').classList.add('show');
 });
 
+/* ---------------- sincronização automática entre dispositivos (Supabase Realtime) ----------------
+   Sem isto, uma mudança feita num dispositivo (upload de Base, edição de Justificativa/
+   hierarquia) só aparecia nos OUTROS quando alguém clicava "Atualizar dados agora" ou
+   recarregava a página — minutos ou horas de atraso dependendo do hábito de cada um. O
+   Supabase Realtime avisa o navegador via websocket assim que um INSERT/UPDATE/DELETE
+   acontece numa tabela (precisa dela estar na publicação "supabase_realtime" — ver
+   supabase_realtime.sql), então o painel só relê quando algo REALMENTE mudou no servidor. */
+function campoEditavelComFoco(){
+  const el = document.activeElement;
+  return !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
+}
+function debounce(fn, ms){
+  let t = null;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+// se a atualização chegar bem na hora em que alguém está digitando (Justificativa, editor de
+// hierarquia, login), não interrompe na hora — espera o campo perder o foco pra nunca derrubar
+// o cursor/texto de quem está no meio de uma edição, e tenta de novo a cada poucos segundos.
+function adiarSeEditando(fn, tentativaDelayMs){
+  if (campoEditavelComFoco()) { setTimeout(() => adiarSeEditando(fn, tentativaDelayMs), tentativaDelayMs); return; }
+  fn();
+}
+// debounced: um upload grande de Base dispara 1 evento de realtime POR LINHA alterada (podem
+// ser milhares, de uma vez só) — sem isto, cada evento disparava uma releitura da tabela
+// inteira, multiplicando por mil o custo de cada upload. Só releitura UMA vez, depois que os
+// eventos pararem de chegar por um instante.
+const recarregarPrincipalDebounced = debounce(() => adiarSeEditando(async () => {
+  await loadFromSupabase();
+  recomputeAndRender();
+}, 2500), 1200);
+const recarregarJustificativasDebounced = debounce(() => adiarSeEditando(async () => {
+  await syncJustificativasFromServer();
+  recomputeAndRender();
+}, 2500), 1200);
+const recarregarAuxDebounced = debounce(() => adiarSeEditando(async () => {
+  await loadAuxPaineis();
+}, 2500), 1200);
+let realtimeChannel = null;
+function wireRealtimeSync(){
+  if (!sb || typeof sb.channel !== 'function') return;
+  try {
+    realtimeChannel = sb.channel('painel-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_registros' }, recarregarPrincipalDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_roster' }, recarregarPrincipalDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_meta' }, recarregarPrincipalDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_justificativas' }, recarregarJustificativasDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bh_registros' }, recarregarAuxDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dsr_registros' }, recarregarAuxDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'feriado_registros' }, recarregarAuxDebounced)
+      .subscribe(status => {
+        // nunca trava nem avisa o usuário comum — "Atualizar dados agora" continua funcionando
+        // normalmente como plano B se o realtime não conectar (rede bloqueando websocket, etc.).
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Realtime do Supabase não conectou (' + status + ') — sincronização automática entre dispositivos fica indisponível; "Atualizar dados agora" continua funcionando normalmente.');
+        }
+      });
+  } catch(e) {
+    console.error('Não foi possível inicializar o Realtime do Supabase.', e);
+  }
+}
+
 (async function boot(){
   enhanceSections();
   applyVerifButtonState();
@@ -5565,5 +5631,6 @@ document.getElementById('role-badge').addEventListener('click', () => {
   await loadFromSupabase();
   recomputeAndRender();
   await loadAuxPaineis();
+  wireRealtimeSync();
 })();
 </script>
