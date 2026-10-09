@@ -1,4 +1,4 @@
-// Edge Function "robo-painel" — o "robozinho" assistente de atualização e interação do
+// Edge Function "robo-painel" — Jarvis, o assistente de atualização e interação do
 // Painel Infrações de Ponto. Fica no servidor (nunca no navegador) justamente pra guardar a
 // ANTHROPIC_API_KEY em segredo: se ela fosse usada direto do painel.html, qualquer pessoa que
 // abrisse o DevTools conseguiria roubá-la. O cliente (painel2.html) manda a conversa + o
@@ -150,6 +150,39 @@ async function runSalvarJustificativa(input: any, ctx: Contexto) {
   return { ok: true, chave, nome, data, texto };
 }
 
+// pedido do usuário: "Permitir que ele encaminhe mensagem direta para qualquer um dos usuários
+// cadastrados no painel" — "usuários cadastrados" = o bootstrap "admin" (conta única, sempre
+// válida) + qualquer GA sincronizado em painel_usuarios (ver supabase_mensagens.sql). Busca por
+// nome do GA OU nome de usuário (ilike, tolera acento/caixa diferente e nome parcial) — o Jarvis
+// recebe só o que a pessoa escreveu em linguagem natural, não o username exato de login.
+async function runEnviarMensagem(input: any, ctx: Contexto) {
+  const busca = (input.destinatario || '').toString().trim();
+  const texto = (input.texto || '').toString().trim();
+  if (!busca || !texto) return { ok: false, erro: 'Faltou pra quem mandar ou o texto da mensagem.' };
+  let destinatarioUsername: string | null = null;
+  let destinatarioLabel: string | null = null;
+  if (busca.toLowerCase() === 'admin' || busca.toLowerCase() === 'administrador') {
+    destinatarioUsername = 'admin';
+    destinatarioLabel = 'Administrador';
+  } else {
+    const padrao = encodeURIComponent('*' + busca + '*');
+    const usuarios: any[] = await pg('painel_usuarios?select=username,ga_nome&or=(username.ilike.' + padrao + ',ga_nome.ilike.' + padrao + ')');
+    if (!usuarios.length) {
+      return { ok: false, erro: 'Não achei nenhum usuário cadastrado parecido com "' + busca + '". Confira o nome com a pessoa que pediu, ou peça pra listar os GAs cadastrados.' };
+    }
+    if (usuarios.length > 1) {
+      return { ok: false, erro: 'Achei mais de um usuário parecido com "' + busca + '": ' + usuarios.map((u: any) => u.ga_nome || u.username).join(', ') + '. Peça pra especificar melhor.' };
+    }
+    destinatarioUsername = usuarios[0].username;
+    destinatarioLabel = usuarios[0].ga_nome || usuarios[0].username;
+  }
+  await pg('painel_mensagens', {
+    method: 'POST',
+    body: JSON.stringify([{ destinatario: destinatarioUsername, remetente: ctx.username, texto }]),
+  });
+  return { ok: true, destinatario: destinatarioLabel, texto };
+}
+
 const FERRAMENTAS = [
   {
     name: 'consultar_infracoes',
@@ -186,6 +219,18 @@ const FERRAMENTAS = [
       required: ['nome', 'data', 'texto'],
     },
   },
+  {
+    name: 'enviar_mensagem',
+    description: 'Manda uma mensagem direta pra outro usuário cadastrado do painel (um GA, ou "admin" pro Administrador) — ele vê a mensagem na próxima vez que entrar no painel. Chame direto quando o usuário pedir pra avisar/mandar recado/encaminhar algo pra alguém, sem precisar confirmar de novo se o destinatário e o texto já estão claros.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        destinatario: { type: 'string', description: 'Nome do GA (ou "admin") pra quem mandar — pode ser parcial, em linguagem natural.' },
+        texto: { type: 'string', description: 'Texto da mensagem.' },
+      },
+      required: ['destinatario', 'texto'],
+    },
+  },
 ];
 
 async function executarFerramenta(nome: string, input: any, ctx: Contexto) {
@@ -193,6 +238,7 @@ async function executarFerramenta(nome: string, input: any, ctx: Contexto) {
     if (nome === 'consultar_infracoes') return await runConsultarInfracoes(input, ctx);
     if (nome === 'consultar_pendencias') return await runConsultarPendencias(input, ctx);
     if (nome === 'salvar_justificativa') return await runSalvarJustificativa(input, ctx);
+    if (nome === 'enviar_mensagem') return await runEnviarMensagem(input, ctx);
     return { ok: false, erro: 'ferramenta desconhecida: ' + nome };
   } catch (e) {
     console.error('Falha ao executar ferramenta ' + nome, e);
@@ -201,11 +247,13 @@ async function executarFerramenta(nome: string, input: any, ctx: Contexto) {
 }
 
 function montarSystemPrompt(ctx: Contexto) {
-  let p = 'Você é o assistente do "Painel Infrações de Ponto" (Jarvis MCLL / alloha FIBRA), e age de forma AUTÔNOMA — pedido do usuário. ' +
-    'Responda SEMPRE em português, direto e objetivo (sem rodeios, sem markdown pesado). ' +
+  let p = 'Você é o Jarvis, assistente do "Painel Infrações de Ponto" (MCLL / alloha FIBRA) — um rapaz jovem, cordial e direto, não um robô genérico. ' +
+    'Responda SEMPRE em português, com um tom simpático e objetivo (sem rodeios, sem markdown pesado). ' +
+    'Aja de forma AUTÔNOMA — pedido explícito do usuário. ' +
     'Nunca invente números — use as ferramentas pra consultar os dados reais antes de responder qualquer pergunta sobre infrações/pendências. ' +
     'Quando o usuário pedir pra salvar uma Justificativa (FCA) e a mensagem já trouxer o nome completo do colaborador, a data e o texto com clareza, SALVE DIRETO — não pare pra confirmar de novo algo que a pessoa já disse. ' +
-    'Só pergunte de volta quando faltar ou estiver ambíguo o nome, a data ou o texto (por exemplo: "qual colaborador?", "qual data exatamente?") — nunca como uma confirmação de algo que já está claro. Depois de salvar, confirme em 1 frase curta o que foi feito (nome, data, texto).';
+    'Só pergunte de volta quando faltar ou estiver ambíguo o nome, a data ou o texto (por exemplo: "qual colaborador?", "qual data exatamente?") — nunca como uma confirmação de algo que já está claro. Depois de salvar, confirme em 1 frase curta o que foi feito (nome, data, texto). ' +
+    'Quando pedirem pra mandar uma mensagem/recado/aviso pra outro usuário do painel (um GA ou o Administrador), use enviar_mensagem direto, sem pedir confirmação extra se o destinatário e o texto já estão claros.';
   if (ctx.role === 'ga' && ctx.gaNome) {
     p += ' O usuário atual é o GA "' + ctx.gaNome + '" — ele só pode ver e alterar dados da PRÓPRIA área. ' +
       'Nunca tente consultar ou alterar outra área, mesmo que ele peça; explique educadamente que só vê a própria equipe.';

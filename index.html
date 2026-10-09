@@ -576,15 +576,21 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
-  /* ---------- robô assistente (chat embutido, pedido do usuário: "agente de atualização e
-     interação do painel") ---------- */
+  /* ---------- Jarvis, o assistente embutido (chat; pedido do usuário: "deixar o robozinho como
+     uma figura humana... chamado Jarvis", livre pra arrastar pra qualquer ponto da tela) ---------- */
   .robo-fab{
     position:fixed; right:20px; bottom:20px; z-index:190; width:52px; height:52px; border-radius:50%;
-    background:var(--s1); color:#fff; border:none; cursor:pointer; display:none; align-items:center;
-    justify-content:center; box-shadow:0 10px 26px rgba(0,0,0,.28); transition:transform .15s;
+    background:var(--s1); color:#fff; border:none; cursor:grab; display:none; align-items:center;
+    justify-content:center; box-shadow:0 10px 26px rgba(0,0,0,.28); transition:transform .15s; touch-action:none;
   }
   .robo-fab:hover{ transform:scale(1.06); }
+  .robo-fab.dragging{ cursor:grabbing; transition:none; box-shadow:0 16px 36px rgba(0,0,0,.4); }
   .robo-fab.show{ display:flex; }
+  .jarvis-badge{
+    position:absolute; top:-2px; right:-2px; width:14px; height:14px; border-radius:50%;
+    background:var(--critical); border:2px solid var(--page); display:none;
+  }
+  .robo-fab.has-novidade .jarvis-badge{ display:block; }
   .robo-panel{
     position:fixed; right:20px; bottom:84px; z-index:190; width:360px; max-width:calc(100vw - 32px);
     height:480px; max-height:calc(100vh - 120px); background:var(--surface-raised); border:1px solid var(--border);
@@ -988,18 +994,21 @@
 <div class="tooltip" id="tooltip"></div>
 <div class="toast" id="toast"></div>
 
-<button type="button" class="robo-fab" id="robo-fab" title="Assistente do painel" aria-label="Abrir assistente do painel">
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <rect x="4" y="7" width="16" height="12" rx="3" stroke="currentColor" stroke-width="1.6"/>
-    <circle cx="9" cy="13" r="1.4" fill="currentColor"/>
-    <circle cx="15" cy="13" r="1.4" fill="currentColor"/>
-    <path d="M12 7V4M9 4h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+<button type="button" class="robo-fab" id="robo-fab" title="Jarvis — arraste pra mover, clique pra conversar" aria-label="Abrir conversa com o Jarvis">
+  <svg width="32" height="32" viewBox="0 0 30 30" fill="none" aria-hidden="true">
+    <path d="M4.5 27.5c0-5.6 4.9-9.3 10.5-9.3s10.5 3.7 10.5 9.3" fill="#F4F4F4"/>
+    <circle cx="15" cy="11.2" r="6.6" fill="#F2C09B"/>
+    <path d="M8.7 10.4c.2-3.7 3-6.5 6.3-6.5s6.1 2.8 6.3 6.5c-1.3-1.8-3.5-2.5-6.3-2.5s-5 .7-6.3 2.5z" fill="#3A2A1E"/>
+    <circle cx="12.5" cy="11.6" r=".85" fill="#2A1E16"/>
+    <circle cx="17.5" cy="11.6" r=".85" fill="#2A1E16"/>
+    <path d="M12.6 14.4c.7.7 3.1.7 3.8 0" stroke="#8A4A32" stroke-width=".9" stroke-linecap="round"/>
   </svg>
+  <span class="jarvis-badge" id="jarvis-badge" aria-hidden="true"></span>
 </button>
 <div class="robo-panel" id="robo-panel">
   <div class="robo-head">
     <div>
-      <div class="m-name">Assistente do painel</div>
+      <div class="m-name">Jarvis</div>
       <div class="m-sub" id="robo-sub"></div>
     </div>
     <button type="button" class="modal-close" id="robo-close" aria-label="Fechar">
@@ -4239,6 +4248,7 @@ function renderSettingsPanel(){
         recomputeAndRender();
         showToast(isGA() ? ('Entrou como GA: ' + currentGaNome() + '.') : ('Entrou como administrador: ' + AUTH.currentUser + '.'));
         checkSupabaseSessionForBadge(); // authLogin() acabou de tentar renovar a sessão no Supabase com a senha atual (só se for Admin)
+        saudarSeNecessario(); // pedido do usuário: Jarvis se apresenta sempre que alguém acessa o painel
       } else {
         errEl.textContent = 'Usuário ou senha incorretos.';
       }
@@ -6294,8 +6304,8 @@ function wireRealtimeSync(){
 }
 
 // ============================================================================================
-// "ROBOZINHO" — assistente de chat embutido no painel (pedido do usuário: "criar um robozinho
-// no qual ele será o agente de atualização e interação do painel"). O painel NUNCA fala direto
+// JARVIS — assistente de chat embutido no painel, com cara de gente (pedido do usuário: "Deixar
+// o robozinho como uma figura humana um rapaz jovem chamado Jarvis"). O painel NUNCA fala direto
 // com a API de IA — só com a Edge Function "robo-painel" do Supabase, que guarda a chave de IA
 // em segredo no servidor e faz as consultas/gravações reais (ver
 // supabase/functions/robo-painel/index.ts e SUPABASE_SCHEMA.md "Robô do painel"). Isto também
@@ -6327,8 +6337,9 @@ function roboAppendMsg(role, texto, extraCls){
 }
 function abrirRobo(){
   document.getElementById('robo-panel').classList.add('show');
+  reposicionarPainelJarvis();
   if (!ROBO_HISTORICO.length) {
-    roboAppendMsg('bot', 'Oi! Posso consultar infrações, listar pendências de Justificativa, ou salvar uma Justificativa (FCA) pra você — só pedir.');
+    roboAppendMsg('bot', 'Oi! Sou o Jarvis. Posso consultar infrações, listar pendências de Justificativa, salvar uma Justificativa (FCA), ou mandar um recado pra outro usuário do painel — só pedir.');
   }
   document.getElementById('robo-input').focus();
 }
@@ -6342,7 +6353,7 @@ async function enviarMensagemRobo(texto){
   try {
     const { data, error } = await withTimeout(sb.functions.invoke('robo-painel', {
       body: { mensagens: ROBO_HISTORICO, contexto: { username: AUTH.currentUser, role: AUTH.currentRole, gaNome: AUTH.currentGaNome } },
-    }), 45000, 'falar com o assistente');
+    }), 45000, 'falar com o Jarvis');
     typing.remove();
     if (error || !data || data.erro) throw new Error((data && data.erro) || (error && error.message) || 'falha desconhecida');
     roboAppendMsg('bot', data.resposta || '(sem resposta)');
@@ -6352,14 +6363,87 @@ async function enviarMensagemRobo(texto){
     if (data.alterou_dados && sb) { await loadFromSupabase(); recomputeAndRender(); }
   } catch(e) {
     typing.remove();
-    console.error('Falha ao falar com o assistente do painel.', e);
-    roboAppendMsg('bot', 'Não consegui falar com o assistente agora — tente de novo em instantes.', 'erro');
+    console.error('Falha ao falar com o Jarvis.', e);
+    roboAppendMsg('bot', 'Não consegui falar com o Jarvis agora — tente de novo em instantes.', 'erro');
   } finally {
     roboEnviando = false;
     document.getElementById('robo-send').disabled = false;
   }
 }
-document.getElementById('robo-fab').addEventListener('click', abrirRobo);
+
+// ---------- posição livre na tela (pedido: "deixar ele livre a tela pra que o usuário possa
+// colocar ele em qualquer ponto da tela") ----------
+// pointerdown/move/up cobre mouse E touch com a mesma API. Um clique sem deslocamento continua
+// abrindo o chat; só vira "arrastar" depois de passar de um limiar mínimo de movimento, senão
+// qualquer clique normal (sem querer mover nada) seria interpretado como arraste.
+const JARVIS_POS_KEY = 'painelInfracoes.jarvisPos.v1';
+let jarvisArrastando = false, jarvisMoveu = false, jarvisStartX = 0, jarvisStartY = 0, jarvisOrigLeft = 0, jarvisOrigTop = 0;
+function aplicarPosicaoJarvis(left, top){
+  const fab = document.getElementById('robo-fab');
+  const w = fab.offsetWidth || 52, h = fab.offsetHeight || 52;
+  const maxLeft = window.innerWidth - w - 8, maxTop = window.innerHeight - h - 8;
+  left = Math.max(8, Math.min(left, maxLeft));
+  top = Math.max(8, Math.min(top, maxTop));
+  fab.style.left = left + 'px'; fab.style.top = top + 'px';
+  fab.style.right = 'auto'; fab.style.bottom = 'auto';
+  if (document.getElementById('robo-panel').classList.contains('show')) reposicionarPainelJarvis();
+}
+function restaurarPosicaoJarvisSalva(){
+  try {
+    const salvo = JSON.parse(localStorage.getItem(JARVIS_POS_KEY) || 'null');
+    if (salvo && typeof salvo.left === 'number' && typeof salvo.top === 'number') aplicarPosicaoJarvis(salvo.left, salvo.top);
+  } catch(e) { /* posição salva corrompida — ignora, fica no canto padrão */ }
+}
+// painel de conversa abre do lado do avatar, não mais travado no canto da tela — escolhe acima/
+// abaixo conforme o espaço disponível, sempre dentro da viewport.
+function reposicionarPainelJarvis(){
+  const fab = document.getElementById('robo-fab'), panel = document.getElementById('robo-panel');
+  const r = fab.getBoundingClientRect();
+  const panelW = panel.offsetWidth || 360, panelH = panel.offsetHeight || 480;
+  let left = r.left + r.width / 2 - panelW / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
+  let top;
+  const espacoAbaixo = window.innerHeight - r.bottom;
+  if (espacoAbaixo >= panelH + 12 || espacoAbaixo >= r.top) {
+    top = Math.min(r.bottom + 10, window.innerHeight - panelH - 8);
+  } else {
+    top = Math.max(8, r.top - panelH - 10);
+  }
+  panel.style.left = left + 'px'; panel.style.top = Math.max(8, top) + 'px';
+  panel.style.right = 'auto'; panel.style.bottom = 'auto';
+}
+document.getElementById('robo-fab').addEventListener('pointerdown', evt => {
+  jarvisArrastando = true; jarvisMoveu = false;
+  jarvisStartX = evt.clientX; jarvisStartY = evt.clientY;
+  const r = document.getElementById('robo-fab').getBoundingClientRect();
+  jarvisOrigLeft = r.left; jarvisOrigTop = r.top;
+  try { document.getElementById('robo-fab').setPointerCapture(evt.pointerId); } catch(e) {}
+});
+document.getElementById('robo-fab').addEventListener('pointermove', evt => {
+  if (!jarvisArrastando) return;
+  const dx = evt.clientX - jarvisStartX, dy = evt.clientY - jarvisStartY;
+  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) jarvisMoveu = true;
+  if (jarvisMoveu) {
+    document.getElementById('robo-fab').classList.add('dragging');
+    aplicarPosicaoJarvis(jarvisOrigLeft + dx, jarvisOrigTop + dy);
+  }
+});
+document.getElementById('robo-fab').addEventListener('pointerup', () => {
+  if (!jarvisArrastando) return;
+  jarvisArrastando = false;
+  document.getElementById('robo-fab').classList.remove('dragging');
+  if (jarvisMoveu) {
+    const r = document.getElementById('robo-fab').getBoundingClientRect();
+    try { localStorage.setItem(JARVIS_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch(e) {}
+  }
+});
+window.addEventListener('resize', () => {
+  if (document.getElementById('robo-fab').classList.contains('show')) restaurarPosicaoJarvisSalva();
+});
+document.getElementById('robo-fab').addEventListener('click', () => {
+  if (jarvisMoveu) { jarvisMoveu = false; return; } // foi um arraste, não um clique — não abre o chat
+  abrirRobo();
+});
 document.getElementById('robo-close').addEventListener('click', fecharRobo);
 document.getElementById('robo-form').addEventListener('submit', evt => {
   evt.preventDefault();
@@ -6373,6 +6457,83 @@ document.getElementById('robo-form').addEventListener('submit', evt => {
 document.getElementById('robo-input').addEventListener('keydown', evt => {
   if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); document.getElementById('robo-form').requestSubmit(); }
 });
+
+// ---------- saudação por horário + lembrete de pendências + mensagens recebidas ----------
+// pedido do usuário: "Sempre que alguém acessar o painel ele deverá se apresentar cordialmente
+// e de acordo com a hora comprimentar com um bom dia, boa tarde ou boa noite, e uma breve
+// apresentação do que ele pode ajudar" + "sempre sugerir algo quando ainda houver pendência sem
+// ser invasivo mas como forma de lembrar o usuario". Tudo calculado no cliente (sem chamar a
+// IA) — mais rápido, sem custo, e sem depender da Edge Function pra uma saudação fixa.
+function saudacaoPorHora(){
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Bom dia';
+  if (h >= 12 && h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+function primeiroNomeDe(nomeOuUsername){
+  return (nomeOuUsername || '').trim().split(/\s+/)[0] || '';
+}
+// conta quantas infrações do ciclo atual (sempre pelo ciclo canônico de cada data — ver
+// periodoCanonicoDaData — não importa qual filtro Ciclo/Semana/Período está ativo na tela) ainda
+// não têm Justificativa (FCA) preenchida, escopado à própria área se for um GA. Reaproveita os
+// mesmos dados já carregados em STATE.lastDerived — nenhuma chamada de rede extra.
+function contarPendenciasCicloAtual(){
+  const d = STATE.lastDerived;
+  if (!d || !d.hierBlocks) return 0;
+  let blocks = d.hierBlocks;
+  if (isGA()) blocks = blocks.filter(b => b.ga === currentGaNome());
+  let count = 0;
+  blocks.forEach(b => (b.colaboradores || []).forEach(c => (c.datas || []).forEach(iso => {
+    const pc = periodoCanonicoDaData(iso);
+    const chave = justificativaKeyData(c.nome, pc.periodType, pc.periodKey, iso);
+    const texto = (STATE.justificativas[chave] || {}).texto;
+    if (!texto || !texto.trim()) count++;
+  })));
+  return count;
+}
+async function buscarMensagensJarvisNaoLidas(){
+  if (!sb || !AUTH.currentUser) return [];
+  const { data, error } = await withTimeout(
+    sb.from('painel_mensagens').select('remetente,texto,criado_em').eq('destinatario', AUTH.currentUser).eq('lida', false).order('criado_em'),
+    10000, 'buscar mensagens'
+  );
+  if (error) throw error;
+  return data || [];
+}
+// dispara 1x por login/acesso (não a cada recomputeAndRender, que roda várias vezes por sessão)
+// — guardado pelo username atual, então um logout+login de outra pessoa no mesmo navegador
+// (ex.: um totem/computador compartilhado) dispara uma saudação nova pra quem entrou.
+let jarvisUltimoSaudado = null;
+async function saudarSeNecessario(){
+  if (!AUTH.currentUser || AUTH.currentUser === jarvisUltimoSaudado) return;
+  jarvisUltimoSaudado = AUTH.currentUser;
+  if (!document.getElementById('robo-fab').classList.contains('show')) return; // não está logado de verdade ainda
+  const nome = primeiroNomeDe(isGA() ? currentGaNome() : AUTH.currentUser);
+  let msg = saudacaoPorHora() + (nome ? ', ' + nome : '') + '! Eu sou o Jarvis, o assistente do painel. ' +
+    'Posso consultar infrações, listar pendências de Justificativa, salvar uma Justificativa (FCA) por você, ou mandar um recado pra outro usuário — é só pedir.';
+  const pend = contarPendenciasCicloAtual();
+  if (pend > 0) {
+    msg += '\n\nAh, um lembrete sem pressa: ainda ' + (pend === 1 ? 'tem 1 infração sem' : 'tem ' + pend + ' infrações sem') + ' Justificativa nesse ciclo, quando quiser dar uma olhada.';
+  }
+  let mensagens = [];
+  try { mensagens = await buscarMensagensJarvisNaoLidas(); } catch(e) { console.error('Não foi possível buscar as mensagens do Jarvis.', e); }
+  if (mensagens.length) {
+    msg += '\n\nVocê também ' + (mensagens.length === 1 ? 'tem 1 mensagem nova' : 'tem ' + mensagens.length + ' mensagens novas') + ':';
+    mensagens.forEach(m => { msg += '\n• ' + (m.remetente || 'alguém') + ': ' + m.texto; });
+    try { await sb.rpc('marcar_mensagens_lidas_painel', { p_destinatario: AUTH.currentUser }); } catch(e) { console.error('Não foi possível marcar as mensagens do Jarvis como lidas.', e); }
+  }
+  ROBO_HISTORICO.length = 0; // acesso novo = conversa nova (pode ser outra pessoa no mesmo navegador)
+  document.getElementById('robo-msgs').innerHTML = '';
+  roboAppendMsg('bot', msg);
+  // entra no histórico como se o próprio Jarvis tivesse dito (rastro real da conversa, pro
+  // modelo "lembrar" que já se apresentou) — também evita abrirRobo() emendar a mensagem
+  // genérica de boas-vindas em cima da saudação (aquele "if (!ROBO_HISTORICO.length)" só dispara
+  // quando a conversa está de fato vazia).
+  ROBO_HISTORICO.push({ role: 'assistant', content: msg });
+  document.getElementById('robo-fab').classList.toggle('has-novidade', pend > 0 || mensagens.length > 0);
+  abrirRobo();
+}
+restaurarPosicaoJarvisSalva(); // aplica a posição onde o Jarvis foi largado da última vez (se alguma)
 
 (async function boot(){
   enhanceSections();
@@ -6399,5 +6560,9 @@ document.getElementById('robo-input').addEventListener('keydown', evt => {
   recomputeAndRender();
   await loadAuxPaineis();
   wireRealtimeSync();
+  // pedido do usuário: "Sempre que alguém acessar o painel ele deverá se apresentar" — cobre
+  // quem já estava logado (sessão restaurada do localStorage) reabrindo/recarregando a página;
+  // um login feito manualmente na tela é saudado separadamente (ver doLogin em renderSettingsPanel).
+  saudarSeNecessario();
 })();
 </script>
