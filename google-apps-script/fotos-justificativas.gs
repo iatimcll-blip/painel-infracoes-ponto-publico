@@ -51,7 +51,28 @@ function doPost(e) {
   }
 }
 
+// o Google às vezes perde a resposta de um POST (404 no redirecionamento) ou executa doGet no
+// lugar do doPost — o painel então repete o MESMO envio (mesmo uid). Guardar o resultado por uid
+// faz a repetição devolver a foto já criada em vez de duplicá-la no Drive.
 function upload_(req, sess) {
+  const cache = CacheService.getScriptCache();
+  const chaveCache = req.uid ? 'up_' + String(req.uid).slice(0, 80) : null;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    if (chaveCache) {
+      const anterior = cache.get(chaveCache);
+      if (anterior) return JSON.parse(anterior);
+    }
+    const res = criarFoto_(req, sess);
+    if (chaveCache && res.ok) cache.put(chaveCache, JSON.stringify(res), 21600);
+    return res;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function criarFoto_(req, sess) {
   if (!sess.pode_editar) return { ok: false, erro: 'sem-permissao' };
   if (!req.chave || !req.base64) return { ok: false, erro: 'dados-incompletos' };
   const bytes = Utilities.base64Decode(req.base64);

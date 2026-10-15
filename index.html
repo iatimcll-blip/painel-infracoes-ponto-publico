@@ -4311,10 +4311,23 @@ function redesenharAnexos(div){
 async function chamarFotosApi(payload){
   // corpo como texto puro (sem header Content-Type custom) = requisição "simples", sem preflight
   // de CORS — o Apps Script não responde OPTIONS.
-  const res = await withTimeout(fetch(FOTOS_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ token: tokenFotos() }, payload)) }), 60000, 'fotos');
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  if (!data || !data.ok) {
+  // O Google é instável aqui (medido em 2026-10-15: ~1 em 4 POSTs voltava 404 no redirecionamento
+  // ou executava o doGet no lugar do doPost). Repete sozinho nesses casos; o upload leva um uid
+  // fixo entre as tentativas, e o Apps Script devolve a foto já criada em vez de duplicar.
+  const corpo = JSON.stringify(Object.assign({ token: tokenFotos(), uid: randomHex(12) }, payload));
+  let data = null, ultimoErro = null;
+  for (let tentativa = 0; tentativa < 5 && !data; tentativa++) {
+    if (tentativa) await new Promise(r => setTimeout(r, 1200 * tentativa));
+    try {
+      const res = await withTimeout(fetch(FOTOS_API_URL, { method: 'POST', body: corpo }), 60000, 'fotos');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const d = await res.json();
+      if (d && d.servico) throw new Error('google-executou-doGet'); // resposta do doGet = POST não processado
+      data = d;
+    } catch(e) { ultimoErro = e; }
+  }
+  if (!data) throw ultimoErro || new Error('falha');
+  if (!data.ok) {
     if (data && data.erro === 'sessao-invalida') { try { localStorage.removeItem(STORAGE_FOTO_TOKEN); } catch(e) {} }
     throw new Error((data && data.erro) || 'falha');
   }
