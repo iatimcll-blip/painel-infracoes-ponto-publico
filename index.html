@@ -4426,7 +4426,7 @@ async function anexarFotos(div, files){
       const base64 = await prepararFotoComCarimbo(file, { chamado, nome, dataFmt, justificativa });
       const n = fotos.length + 1;
       const r = await chamarFotosApi({
-        acao: 'upload', chave, base64, justificativa,
+        acao: 'upload', chave, base64, justificativa, ga: h.ga || '', nomeOriginal: file.name || '',
         nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.jpg',
         cabecalho: 'Chamado: ' + chamado + '\nColaborador: ' + nome + '\nGA: ' + (h.ga || '—') + '\nData da infração: ' + dataFmt,
       });

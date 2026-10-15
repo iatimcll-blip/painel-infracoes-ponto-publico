@@ -58,10 +58,12 @@ function upload_(req, sess) {
   if (bytes.length > MAX_BYTES) return { ok: false, erro: 'foto-grande-demais' };
   const nome = String(req.nomeArquivo || 'foto.jpg').replace(/[^\w.\-]/g, '_').slice(0, 150);
   const blob = Utilities.newBlob(bytes, 'image/jpeg', nome);
-  const file = DriveApp.getFolderById(pastaId_()).createFile(blob);
+  const file = subpastaDoGa_(nomeSubpasta_(req, sess)).createFile(blob);
   const cab = String(req.cabecalho || '').slice(0, 1500);
+  const original = String(req.nomeOriginal || '').slice(0, 200);
   file.setDescription(
-    cab + '\nEnviado por: ' + sess.username + ' em ' + agora_() +
+    cab + (original ? '\nArquivo original: ' + original : '') +
+    '\nEnviado por: ' + sess.username + ' em ' + agora_() +
     '\nRef: ' + req.chave + '\n' + SEPARADOR_JUST + '\n' + String(req.justificativa || '').slice(0, 2500)
   );
   return { ok: true, id: file.getId(), nome: file.getName() };
@@ -106,11 +108,31 @@ function validarSessao_(token, chave) {
   return JSON.parse(res.getContentText());
 }
 
+// uma subpasta por GA dentro da pasta principal (pedido do usuário). GA logado: sempre a área
+// DELE (vem da sessão, não do navegador). Admin: a área do colaborador da justificativa,
+// informada pelo painel — Admin anexando por um GA cai na mesma pasta que o GA usaria.
+function nomeSubpasta_(req, sess) {
+  const bruto = sess.role === 'ga' ? sess.ga_nome : (req.ga || 'Sem GA definido');
+  return String(bruto || 'Sem GA definido').replace(/[\\/:*?"<>|]/g, '-').trim().slice(0, 100) || 'Sem GA definido';
+}
+
+function subpastaDoGa_(nome) {
+  const raiz = DriveApp.getFolderById(pastaId_());
+  const it = raiz.getFoldersByName(nome);
+  return it.hasNext() ? it.next() : raiz.createFolder(nome);
+}
+
+// aceita arquivo na pasta principal ou em qualquer subpasta de GA dela — nunca fora dela
 function arquivoDaPasta_(id) {
   const file = DriveApp.getFileById(String(id || ''));
-  const pasta = pastaId_();
+  const raiz = pastaId_();
   const pais = file.getParents();
-  while (pais.hasNext()) if (pais.next().getId() === pasta) return file;
+  while (pais.hasNext()) {
+    const pai = pais.next();
+    if (pai.getId() === raiz) return file;
+    const avos = pai.getParents();
+    while (avos.hasNext()) if (avos.next().getId() === raiz) return file;
+  }
   throw new Error('arquivo-fora-da-pasta');
 }
 
