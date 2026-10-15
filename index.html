@@ -5913,9 +5913,12 @@ async function gerarApresentacaoPPT(){
   // um clique só, apresentação com todos os painéis que tiverem alguma planilha anexada no
   // momento (cada *.lastDerived só existe depois de pelo menos um anexo bem-sucedido daquele
   // painel) — não exige mais que Infrações especificamente tenha dados.
-  const dados = { infracoes: STATE.lastDerived, bh: STATE_BH.lastDerived, dsr: STATE_DSR.lastDerived, feriado: STATE_FERIADO.lastDerived };
-  if (!dados.infracoes && !dados.bh && !dados.dsr && !dados.feriado) {
-    showToast('Nenhum dado carregado pra gerar a apresentação — anexe uma planilha em pelo menos um painel primeiro.');
+  // só Infrações entra na apresentação — Banco de Horas, DSR e Feriados foram retirados a pedido
+  // do usuário (2026-10-15). buildApresentacaoPres continua sabendo montar essas seções; basta
+  // voltar a passar STATE_BH/STATE_DSR/STATE_FERIADO.lastDerived aqui se um dia quiserem de volta.
+  const dados = { infracoes: STATE.lastDerived, bh: null, dsr: null, feriado: null };
+  if (!dados.infracoes) {
+    showToast('Nenhum dado de Infrações carregado pra gerar a apresentação — anexe a Base primeiro.');
     return;
   }
   if (typeof PptxGenJS === 'undefined') { showToast('A biblioteca de apresentações ainda não carregou — aguarde alguns segundos e tente de novo.'); return; }
