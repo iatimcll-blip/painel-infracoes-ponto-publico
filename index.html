@@ -496,6 +496,12 @@
   .foto-chip .foto-ver{ color:var(--good); font-weight:600; }
   .foto-chip .foto-del{ border-left-color:var(--good); }
   .foto-chip .foto-ver-nome{ max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:10.5px; }
+  .foto-progresso{ flex-basis:100%; display:flex; align-items:center; gap:8px; }
+  .foto-progresso .fp-trilho{ flex:1; max-width:320px; height:6px; background:var(--grid); border-radius:999px; overflow:hidden; }
+  .foto-progresso .fp-barra{ display:block; height:100%; width:0; background:var(--s1); border-radius:999px; transition:width .25s ease; }
+  .foto-progresso .fp-texto{ font-size:10.5px; color:var(--text-secondary); font-family:var(--mono); white-space:nowrap; }
+  .foto-progresso.fp-erro .fp-barra{ background:var(--critical); }
+  .foto-progresso.fp-erro .fp-texto{ color:var(--critical); white-space:normal; }
   .fotos-admin-h3{ margin:0 0 8px; font-size:12.5px; font-weight:600; color:var(--text-secondary); }
   #fotos-lista .foto-chip{ margin-right:4px; }
   .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
@@ -4457,16 +4463,25 @@ async function anexarFotos(div, files){
   if (lista.length > vagas) showToast('Só cabem mais ' + vagas + ' foto(s) — as demais foram ignoradas.');
   const label = div.querySelector('.foto-add');
   if (label) label.classList.add('busy');
+  const lote = lista.slice(0, vagas);
+  const prog = barraProgressoFotos(div);
+  prog.set(2, 'Preparando…');
   // garante que o texto que vai carimbado na foto é o mesmo salvo na justificativa
   if (ta) await salvarCampoJustificativa(ta, chaveDoJustInput(ta), row);
   const dataFmt = fmtDMY(parseISODate(iso));
   const h = STATE.hierMap[nome] || {};
   const fotos = atual.fotos.slice();
   let falhou = null;
-  for (const file of lista.slice(0, vagas)) {
+  for (const [idx, file] of lote.entries()) {
+    // cada foto ocupa uma fatia igual da barra (95% no total; os 5% finais = registrar no painel)
+    const ini = idx / lote.length * 95, fatia = 95 / lote.length;
+    const rotulo = 'Foto ' + (idx + 1) + ' de ' + lote.length;
     try {
+      prog.set(ini + fatia * 0.05, rotulo + ' · preparando…');
       const base64 = await prepararFotoComCarimbo(file, { chamado, nome, dataFmt, justificativa });
       const n = fotos.length + 1;
+      prog.set(ini + fatia * 0.15, rotulo + ' · enviando ao Drive…');
+      prog.avancarAte(ini + fatia * 0.95); // o envio não informa progresso real — anda devagar até o fim da fatia
       const r = await chamarFotosApi({
         acao: 'upload', chave, base64, justificativa, ga: h.ga || '', nomeOriginal: file.name || '',
         nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.jpg',
@@ -4474,16 +4489,49 @@ async function anexarFotos(div, files){
       });
       // quem anexou e quando, POR FOTO (alimenta o painel "Fotos anexadas" do Admin)
       fotos.push({ id: r.id, nome: r.nome, por: AUTH.currentUser || null, em: new Date().toISOString() });
+      prog.set(ini + fatia, rotulo + ' · enviada ✓');
     } catch(e) { console.error('Falha ao enviar foto.', e); falhou = e; break; }
   }
   if (fotos.length !== atual.fotos.length) {
+    prog.set(96, 'Registrando no painel…');
     try { await salvarAnexosNoServidor(chave, chamado, fotos); }
     catch(e) { console.error('Fotos enviadas ao Drive, mas não deu pra registrar no painel.', e); falhou = falhou || e; }
   }
+  if (falhou) prog.erro('Falhou — ' + msgErroFotos(falhou));
+  else prog.set(100, 'Concluído ✓');
+  await new Promise(r => setTimeout(r, falhou ? 2500 : 900));
+  prog.parar();
   redesenharAnexos(div);
   const enviadas = (STATE.anexos[chave] || { fotos: [] }).fotos.length - atual.fotos.length;
   if (falhou) showToast((enviadas > 0 ? enviadas + ' foto(s) anexada(s), mas ' : '') + msgErroFotos(falhou));
   else showToast(enviadas + ' foto(s) anexada(s) — chamado ' + chamado + '.');
+}
+// barrinha de progresso do anexo (pedido do usuário) — fica embaixo do campo do chamado
+// enquanto as fotos sobem; some sozinha quando a linha é redesenhada no fim.
+function barraProgressoFotos(div){
+  let el = div.querySelector('.foto-progresso');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'foto-progresso';
+    el.innerHTML = '<div class="fp-trilho"><span class="fp-barra"></span></div><span class="fp-texto"></span>';
+    div.appendChild(el);
+  }
+  const barra = el.querySelector('.fp-barra'), texto = el.querySelector('.fp-texto');
+  let atual = 0, timer = null;
+  const pintar = (pct, msg) => {
+    atual = Math.max(0, Math.min(100, pct));
+    barra.style.width = atual.toFixed(1) + '%';
+    if (msg != null) texto.dataset.msg = msg;
+    texto.textContent = Math.round(atual) + '% · ' + (texto.dataset.msg || '');
+  };
+  const parar = () => { if (timer) { clearInterval(timer); timer = null; } };
+  return {
+    set(pct, msg){ parar(); pintar(pct, msg); },
+    // anda sozinha, cada vez mais devagar, sem nunca passar do alvo (o envio real não tem progresso)
+    avancarAte(alvo){ parar(); timer = setInterval(() => { if (atual < alvo - 0.2) pintar(atual + (alvo - atual) * 0.06); }, 250); },
+    erro(msg){ parar(); el.classList.add('fp-erro'); pintar(atual, msg); },
+    parar,
+  };
 }
 async function salvarChamado(input){
   const div = input.closest('.just-anexos');
