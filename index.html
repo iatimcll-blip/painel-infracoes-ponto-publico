@@ -491,6 +491,11 @@
   .foto-chip .foto-del{ padding:3px 7px; color:var(--text-muted); border-left:1px solid var(--border); }
   .foto-add{ display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--s1); border:1px dashed var(--s1); border-radius:999px; padding:3px 9px; cursor:pointer; }
   .foto-add.busy{ opacity:.6; pointer-events:none; }
+  .foto-add.bloqueado{ color:var(--text-muted); border-color:var(--border); cursor:not-allowed; opacity:.7; }
+  .foto-chip{ border-color:var(--good); background:var(--good-tint); }
+  .foto-chip .foto-ver{ color:var(--good); font-weight:600; }
+  .foto-chip .foto-del{ border-left-color:var(--good); }
+  .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
   .foto-add input{ display:none; }
   .foto-lightbox{ position:fixed; inset:0; background:rgba(11,11,11,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:200; }
   .foto-lightbox.show{ display:flex; }
@@ -4273,16 +4278,29 @@ function anexosHtml(chave, nome, iso){
   const travaChamado = a.fotos.length > 0;
   const chamadoAttrs = !editavel ? ' disabled title="Só o GA desta área (ou um Administrador) pode editar."'
     : (travaChamado ? ' disabled title="O chamado está gravado nas fotos — remova as fotos pra trocar o número."' : '');
+  // marcador de OK (pedido do usuário): cada foto anexada vira um chip verde com ✓, e a linha
+  // ganha um selo "✓ OK" assim que tem pelo menos 1 foto confirmada no Drive.
+  const ok = a.fotos.length ? '<span class="foto-ok" title="'+a.fotos.length+' foto(s) anexada(s) e guardada(s) no Drive">✓ OK</span>' : '';
   const chips = a.fotos.map((f, i) =>
-    '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.nome || '')+'">📷 Foto '+(i+1)+'</button>' +
+    '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.nome || '')+'">✓ Foto '+(i+1)+'</button>' +
     (editavel ? '<button type="button" class="foto-del" data-id="'+esc(f.id)+'" title="Remover esta foto">×</button>' : '') +
     '</span>').join('');
+  // só libera anexar com o nº do chamado preenchido (pedido do usuário) — o botão nasce
+  // bloqueado e destrava ao digitar (ver atualizarBotaoFoto).
   const add = (editavel && a.fotos.length < FOTOS_MAX)
-    ? '<label class="foto-add" title="Anexar foto (máx. '+FOTOS_MAX+' por justificativa)">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="image/*" multiple></label>'
+    ? '<label class="foto-add'+(a.chamado ? '' : ' bloqueado')+'" title="'+(a.chamado ? 'Anexar foto (máx. '+FOTOS_MAX+' por justificativa)' : 'Digite o nº do chamado para liberar o anexo de fotos')+'">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="image/*" multiple'+(a.chamado ? '' : ' disabled')+'></label>'
     : '';
   return '<div class="just-anexos" data-chave="'+esc(chave)+'" data-nome="'+esc(nome)+'" data-data="'+esc(iso)+'">' +
     '<input type="text" class="just-chamado" maxlength="60" placeholder="Nº do chamado" value="'+esc(a.chamado)+'"'+chamadoAttrs+'>' +
-    chips + add + '</div>';
+    ok + chips + add + '</div>';
+}
+function atualizarBotaoFoto(div){
+  const label = div && div.querySelector('.foto-add');
+  if (!label) return;
+  const temChamado = !!div.querySelector('.just-chamado').value.trim();
+  label.classList.toggle('bloqueado', !temChamado);
+  label.querySelector('.foto-input').disabled = !temChamado;
+  label.title = temChamado ? 'Anexar foto (máx. ' + FOTOS_MAX + ' por justificativa)' : 'Digite o nº do chamado para liberar o anexo de fotos';
 }
 function redesenharAnexos(div){
   if (!div || !div.isConnected) return;
@@ -4502,7 +4520,18 @@ hierBlocksContainer.addEventListener('change', evt => {
   if (files && files.length) anexarFotos(evt.target.closest('.just-anexos'), files);
   evt.target.value = '';
 });
+hierBlocksContainer.addEventListener('input', evt => {
+  if (evt.target.classList && evt.target.classList.contains('just-chamado')) atualizarBotaoFoto(evt.target.closest('.just-anexos'));
+});
 hierBlocksContainer.addEventListener('click', evt => {
+  const bloqueado = evt.target.closest && evt.target.closest('.foto-add.bloqueado');
+  if (bloqueado) {
+    evt.preventDefault();
+    showToast('Digite o número do chamado antes de anexar a foto.');
+    const campo = bloqueado.closest('.just-anexos').querySelector('.just-chamado');
+    if (campo) campo.focus();
+    return;
+  }
   const ver = evt.target.closest && evt.target.closest('.foto-ver');
   if (ver) { evt.preventDefault(); verFoto(ver.dataset.id); return; }
   const del = evt.target.closest && evt.target.closest('.foto-del');
