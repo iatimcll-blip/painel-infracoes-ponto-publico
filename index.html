@@ -5512,6 +5512,80 @@ function pptSecaoTemaAuxiliar(pres, temaKey, temaLabel, d, opts, kpiTiles, eyebr
     });
   });
 }
+// fotos anexadas às justificativas (pedido do usuário: "as fotos anexadas deverão ser aplicadas
+// na apresentação PPT") — 1 slide de evidências por justificativa com foto, logo depois do slide
+// do GA dela: colaborador, data, chamado, texto da justificativa e as fotos (até 3) lado a lado.
+// As imagens chegam já baixadas em `fotos` (id -> { data, w, h }, ver baixarFotosParaApresentacao),
+// porque buildApresentacaoPres é síncrona.
+function justificativasComFotoDoBloco(block){
+  const itens = [];
+  (block.colaboradores || []).forEach(c => (c.datas || []).forEach(iso => {
+    const pc = periodoCanonicoDaData(iso);
+    const chave = justificativaKeyData(c.nome, pc.periodType, pc.periodKey, iso);
+    const a = STATE.anexos[chave];
+    if (a && a.fotos && a.fotos.length) itens.push({ nome: c.nome, iso, chave, chamado: a.chamado || '', fotos: a.fotos, texto: (STATE.justificativas[chave] || {}).texto || '' });
+  }));
+  return itens;
+}
+function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
+  justificativasComFotoDoBloco(block).forEach(j => {
+    const imgs = j.fotos.map(f => fotos[f.id]).filter(Boolean);
+    if (!imgs.length) return; // fotos não puderam ser baixadas (sem login/sem rede) — não gera slide vazio
+    const s = pres.addSlide();
+    pptCabecalho(s, 'Evidências — ' + j.nome, 'Foto(s) anexada(s) à justificativa (FCA) · ' + d.cicloAtualLabel, eyebrow);
+    s.addText([
+      { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
+      { text:'   ·   Data da infração: ', options:{ bold:true, color:PPT_NAVY } }, { text:fmtDMY(parseISODate(j.iso)), options:{ color:PPT_NAVY } },
+      { text:'   ·   Chamado nº ', options:{ bold:true, color:PPT_NAVY } }, { text:(j.chamado || '—'), options:{ color:PPT_GREEN, bold:true } },
+    ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
+    s.addShape('roundRect', { x:0.5, y:2.05, w:12.3, h:0.75, rectRadius:0.05, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
+    s.addText([{ text:'Justificativa: ', options:{ bold:true } }, { text: j.texto || '—' }],
+      { x:0.65, y:2.08, w:12.0, h:0.69, fontFace:'Arial', fontSize:10.5, color:PPT_NAVY, valign:'middle', fit:'shrink', isTextBox:true, margin:0 });
+    // fotos lado a lado, cada uma "contida" na sua faixa sem distorcer
+    const areaY = 2.95, areaH = 4.05, gap = 0.25, n = imgs.length;
+    const slotW = (12.3 - (n - 1) * gap) / n;
+    imgs.forEach((img, i) => {
+      const escala = Math.min(slotW / img.w, areaH / img.h);
+      const w = img.w * escala, h = img.h * escala;
+      const x = 0.5 + i * (slotW + gap) + (slotW - w) / 2;
+      s.addImage({ data: img.data, x, y: areaY + (areaH - h) / 2, w, h });
+    });
+    pptRodape(s, rodapeTxt);
+  });
+}
+// baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
+// justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
+async function baixarFotosParaApresentacao(d){
+  const out = {};
+  if (!FOTOS_API_URL || !d || !tokenFotos()) return { fotos: out, total: 0, ok: 0 };
+  const ids = [];
+  (d.hierBlocks || []).forEach(b => justificativasComFotoDoBloco(b).forEach(j => j.fotos.forEach(f => ids.push(f.id))));
+  let ok = 0;
+  const fila = ids.slice();
+  const trabalhador = async () => {
+    while (fila.length) {
+      const id = fila.shift();
+      try {
+        if (!FOTO_CACHE[id]) {
+          const r = await chamarFotosApi({ acao: 'ver', id });
+          FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
+        }
+        const dims = await new Promise((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve({ w: el.naturalWidth || 4, h: el.naturalHeight || 3 });
+          el.onerror = reject;
+          el.src = FOTO_CACHE[id];
+        });
+        out[id] = { data: FOTO_CACHE[id].replace(/^data:/, ''), w: dims.w, h: dims.h };
+        ok++;
+        showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
+      } catch(e) { console.error('Não foi possível baixar a foto ' + id + ' para a apresentação.', e); }
+    }
+  };
+  await Promise.all([trabalhador(), trabalhador(), trabalhador()]);
+  return { fotos: out, total: ids.length, ok };
+}
+
 // rótulo de período "principal" da apresentação — usado no rodapé/título/nome do arquivo:
 // prioriza o ciclo de Infrações (é o painel original do modelo); se só os painéis auxiliares
 // tiverem dados anexados, cai pro período de qualquer um deles que exista.
@@ -5640,6 +5714,7 @@ function buildApresentacaoPres(dados){
     ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
     s.addTable(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
     pptRodape(s, rodapeTxt);
+    pptSlidesEvidenciasGA(pres, block, d, dados.fotos || {}, eyebrow, rodapeTxt);
   });
 
   // --- ranking: maior redução de infrações ---
@@ -5747,10 +5822,22 @@ async function gerarApresentacaoPPT(){
   const btn = document.getElementById('apresentacao-btn');
   if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
   try {
+    // fotos das justificativas — só pra quem está logado como GA/Admin (a pasta do Drive é privada)
+    let avisoFotos = '';
+    if (FOTOS_API_URL && dados.infracoes) {
+      const temFotos = (dados.infracoes.hierBlocks || []).some(b => justificativasComFotoDoBloco(b).length);
+      if (temFotos && !tokenFotos()) avisoFotos = ' (sem as fotos — entre como GA/Admin pra incluí-las)';
+      else if (temFotos) {
+        const r = await baixarFotosParaApresentacao(dados.infracoes);
+        dados.fotos = r.fotos;
+        if (r.ok < r.total) avisoFotos = ' (' + (r.total - r.ok) + ' foto(s) não puderam ser baixadas)';
+        else if (r.total) avisoFotos = ' com ' + r.total + ' foto(s)';
+      }
+    }
     const pres = buildApresentacaoPres(dados);
     const labelPrincipal = labelPrincipalApresentacao(dados);
     await pres.writeFile({ fileName: nomeArquivoApresentacao(labelPrincipal) + '.pptx' });
-    showToast('Apresentação gerada: ' + labelPrincipal + '.');
+    showToast('Apresentação gerada: ' + labelPrincipal + avisoFotos + '.');
   } catch (e) {
     console.error('Falha ao gerar a apresentação em PowerPoint.', e);
     showToast('Não foi possível gerar a apresentação — detalhes no console (F12).');
