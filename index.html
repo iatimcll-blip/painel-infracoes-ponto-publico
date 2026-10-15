@@ -495,11 +495,6 @@
   .foto-chip{ border-color:var(--good); background:var(--good-tint); }
   .foto-chip .foto-ver{ color:var(--good); font-weight:600; }
   .foto-chip .foto-del{ border-left-color:var(--good); }
-  .fotos-cfg-kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:4px 0 10px; }
-  .fotos-cfg-kpis div{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:2px; }
-  .fotos-cfg-kpis b{ font-size:20px; font-weight:600; line-height:1.1; }
-  .fotos-cfg-kpis span{ font-size:11px; color:var(--text-muted); }
-  .fotos-cfg-tabela{ width:100%; font-size:12px; margin-bottom:8px; }
   .fotos-admin-h3{ margin:0 0 8px; font-size:12.5px; font-weight:600; color:var(--text-secondary); }
   #fotos-lista .foto-chip{ margin-right:4px; }
   .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
@@ -797,6 +792,28 @@
     <div class="kpi-grid" id="kpi-grid"></div>
   </section>
 
+  <section data-export="fotos" id="fotos-admin-section" style="display:none">
+    <div class="section-head">
+      <h2>Fotos anexadas · controle do Administrador</h2>
+      <span class="hint" id="fotos-admin-hint">visível só para Administrador — todas as áreas, sem depender do filtro de ciclo</span>
+    </div>
+    <div class="kpi-grid" id="fotos-kpis"></div>
+    <div class="card table-scroll" style="margin-top:10px;">
+      <h3 class="fotos-admin-h3">Por quem anexou</h3>
+      <table>
+        <thead><tr><th>Quem anexou</th><th class="num-col">Fotos</th><th class="num-col">Justificativas</th><th>Áreas (GA)</th><th>Último anexo</th></tr></thead>
+        <tbody id="fotos-por-autor"></tbody>
+      </table>
+    </div>
+    <div class="card table-scroll" style="margin-top:10px;">
+      <h3 class="fotos-admin-h3">Anexos (mais recentes primeiro)</h3>
+      <table>
+        <thead><tr><th>Quando</th><th>Quem anexou</th><th>Colaborador</th><th>GA</th><th>Data da infração</th><th>Chamado</th><th>Fotos</th></tr></thead>
+        <tbody id="fotos-lista"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section data-export="ano">
     <div class="section-head">
       <h2>Infrações no ano</h2>
@@ -905,28 +922,6 @@
       <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
-  </section>
-
-  <section data-export="fotos" id="fotos-admin-section" style="display:none">
-    <div class="section-head">
-      <h2>Fotos anexadas · controle do Administrador</h2>
-      <span class="hint" id="fotos-admin-hint">visível só para Administrador — todas as áreas, sem depender do filtro de ciclo</span>
-    </div>
-    <div class="kpi-grid" id="fotos-kpis"></div>
-    <div class="card table-scroll" style="margin-top:10px;">
-      <h3 class="fotos-admin-h3">Por quem anexou</h3>
-      <table>
-        <thead><tr><th>Quem anexou</th><th class="num-col">Fotos</th><th class="num-col">Justificativas</th><th>Áreas (GA)</th><th>Último anexo</th></tr></thead>
-        <tbody id="fotos-por-autor"></tbody>
-      </table>
-    </div>
-    <div class="card table-scroll" style="margin-top:10px;">
-      <h3 class="fotos-admin-h3">Anexos (mais recentes primeiro)</h3>
-      <table>
-        <thead><tr><th>Quando</th><th>Quem anexou</th><th>Colaborador</th><th>GA</th><th>Data da infração</th><th>Chamado</th><th>Fotos</th></tr></thead>
-        <tbody id="fotos-lista"></tbody>
-      </table>
-    </div>
   </section>
 
   <section data-export="verif">
@@ -4840,41 +4835,6 @@ function renderSettingsPanel(){
     reloginSubmit.addEventListener('click', doRelogin);
     relogSec.querySelector('#relogin-pass').addEventListener('keydown', evt => { if (evt.key === 'Enter') doRelogin(); });
     relogSec.querySelector('#relogin-pass').focus();
-  }
-
-  // contador de fotos anexadas + quem anexou, logo no topo do painel do Administrador (pedido do
-  // usuário: "não vejo os contadores" — o bloco completo fica no fim da aba Infrações, fácil de
-  // não achar). Mesmos números do renderFotosAdmin(); o botão leva até a lista completa.
-  if (FOTOS_API_URL) {
-    const itensFotos = listaFotosAnexadas();
-    const porQuem = {};
-    itensFotos.forEach(i => { porQuem[i.por] = (porQuem[i.por] || 0) + 1; });
-    const hojeKey = isoKey(new Date());
-    const hojeQtd = itensFotos.filter(i => i.em && isoKey(new Date(i.em)) === hojeKey).length;
-    const fotosSec = document.createElement('div');
-    fotosSec.className = 'settings-section';
-    fotosSec.innerHTML =
-      '<h3>📷 Fotos anexadas nas justificativas</h3>' +
-      '<div class="fotos-cfg-kpis">' +
-        '<div><b class="num">' + fmt(itensFotos.length) + '</b><span>fotos</span></div>' +
-        '<div><b class="num">' + fmt(hojeQtd) + '</b><span>hoje</span></div>' +
-        '<div><b class="num">' + fmt(new Set(itensFotos.map(i => i.chave)).size) + '</b><span>justificativas</span></div>' +
-        '<div><b class="num">' + fmt(Object.keys(porQuem).length) + '</b><span>pessoas</span></div>' +
-      '</div>' +
-      (itensFotos.length
-        ? '<table class="fotos-cfg-tabela"><thead><tr><th>Quem anexou</th><th class="num-col">Fotos</th></tr></thead><tbody>' +
-            Object.entries(porQuem).sort((a, b) => b[1] - a[1]).map(([q, n]) => '<tr><td>' + esc(q) + '</td><td class="num-col num">' + fmt(n) + '</td></tr>').join('') +
-          '</tbody></table>'
-        : '<p class="settings-note">Nenhuma foto anexada ainda.</p>') +
-      '<div class="settings-btn-row"><button type="button" class="he-btn" id="fotos-ver-lista">Ver lista completa</button></div>';
-    body.appendChild(fotosSec);
-    fotosSec.querySelector('#fotos-ver-lista').addEventListener('click', () => {
-      document.getElementById('settings-overlay').classList.remove('show');
-      const alvo = document.getElementById('fotos-admin-section');
-      const abaInfracoes = document.querySelector('.tab-btn[data-tab="infracoes"]');
-      if (abaInfracoes && !abaInfracoes.classList.contains('active')) abaInfracoes.click();
-      if (alvo) { alvo.classList.remove('collapsed'); alvo.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    });
   }
 
   const importSec = document.createElement('div');
