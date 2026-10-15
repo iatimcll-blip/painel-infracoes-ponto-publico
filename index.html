@@ -479,6 +479,23 @@
      numa linha própria embaixo do campo, nunca espremido ao lado do textarea. */
   .just-autor{ flex-basis:100%; font-size:10px; color:var(--text-muted); font-style:italic; padding-left:2px; }
   .just-input:disabled{ opacity:.55; cursor:not-allowed; background:var(--grid); }
+  /* Nº do chamado + até 3 fotos por linha de Justificativa (só GA/Admin veem) — fotos ficam no
+     Google Drive privado, ver FOTOS_API_URL. Linha própria embaixo do campo, recuada até o texto. */
+  .just-anexos{ flex-basis:100%; display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-left:47px; }
+  .just-chamado{ width:130px; font-family:var(--mono); font-size:11px; color:var(--text-primary); background:var(--page); border:1px solid var(--border); border-radius:5px; padding:4px 7px; }
+  .just-chamado:focus{ outline:2px solid var(--s1); outline-offset:1px; border-color:var(--s1); }
+  .just-chamado:disabled{ opacity:.7; cursor:not-allowed; }
+  .foto-chip{ display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:999px; background:var(--surface-raised); overflow:hidden; }
+  .foto-chip button{ border:0; background:transparent; color:var(--text-primary); font-size:11px; padding:3px 8px; cursor:pointer; font-family:var(--sans); }
+  .foto-chip button:hover{ background:var(--grid); }
+  .foto-chip .foto-del{ padding:3px 7px; color:var(--text-muted); border-left:1px solid var(--border); }
+  .foto-add{ display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--s1); border:1px dashed var(--s1); border-radius:999px; padding:3px 9px; cursor:pointer; }
+  .foto-add.busy{ opacity:.6; pointer-events:none; }
+  .foto-add input{ display:none; }
+  .foto-lightbox{ position:fixed; inset:0; background:rgba(11,11,11,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:200; }
+  .foto-lightbox.show{ display:flex; }
+  .foto-lightbox img{ max-width:100%; max-height:calc(100vh - 32px); border-radius:8px; box-shadow:0 24px 64px rgba(0,0,0,.4); }
+  .foto-lightbox .fl-msg{ color:#fff; font-size:13px; }
 
   /* ---------- detail modal ---------- */
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
@@ -1244,6 +1261,45 @@ function justAutorHtml(chave){
 // igual à senha do Admin principal). Se não bater, a escrita sincronizada só fica indisponível
 // — o login local continua funcionando normalmente.
 const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
+// Fotos das Justificativas — URL do Web App do Google Apps Script (google-apps-script/
+// fotos-justificativas.gs) que grava na pasta privada do Drive. Vazia = recurso desligado (o
+// campo de chamado e o botão de foto nem aparecem).
+const FOTOS_API_URL = '';
+const FOTOS_MAX = 3;
+// token de sessão (supabase_fotos_justificativas.sql, painel_sessoes) que o Apps Script confere
+// antes de aceitar/mostrar/apagar uma foto — obtido no login de GA/Admin, já que a senha só
+// passa pelo painel nessa hora.
+const STORAGE_FOTO_TOKEN = 'painelInfracoes.fotoToken.v1';
+function tokenFotos(){
+  try {
+    const t = JSON.parse(localStorage.getItem(STORAGE_FOTO_TOKEN) || 'null');
+    return (t && t.token && t.username === AUTH.currentUser) ? t.token : null;
+  } catch(e) { return null; }
+}
+function limparTokenFotos(){
+  const tk = tokenFotos();
+  try { localStorage.removeItem(STORAGE_FOTO_TOKEN); } catch(e) {}
+  if (tk && sb) withTimeout(sb.rpc('painel_encerrar_sessao', { p_token: tk }), 5000, 'encerrar sessão de fotos').catch(() => {});
+}
+async function obterTokenFotos(username, password){
+  if (!sb || !FOTOS_API_URL) return;
+  limparTokenFotos();
+  let token = null;
+  try {
+    const { data, error } = await withTimeout(sb.rpc('painel_criar_sessao', { p_username: username, p_password: password }), 10000, 'sessão de fotos');
+    if (!error && data && data.ok) token = data.token;
+  } catch(e) {}
+  // Admin "bootstrap" só existe localmente (não está em painel_usuarios) — pega o token pela
+  // sessão de escrita do Supabase que authLogin() acabou de abrir.
+  if (!token && isAdmin()) {
+    try {
+      const { data, error } = await withTimeout(sb.rpc('painel_criar_sessao_admin', { p_username: username }), 10000, 'sessão de fotos (admin)');
+      if (!error && data && data.ok) token = data.token;
+    } catch(e) {}
+  }
+  if (token) { try { localStorage.setItem(STORAGE_FOTO_TOKEN, JSON.stringify({ token, username })); } catch(e) {} }
+  else console.warn('Não foi possível obter a sessão de fotos — anexar/ver fotos fica indisponível até o próximo login.');
+}
 // nenhuma chamada ao Supabase pode ficar pendurada pra sempre — sem isto, uma rede lenta/instável
 // deixava botões travados em "carregando" indefinidamente, sem nenhum toast de erro, parecendo
 // que o clique "não fez nada".
@@ -1295,9 +1351,11 @@ async function authLogin(username, password){
     try { await withTimeout(sb.auth.signInWithPassword({ email: SUPABASE_WRITE_EMAIL, password }), 10000, 'login Supabase'); }
     catch(e) { console.error('Não foi possível autenticar no Supabase — escrita sincronizada fica indisponível.', e); }
   }
+  obterTokenFotos(AUTH.currentUser, password).catch(() => {}); // em segundo plano — não atrasa o login
   return true;
 }
 function authLogout(){
+  limparTokenFotos();
   clearAuthSession();
   if (sb) withTimeout(sb.auth.signOut(), 5000, 'logout Supabase').catch(() => {});
 }
@@ -1579,6 +1637,23 @@ async function syncJustificativasFromServer(){
     saveJustificativasToStorage();
   } catch(e) {
     console.error('Não foi possível ler justificativas do Supabase.', e);
+  }
+  await syncAnexosFromServer();
+}
+// nº do chamado + IDs das fotos no Drive de cada Justificativa (supabase_fotos_justificativas.sql).
+// Independente das justificativas: se a tabela ainda não existir/falhar, só não mostra anexos.
+async function syncAnexosFromServer(){
+  if (!sb || !FOTOS_API_URL) return;
+  try {
+    const rows = await fetchAllRows('infracoes_justificativas_anexos', 'id,chave,chamado,fotos,autor');
+    const mapa = {};
+    rows.forEach(r => {
+      const fotos = Array.isArray(r.fotos) ? r.fotos : [];
+      if (r.chamado || fotos.length) mapa[r.chave] = { chamado: r.chamado || '', fotos, autor: r.autor || null };
+    });
+    STATE.anexos = mapa;
+  } catch(e) {
+    console.error('Não foi possível ler os anexos (chamado/fotos) das justificativas.', e);
   }
 }
 async function loadFromSupabase(){
@@ -2111,7 +2186,7 @@ function cssVar(name){
 /* ---------------- estado ---------------- */
 // o painel começa vazio de propósito — só mostra dados quando existe uma Base anexada de
 // verdade (localmente ou sincronizada pelo Supabase), nunca uma planilha de exemplo embutida.
-let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, justificativasPendente: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+let STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: {}, justificativasPendente: {}, anexos: {}, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
 
 function tryLoadFromStorage(){
   try {
@@ -2588,7 +2663,7 @@ function resetData(){
   // justificativas (e o que ainda está pendente de sincronizar delas) NÃO são apagadas aqui —
   // são anotações do GA, independentes da Base/Hierarquia anexada, e "limpar dados locais" é
   // especificamente sobre essas duas.
-  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, justificativasPendente: STATE.justificativasPendente, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
+  STATE = { raw: [], hierMap: {}, hierMapPendente: {}, justificativas: STATE.justificativas, justificativasPendente: STATE.justificativasPendente, anexos: STATE.anexos, cicloSel: null, semanaSel: null, periodoInicio: null, periodoFim: null, filterMode: 'ciclo', usingDefault: true, usingSupabase: false, pendingSync: null, readSyncFailed: false, lastDerived: null };
   recomputeAndRender();
   showToast('Dados locais removidos (dados sincronizados no Supabase não foram alterados).');
 }
@@ -4045,6 +4120,7 @@ function renderHierarchy(d){
             justSyncDotHTML(jChave) +
             '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(pc.periodType)+'" data-period-key="'+esc(pc.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…"'+justDisabledAttr(c.nome)+'>'+esc(jTexto)+'</textarea>' +
             justAutorHtml(jChave) +
+            anexosHtml(jChave, c.nome, iso) +
           '</div>';
         }).join('');
         tr.innerHTML =
@@ -4127,6 +4203,7 @@ async function salvarCampoJustificativa(ta, key, flashAlvo){
     await withRetry(() => upsertSingleJustificativaToSupabase(key, texto, autor), 3, 2000);
     limparJustPendente(key);
     atualizarJustSyncDot(flashAlvo, key); // sucesso -> vira "sincronizada" (verde)
+    atualizarDescricaoFotos(key, texto);
     return 'sincronizada';
   } catch(syncErr) {
     console.error('Justificativa salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
@@ -4179,6 +4256,257 @@ hierBlocksContainer.addEventListener('focusout', async evt => {
   if (resultado === 'pendente-falhou') {
     showToast('Justificativa salva neste navegador — vai continuar tentando sincronizar sozinha (protegida até lá).');
   }
+});
+
+/* ---------------- Nº do chamado + fotos (até 3) por linha de Justificativa ----------------
+   Pedido do usuário (2026-10-15). Só GA/Admin veem; GA só edita a própria área. As fotos vão do
+   navegador direto pro Web App do Apps Script (FOTOS_API_URL), que grava na pasta privada do
+   Google Drive; o Supabase guarda só chave -> chamado + IDs dos arquivos. Cada foto sai do
+   navegador já com uma faixa no rodapé com o nº do chamado, colaborador, data e a justificativa
+   (pedido: "cada foto anexada deverá conter o número do chamado junto com a justificativa") — o
+   mesmo vai no nome e na descrição do arquivo no Drive. */
+function anexosHtml(chave, nome, iso){
+  if (!FOTOS_API_URL || !(isAdmin() || isGA())) return '';
+  const a = STATE.anexos[chave] || { chamado: '', fotos: [] };
+  const editavel = campoJustEhEditavelPara(nome);
+  // com foto já anexada o chamado trava — ele está carimbado nas fotos; pra trocar, remove as fotos
+  const travaChamado = a.fotos.length > 0;
+  const chamadoAttrs = !editavel ? ' disabled title="Só o GA desta área (ou um Administrador) pode editar."'
+    : (travaChamado ? ' disabled title="O chamado está gravado nas fotos — remova as fotos pra trocar o número."' : '');
+  const chips = a.fotos.map((f, i) =>
+    '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.nome || '')+'">📷 Foto '+(i+1)+'</button>' +
+    (editavel ? '<button type="button" class="foto-del" data-id="'+esc(f.id)+'" title="Remover esta foto">×</button>' : '') +
+    '</span>').join('');
+  const add = (editavel && a.fotos.length < FOTOS_MAX)
+    ? '<label class="foto-add" title="Anexar foto (máx. '+FOTOS_MAX+' por justificativa)">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="image/*" multiple></label>'
+    : '';
+  return '<div class="just-anexos" data-chave="'+esc(chave)+'" data-nome="'+esc(nome)+'" data-data="'+esc(iso)+'">' +
+    '<input type="text" class="just-chamado" maxlength="60" placeholder="Nº do chamado" value="'+esc(a.chamado)+'"'+chamadoAttrs+'>' +
+    chips + add + '</div>';
+}
+function redesenharAnexos(div){
+  if (!div || !div.isConnected) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = anexosHtml(div.dataset.chave, div.dataset.nome, div.dataset.data);
+  if (tmp.firstElementChild) div.replaceWith(tmp.firstElementChild);
+}
+async function chamarFotosApi(payload){
+  // corpo como texto puro (sem header Content-Type custom) = requisição "simples", sem preflight
+  // de CORS — o Apps Script não responde OPTIONS.
+  const res = await withTimeout(fetch(FOTOS_API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ token: tokenFotos() }, payload)) }), 60000, 'fotos');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (!data || !data.ok) {
+    if (data && data.erro === 'sessao-invalida') { try { localStorage.removeItem(STORAGE_FOTO_TOKEN); } catch(e) {} }
+    throw new Error((data && data.erro) || 'falha');
+  }
+  return data;
+}
+async function salvarAnexosNoServidor(chave, chamado, fotos){
+  const { data, error } = await withTimeout(sb.rpc('painel_salvar_anexos', { p_token: tokenFotos(), p_chave: chave, p_chamado: chamado, p_fotos: fotos }), 15000, 'gravar anexos');
+  if (error) throw error;
+  if (!data || !data.ok) {
+    if (data && data.erro === 'sessao-invalida') { try { localStorage.removeItem(STORAGE_FOTO_TOKEN); } catch(e) {} }
+    throw new Error((data && data.erro) || 'recusado');
+  }
+  if (chamado || fotos.length) STATE.anexos[chave] = { chamado, fotos, autor: AUTH.currentUser };
+  else delete STATE.anexos[chave];
+}
+function msgErroFotos(e){
+  const m = (e && e.message) || '';
+  if (m === 'sessao-invalida') return 'Sua sessão de fotos expirou — saia e entre de novo (Configurações) pra anexar/ver fotos.';
+  if (m === 'sem-permissao') return 'Só o GA desta área (ou um Administrador) pode alterar esta justificativa.';
+  if (m === 'foto-grande-demais') return 'Foto grande demais — tente outra.';
+  return 'Não foi possível concluir agora — confira a internet e tente de novo.';
+}
+function exigirTokenFotos(){
+  if (tokenFotos()) return true;
+  showToast('Pra anexar ou ver fotos, saia e entre de novo em Configurações (só desta vez).');
+  return false;
+}
+function slugArquivo(s){
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toUpperCase().slice(0, 50);
+}
+function quebrarTexto(ctx, texto, larguraMax, maxLinhas){
+  const linhas = [];
+  let atual = '';
+  for (const palavra of String(texto).replace(/\s+/g, ' ').trim().split(' ')) {
+    const tentativa = atual ? atual + ' ' + palavra : palavra;
+    if (ctx.measureText(tentativa).width <= larguraMax || !atual) atual = tentativa;
+    else { linhas.push(atual); atual = palavra; }
+  }
+  if (atual) linhas.push(atual);
+  if (linhas.length > maxLinhas) {
+    const cortadas = linhas.slice(0, maxLinhas);
+    cortadas[maxLinhas - 1] = cortadas[maxLinhas - 1].replace(/\s*\S*$/, '') + '…';
+    return cortadas;
+  }
+  return linhas;
+}
+// reduz a foto (máx. 1600px no lado maior, JPEG) e carimba uma faixa no rodapé com chamado +
+// colaborador + data + justificativa. Devolve o base64 do JPEG (sem o prefixo data:).
+async function prepararFotoComCarimbo(file, info){
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('imagem-invalida'));
+      el.src = url;
+    });
+    const escala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * escala), h = Math.round(img.naturalHeight * escala);
+    const fonte = Math.max(13, Math.round(w / 48)), lh = Math.round(fonte * 1.35), pad = Math.round(fonte * 0.8);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = '600 ' + fonte + 'px sans-serif';
+    const l1 = 'Chamado nº ' + info.chamado + '  ·  ' + info.nome + '  ·  ' + info.dataFmt;
+    const linhas1 = quebrarTexto(ctx, l1, w - pad * 2, 2);
+    ctx.font = fonte + 'px sans-serif';
+    const linhasJ = quebrarTexto(ctx, 'Justificativa: ' + (info.justificativa || '—'), w - pad * 2, 4);
+    const faixa = pad * 2 + lh * (linhas1.length + linhasJ.length);
+    canvas.width = w; canvas.height = h + faixa;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h + faixa);
+    ctx.drawImage(img, 0, 0, w, h);
+    ctx.fillStyle = '#111111'; ctx.fillRect(0, h, w, faixa);
+    ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'top';
+    let y = h + pad;
+    ctx.font = '600 ' + fonte + 'px sans-serif';
+    linhas1.forEach(l => { ctx.fillText(l, pad, y); y += lh; });
+    ctx.font = fonte + 'px sans-serif';
+    linhasJ.forEach(l => { ctx.fillText(l, pad, y); y += lh; });
+    return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+async function anexarFotos(div, files){
+  const chave = div.dataset.chave, nome = div.dataset.nome, iso = div.dataset.data;
+  const row = div.closest('.just-date-row');
+  const ta = row && row.querySelector('.just-input');
+  const chamado = (div.querySelector('.just-chamado').value || '').trim();
+  const justificativa = ta ? ta.value.trim() : '';
+  if (!chamado) { showToast('Digite o número do chamado antes de anexar a foto.'); div.querySelector('.just-chamado').focus(); return; }
+  if (!justificativa) { showToast('Escreva a justificativa antes de anexar a foto.'); if (ta) ta.focus(); return; }
+  if (!exigirTokenFotos()) return;
+  const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
+  const vagas = FOTOS_MAX - atual.fotos.length;
+  if (vagas <= 0) { showToast('Esta justificativa já tem ' + FOTOS_MAX + ' fotos (o máximo).'); return; }
+  const lista = [...files].filter(f => /^image\//.test(f.type));
+  if (!lista.length) { showToast('Escolha um arquivo de imagem.'); return; }
+  if (lista.length > vagas) showToast('Só cabem mais ' + vagas + ' foto(s) — as demais foram ignoradas.');
+  const label = div.querySelector('.foto-add');
+  if (label) label.classList.add('busy');
+  // garante que o texto que vai carimbado na foto é o mesmo salvo na justificativa
+  if (ta) await salvarCampoJustificativa(ta, chaveDoJustInput(ta), row);
+  const dataFmt = fmtDMY(parseISODate(iso));
+  const h = STATE.hierMap[nome] || {};
+  const fotos = atual.fotos.slice();
+  let falhou = null;
+  for (const file of lista.slice(0, vagas)) {
+    try {
+      const base64 = await prepararFotoComCarimbo(file, { chamado, nome, dataFmt, justificativa });
+      const n = fotos.length + 1;
+      const r = await chamarFotosApi({
+        acao: 'upload', chave, base64, justificativa,
+        nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.jpg',
+        cabecalho: 'Chamado: ' + chamado + '\nColaborador: ' + nome + '\nGA: ' + (h.ga || '—') + '\nData da infração: ' + dataFmt,
+      });
+      fotos.push({ id: r.id, nome: r.nome });
+    } catch(e) { console.error('Falha ao enviar foto.', e); falhou = e; break; }
+  }
+  if (fotos.length !== atual.fotos.length) {
+    try { await salvarAnexosNoServidor(chave, chamado, fotos); }
+    catch(e) { console.error('Fotos enviadas ao Drive, mas não deu pra registrar no painel.', e); falhou = falhou || e; }
+  }
+  redesenharAnexos(div);
+  const enviadas = (STATE.anexos[chave] || { fotos: [] }).fotos.length - atual.fotos.length;
+  if (falhou) showToast((enviadas > 0 ? enviadas + ' foto(s) anexada(s), mas ' : '') + msgErroFotos(falhou));
+  else showToast(enviadas + ' foto(s) anexada(s) — chamado ' + chamado + '.');
+}
+async function salvarChamado(input){
+  const div = input.closest('.just-anexos');
+  const chave = div.dataset.chave;
+  const chamado = input.value.trim();
+  const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
+  if (chamado === atual.chamado) return;
+  if (!campoJustEhEditavelPara(div.dataset.nome)) return;
+  if (!exigirTokenFotos()) { input.value = atual.chamado; return; }
+  try {
+    await salvarAnexosNoServidor(chave, chamado, atual.fotos);
+    const row = div.closest('.just-date-row');
+    if (row) { row.classList.remove('just-saved'); void row.offsetWidth; row.classList.add('just-saved'); }
+  } catch(e) {
+    console.error('Não foi possível salvar o nº do chamado.', e);
+    input.value = atual.chamado;
+    showToast(msgErroFotos(e));
+  }
+}
+async function removerFoto(div, id){
+  const chave = div.dataset.chave;
+  const atual = STATE.anexos[chave];
+  if (!atual || !exigirTokenFotos()) return;
+  if (!confirm('Remover esta foto? Ela vai pra lixeira do Google Drive.')) return;
+  try {
+    await chamarFotosApi({ acao: 'excluir', chave, id });
+    await salvarAnexosNoServidor(chave, atual.chamado, atual.fotos.filter(f => f.id !== id));
+    delete FOTO_CACHE[id];
+    redesenharAnexos(div);
+    showToast('Foto removida.');
+  } catch(e) {
+    console.error('Não foi possível remover a foto.', e);
+    showToast(msgErroFotos(e));
+  }
+}
+const FOTO_CACHE = {};
+let fotoLightbox = null;
+async function verFoto(id){
+  if (!exigirTokenFotos()) return;
+  if (!fotoLightbox) {
+    fotoLightbox = document.createElement('div');
+    fotoLightbox.className = 'foto-lightbox';
+    fotoLightbox.addEventListener('click', () => fotoLightbox.classList.remove('show'));
+    document.addEventListener('keydown', evt => { if (evt.key === 'Escape') fotoLightbox.classList.remove('show'); });
+    document.body.appendChild(fotoLightbox);
+  }
+  fotoLightbox.innerHTML = '<span class="fl-msg">Carregando foto…</span>';
+  fotoLightbox.classList.add('show');
+  try {
+    if (!FOTO_CACHE[id]) {
+      const r = await chamarFotosApi({ acao: 'ver', id });
+      FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
+    }
+    fotoLightbox.innerHTML = '<img alt="Foto anexada à justificativa" src="' + FOTO_CACHE[id] + '">';
+  } catch(e) {
+    console.error('Não foi possível abrir a foto.', e);
+    fotoLightbox.innerHTML = '<span class="fl-msg">' + esc(msgErroFotos(e)) + '</span>';
+  }
+}
+// quando o texto da justificativa muda depois das fotos já anexadas, atualiza a descrição dos
+// arquivos no Drive (a faixa carimbada na imagem fica com o texto da hora do envio).
+function atualizarDescricaoFotos(chave, texto){
+  const a = STATE.anexos[chave];
+  if (!FOTOS_API_URL || !a || !a.fotos.length || !tokenFotos()) return;
+  chamarFotosApi({ acao: 'descrever', chave, ids: a.fotos.map(f => f.id), justificativa: texto })
+    .catch(e => console.error('Não foi possível atualizar a descrição das fotos no Drive.', e));
+}
+hierBlocksContainer.addEventListener('focusout', evt => {
+  if (evt.target.classList && evt.target.classList.contains('just-chamado')) salvarChamado(evt.target);
+});
+hierBlocksContainer.addEventListener('keydown', evt => {
+  if (evt.key === 'Enter' && evt.target.classList && evt.target.classList.contains('just-chamado')) evt.target.blur();
+});
+hierBlocksContainer.addEventListener('change', evt => {
+  if (!(evt.target.classList && evt.target.classList.contains('foto-input'))) return;
+  const files = evt.target.files;
+  if (files && files.length) anexarFotos(evt.target.closest('.just-anexos'), files);
+  evt.target.value = '';
+});
+hierBlocksContainer.addEventListener('click', evt => {
+  const ver = evt.target.closest && evt.target.closest('.foto-ver');
+  if (ver) { evt.preventDefault(); verFoto(ver.dataset.id); return; }
+  const del = evt.target.closest && evt.target.closest('.foto-del');
+  if (del) { evt.preventDefault(); removerFoto(del.closest('.just-anexos'), del.dataset.id); }
 });
 
 /* ---------------- recolher/expandir + copiar em todas as seções ---------------- */
@@ -6307,6 +6635,7 @@ function wireRealtimeSync(){
       .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_roster' }, recarregarPrincipalDebounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_meta' }, recarregarPrincipalDebounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_justificativas' }, recarregarJustificativasDebounced)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'infracoes_justificativas_anexos' }, recarregarJustificativasDebounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bh_registros' }, recarregarAuxDebounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'dsr_registros' }, recarregarAuxDebounced)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'feriado_registros' }, recarregarAuxDebounced)
