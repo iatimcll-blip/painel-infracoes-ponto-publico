@@ -1302,6 +1302,12 @@ const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
 // campo de chamado e o botão de foto nem aparecem).
 const FOTOS_API_URL = 'https://script.google.com/macros/s/AKfycbwRenm970-ichjTQFk5Nkz1_Nn32utD5zoqN2wXoNgCPJ8Q0F1F56sM-jFg0yFozCYN6w/exec';
 const FOTOS_MAX = 3;
+// formatos de foto aceitos no anexo (pedido do usuário: "o arquivo a ser anexado será sempre nos
+// formatos de foto"). Tudo vira JPEG antes de subir (ver prepararFotoComCarimbo).
+const FOTOS_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif';
+function ehArquivoDeFoto(f){
+  return /^image\/(jpeg|pjpeg|png|webp|heic|heif)$/i.test(f.type || '') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || '');
+}
 // token de sessão (supabase_fotos_justificativas.sql, painel_sessoes) que o Apps Script confere
 // antes de aceitar/mostrar/apagar uma foto — obtido no login de GA/Admin, já que a senha só
 // passa pelo painel nessa hora.
@@ -4322,7 +4328,7 @@ function anexosHtml(chave, nome, iso){
   // só libera anexar com o nº do chamado preenchido (pedido do usuário) — o botão nasce
   // bloqueado e destrava ao digitar (ver atualizarBotaoFoto).
   const add = (editavel && a.fotos.length < FOTOS_MAX)
-    ? '<label class="foto-add'+(a.chamado ? '' : ' bloqueado')+'" title="'+(a.chamado ? 'Anexar foto (máx. '+FOTOS_MAX+' por justificativa)' : 'Digite o nº do chamado para liberar o anexo de fotos')+'">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="image/*" multiple'+(a.chamado ? '' : ' disabled')+'></label>'
+    ? '<label class="foto-add'+(a.chamado ? '' : ' bloqueado')+'" title="'+(a.chamado ? 'Anexar foto (máx. '+FOTOS_MAX+' por justificativa)' : 'Digite o nº do chamado para liberar o anexo de fotos')+'">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="'+FOTOS_ACCEPT+'" multiple'+(a.chamado ? '' : ' disabled')+'></label>'
     : '';
   return '<div class="just-anexos" data-chave="'+esc(chave)+'" data-nome="'+esc(nome)+'" data-data="'+esc(iso)+'">' +
     '<input type="text" class="just-chamado" maxlength="60" placeholder="Nº do chamado" value="'+esc(a.chamado)+'"'+chamadoAttrs+'>' +
@@ -4383,6 +4389,7 @@ function msgErroFotos(e){
   if (m === 'sessao-invalida') return 'Sua sessão de fotos expirou — saia e entre de novo (Configurações) pra anexar/ver fotos.';
   if (m === 'sem-permissao') return 'Só o GA desta área (ou um Administrador) pode alterar esta justificativa.';
   if (m === 'foto-grande-demais') return 'Foto grande demais — tente outra.';
+  if (m === 'foto-nao-suportada') return 'Este navegador não conseguiu abrir a foto (comum com HEIC do iPhone fora do Safari). Salve/exporte como JPG e anexe de novo.';
   return 'Não foi possível concluir agora — confira a internet e tente de novo.';
 }
 function exigirTokenFotos(){
@@ -4417,7 +4424,7 @@ async function prepararFotoComCarimbo(file, info){
     const img = await new Promise((resolve, reject) => {
       const el = new Image();
       el.onload = () => resolve(el);
-      el.onerror = () => reject(new Error('imagem-invalida'));
+      el.onerror = () => reject(new Error('foto-nao-suportada'));
       el.src = url;
     });
     const escala = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
@@ -4458,8 +4465,12 @@ async function anexarFotos(div, files){
   const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
   const vagas = FOTOS_MAX - atual.fotos.length;
   if (vagas <= 0) { showToast('Esta justificativa já tem ' + FOTOS_MAX + ' fotos (o máximo).'); return; }
-  const lista = [...files].filter(f => /^image\//.test(f.type));
-  if (!lista.length) { showToast('Escolha um arquivo de imagem.'); return; }
+  // só formatos de foto (pedido do usuário) — PDF, vídeo, documento etc. são recusados
+  const todos = [...files];
+  const lista = todos.filter(ehArquivoDeFoto);
+  const recusados = todos.filter(f => !ehArquivoDeFoto(f));
+  if (!lista.length) { showToast('Só é possível anexar fotos (JPG, PNG, WEBP ou HEIC) — "' + (recusados[0] && recusados[0].name) + '" não é uma foto.'); return; }
+  if (recusados.length) showToast(recusados.length + ' arquivo(s) ignorado(s) por não serem foto: ' + recusados.map(f => f.name).join(', ') + '.');
   if (lista.length > vagas) showToast('Só cabem mais ' + vagas + ' foto(s) — as demais foram ignoradas.');
   const label = div.querySelector('.foto-add');
   if (label) label.classList.add('busy');
