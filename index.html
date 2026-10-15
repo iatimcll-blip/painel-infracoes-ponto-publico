@@ -495,6 +495,7 @@
   .foto-chip{ border-color:var(--good); background:var(--good-tint); }
   .foto-chip .foto-ver{ color:var(--good); font-weight:600; }
   .foto-chip .foto-del{ border-left-color:var(--good); }
+  .foto-chip .foto-ver-nome{ max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:10.5px; }
   .fotos-admin-h3{ margin:0 0 8px; font-size:12.5px; font-weight:600; color:var(--text-secondary); }
   #fotos-lista .foto-chip{ margin-right:4px; }
   .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
@@ -4307,7 +4308,9 @@ function anexosHtml(chave, nome, iso){
   // ganha um selo "✓ OK" assim que tem pelo menos 1 foto confirmada no Drive.
   const ok = a.fotos.length ? '<span class="foto-ok" title="'+a.fotos.length+' foto(s) anexada(s) e guardada(s) no Drive">✓ OK</span>' : '';
   const chips = a.fotos.map((f, i) =>
-    '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.nome || '')+'">✓ Foto '+(i+1)+'</button>' +
+    // mostra o nome do arquivo gravado no Drive (CH-<chamado>_..._n.jpg) — pedido do usuário:
+    // "deixar ao lado o nome do arquivo anexo (número do chamado informado)"
+    '<span class="foto-chip"><button type="button" class="foto-ver foto-ver-nome" data-id="'+esc(f.id)+'" title="Abrir '+esc(f.nome || ('Foto '+(i+1)))+'">✓ '+esc(f.nome || ('Foto '+(i+1)))+'</button>' +
     (editavel ? '<button type="button" class="foto-del" data-id="'+esc(f.id)+'" title="Remover esta foto">×</button>' : '') +
     '</span>').join('');
   // só libera anexar com o nº do chamado preenchido (pedido do usuário) — o botão nasce
