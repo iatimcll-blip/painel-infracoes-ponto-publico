@@ -5362,11 +5362,84 @@ function pptCabecalho(s, titulo, subtitulo, regiaoTxt){
   s.addText((regiaoTxt || 'OPERAÇÕES').toUpperCase(), { x:0.5, y:0.32, w:9, h:0.32, fontFace:'Arial', fontSize:11, bold:true, color:PPT_NAVY, charSpacing:1, isTextBox:true, margin:0 });
   s.addText([{ text:'alloha ', options:{ color:PPT_NAVY, bold:true } }, { text:'FIBRA', options:{ color:PPT_GREEN, bold:true, charSpacing:1 } }],
     { x:10.2, y:0.28, w:2.6, h:0.4, align:'right', fontFace:'Arial', fontSize:15, isTextBox:true, margin:0 });
-  s.addText(titulo, { x:0.5, y:0.72, w:12.3, h:0.55, fontFace:'Cambria', fontSize:23, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
-  if (subtitulo) s.addText(subtitulo, { x:0.5, y:1.24, w:12.3, h:0.4, fontFace:'Arial', fontSize:12, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+  s.addText(titulo, { x:0.5, y:0.72, w:12.3, h:0.55, fontFace:'Cambria', fontSize:pptFonteQueCabe(titulo, 12.3, 0.55, 23, 13, 1), bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+  if (subtitulo) s.addText(subtitulo, { x:0.5, y:1.26, w:12.3, h:0.34, fontFace:'Arial', fontSize:pptFonteQueCabe(subtitulo, 12.3, 0.34, 12, 8, 1), color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
 }
 function pptRodape(s, texto){
-  s.addText(texto, { x:0.5, y:7.12, w:12.3, h:0.3, fontFace:'Arial', fontSize:9, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+  s.addText(texto, { x:0.5, y:7.12, w:12.3, h:0.3, fontFace:'Arial', fontSize:pptFonteQueCabe(texto, 12.3, 0.3, 9, 7, 1), italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+}
+/* ---- "nada passa da borda do slide" (pedido do usuário, 2026-10-15) ----
+   O PowerPoint não encolhe texto sozinho ao abrir o arquivo, e a paginação automática de tabela
+   do pptxgenjs subestima a altura de linhas com texto longo (Justificativa) — as tabelas
+   vazavam pra fora do slide. Agora: estimativa CONSERVADORA de linhas/altura por texto, fonte
+   reduzida até caber nas caixas, e tabelas divididas em slides de "continuação" por conta
+   própria (pptTabelaPaginada), cada um com cabeçalho e rodapé. */
+const PPT_LIMITE_INFERIOR = 7.0; // abaixo disto só o rodapé (y 7,12)
+function pptLinhasEstimadas(texto, larguraIn, fontPt){
+  const porLinha = Math.max(1, Math.floor(larguraIn / (fontPt / 72 * 0.56)));
+  return String(texto == null ? '' : texto).split('\n').reduce((tot, par) => tot + Math.max(1, Math.ceil(par.length / porLinha)), 0);
+}
+// maior fonte (de `base` descendo até `min`) em que o texto cabe na caixa larguraIn × alturaIn
+// sem passar de maxLinhas (0 = sem limite de linhas, só a altura)
+function pptFonteQueCabe(texto, larguraIn, alturaIn, base, min, maxLinhas){
+  for (let f = base; f > min; f -= 0.5) {
+    const linhas = pptLinhasEstimadas(texto, larguraIn, f);
+    if ((!maxLinhas || linhas <= maxLinhas) && linhas * (f / 72 * 1.2) <= alturaIn) return f;
+  }
+  return min;
+}
+// corta o texto (com "…") pra caber em larguraIn × alturaIn na fonte dada
+function pptCortarParaCaber(texto, larguraIn, alturaIn, fontPt){
+  const maxLinhas = Math.max(1, Math.floor(alturaIn / (fontPt / 72 * 1.2)));
+  let t = String(texto == null ? '' : texto);
+  if (pptLinhasEstimadas(t, larguraIn, fontPt) <= maxLinhas) return t;
+  while (t.length > 1 && pptLinhasEstimadas(t + '…', larguraIn, fontPt) > maxLinhas) t = t.slice(0, Math.max(1, Math.floor(t.length * 0.92)));
+  return t.replace(/\s+\S*$/, '') + '…';
+}
+function pptCont(cont){ return cont ? ' (continuação)' : ''; }
+// linha "Gestor: X · GO: Y" — fonte reduz se os nomes forem longos
+function pptLinhaGestor(s, pares){
+  const texto = pares.map(p => p[0] + p[1]).join('');
+  const f = pptFonteQueCabe(texto, 12.3, 0.35, 13, 8, 1);
+  const runs = [];
+  pares.forEach(p => { runs.push({ text:p[0], options:{ bold:true, color:PPT_NAVY } }); runs.push({ text:String(p[1]), options:{ color:PPT_NAVY } }); });
+  s.addText(runs, { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:f, isTextBox:true, margin:0 });
+}
+function pptAlturaLinhaTabela(linha, colW){
+  let maior = 0;
+  linha.forEach((cel, i) => {
+    const fonte = (cel.options && cel.options.fontSize) || 11;
+    const linhas = pptLinhasEstimadas(cel.text, Math.max(0.3, (colW[i] || 1) - 0.12), fonte);
+    maior = Math.max(maior, linhas * (fonte / 72 * 1.2));
+  });
+  return maior + 0.12; // margens internas da célula
+}
+// tabela que nunca passa do limite inferior: divide as linhas em quantos slides precisar,
+// repetindo o cabeçalho (linha 0). novoSlide(cont) cria o slide (cont=true nos de continuação)
+// já com título/rodapé e devolve ele. Linha sozinha alta demais tem o texto mais longo cortado.
+function pptTabelaPaginada(rows, pos, novoSlide){
+  const cab = rows[0], corpo = rows.slice(1);
+  const alturaMax = PPT_LIMITE_INFERIOR - pos.y;
+  const hCab = pptAlturaLinhaTabela(cab, pos.colW);
+  const paginas = [];
+  let atual = [], usado = hCab;
+  corpo.forEach(linha => {
+    let h = pptAlturaLinhaTabela(linha, pos.colW);
+    if (h > alturaMax - hCab) {
+      let iMaior = 0;
+      linha.forEach((c, i) => { if (String(c.text || '').length > String(linha[iMaior].text || '').length) iMaior = i; });
+      const c = linha[iMaior], fonte = (c.options && c.options.fontSize) || 11;
+      c.text = pptCortarParaCaber(c.text, Math.max(0.3, (pos.colW[iMaior] || 1) - 0.12), alturaMax - hCab - 0.15, fonte);
+      h = pptAlturaLinhaTabela(linha, pos.colW);
+    }
+    if (atual.length && usado + h > alturaMax) { paginas.push(atual); atual = []; usado = hCab; }
+    atual.push(linha); usado += h;
+  });
+  if (atual.length || !paginas.length) paginas.push(atual);
+  paginas.forEach((linhas, i) => {
+    const s = novoSlide(i > 0);
+    s.addTable([cab].concat(linhas), { x:pos.x, y:pos.y, w:pos.w, colW:pos.colW, border:{ type:'solid', color:'D8D8D8', pt:0.5 } });
+  });
 }
 function pptTabelaColaboradoresGA(block, d){
   const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
@@ -5471,15 +5544,13 @@ function pptSecaoTemaAuxiliar(pres, temaKey, temaLabel, d, opts, kpiTiles, eyebr
     kpiTiles.forEach((t, i) => {
       const x = startX + i*(colW+0.2);
       s.addShape('roundRect', { x, y:y0, w:colW, h:rowH, rectRadius:0.08, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
-      s.addText(String(t[1]), { x:x+0.15, y:y0+0.3, w:colW-0.3, h:1.2, align:'center', fontFace:'Cambria', fontSize:26, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
-      s.addText(t[0].toUpperCase(), { x:x+0.15, y:y0+1.55, w:colW-0.3, h:0.65, align:'center', fontFace:'Arial', fontSize:10, bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
+      s.addText(String(t[1]), { x:x+0.15, y:y0+0.3, w:colW-0.3, h:1.2, align:'center', valign:'middle', fontFace:'Cambria', fontSize:pptFonteQueCabe(String(t[1]), colW-0.3, 1.2, 26, 12, 1), bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      s.addText(t[0].toUpperCase(), { x:x+0.15, y:y0+1.55, w:colW-0.3, h:0.65, align:'center', fontFace:'Arial', fontSize:pptFonteQueCabe(t[0].toUpperCase(), colW-0.3, 0.65, 10, 7, 2), bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
     });
     pptRodape(s, rodapeTxt);
   }
   // --- por GO ---
   if (d.porGo && d.porGo.length) {
-    const s = pres.addSlide();
-    pptCabecalho(s, temaLabel + ' por GO (Gestor Operacional)', 'Soma dos GOs = total do período selecionado', eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
     const rows = [[
       { text:'GO', options: Object.assign({}, headerOpts, { align:'left' }) },
@@ -5492,23 +5563,26 @@ function pptSecaoTemaAuxiliar(pres, temaKey, temaLabel, d, opts, kpiTiles, eyebr
         { text:fmtMoeda(g.valor), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
       ]);
     });
-    s.addTable(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
-    pptRodape(s, rodapeTxt);
+    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5] }, cont => {
+      const s = pres.addSlide();
+      pptCabecalho(s, temaLabel + ' por GO (Gestor Operacional)' + pptCont(cont), 'Soma dos GOs = total do período selecionado', eyebrow);
+      pptRodape(s, rodapeTxt);
+      return s;
+    });
   }
   // --- um slide por GA ---
   const colW = pptColWidthsAux(opts);
   (d.goGaBlocks || []).forEach(goBlock => {
     goBlock.gas.forEach(gaBlock => {
       if (!gaBlock.pessoas.length) return;
-      const s = pres.addSlide();
-      pptCabecalho(s, temaLabel + ' — ' + d.periodLabel, 'Acompanhamento por gestor de área', eyebrow);
-      s.addText([
-        { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:gaBlock.ga, options:{ color:PPT_NAVY } },
-        { text:'   ·   GO: ', options:{ bold:true, color:PPT_NAVY } }, { text:(gaBlock.go||'—'), options:{ color:PPT_NAVY } },
-      ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
       const ctx = { tema: temaKey, periodType: d.periodType, periodKey: d.periodKey, periodLabel: d.periodLabel };
-      s.addTable(pptTabelaColaboradoresAux(gaBlock.pessoas, opts, ctx), { x:0.5, y:2.05, w:12.3, colW, border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
-      pptRodape(s, rodapeTxt);
+      pptTabelaPaginada(pptTabelaColaboradoresAux(gaBlock.pessoas, opts, ctx), { x:0.5, y:2.05, w:12.3, colW }, cont => {
+        const s = pres.addSlide();
+        pptCabecalho(s, temaLabel + ' — ' + d.periodLabel + pptCont(cont), 'Acompanhamento por gestor de área', eyebrow);
+        pptLinhaGestor(s, [['Gestor: ', gaBlock.ga], ['   ·   GO: ', gaBlock.go || '—']]);
+        pptRodape(s, rodapeTxt);
+        return s;
+      });
     });
   });
 }
@@ -5539,19 +5613,46 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
       { text:'   ·   Chamado nº ', options:{ bold:true, color:PPT_NAVY } }, { text:(j.chamado || '—'), options:{ color:PPT_GREEN, bold:true } },
     ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
     s.addShape('roundRect', { x:0.5, y:2.05, w:12.3, h:0.75, rectRadius:0.05, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
-    s.addText([{ text:'Justificativa: ', options:{ bold:true } }, { text: j.texto || '—' }],
-      { x:0.65, y:2.08, w:12.0, h:0.69, fontFace:'Arial', fontSize:10.5, color:PPT_NAVY, valign:'middle', fit:'shrink', isTextBox:true, margin:0 });
-    // fotos lado a lado, cada uma "contida" na sua faixa sem distorcer
-    const areaY = 2.95, areaH = 4.05, gap = 0.25, n = imgs.length;
-    const slotW = (12.3 - (n - 1) * gap) / n;
-    imgs.forEach((img, i) => {
-      const escala = Math.min(slotW / img.w, areaH / img.h);
-      const w = img.w * escala, h = img.h * escala;
-      const x = 0.5 + i * (slotW + gap) + (slotW - w) / 2;
-      s.addImage({ data: img.data, x, y: areaY + (areaH - h) / 2, w, h });
+    const justTxt = 'Justificativa: ' + (j.texto || '—');
+    const fJust = pptFonteQueCabe(justTxt, 12.0, 0.69, 10.5, 7.5, 0);
+    const justCabe = pptCortarParaCaber(j.texto || '—', 12.0, 0.69, fJust);
+    s.addText([{ text:'Justificativa: ', options:{ bold:true } }, { text: justCabe }],
+      { x:0.65, y:2.08, w:12.0, h:0.69, fontFace:'Arial', fontSize:fJust, color:PPT_NAVY, valign:'middle', isTextBox:true, margin:0 });
+    // tamanho PADRÃO (pedido do usuário): paisagem 9,12 × 7,65 cm, retrato 9,12 × 10,19 cm
+    // (largura × altura) — a imagem já chega recortada nessa proporção (ver baixarFotosParaApresentacao)
+    const areaY = 2.95, areaH = 4.03, gap = 0.3, n = imgs.length;
+    const larguras = imgs.map(img => img.wIn), totalW = larguras.reduce((a, b) => a + b, 0) + (n - 1) * gap;
+    let x = 0.5 + (12.3 - totalW) / 2;
+    imgs.forEach(img => {
+      s.addImage({ data: img.data, x, y: areaY + (areaH - img.hIn) / 2, w: img.wIn, h: img.hIn });
+      x += img.wIn + gap;
     });
     pptRodape(s, rodapeTxt);
   });
+}
+// tamanhos padrão das fotos no slide (pedido do usuário), em polegadas — largura × altura
+const PPT_FOTO_PAISAGEM = { wIn: 9.12 / 2.54, hIn: 7.65 / 2.54 };
+const PPT_FOTO_RETRATO = { wIn: 9.12 / 2.54, hIn: 10.19 / 2.54 };
+// recorta a foto na proporção exata da moldura padrão, sem distorcer: centraliza na horizontal e
+// ANCORA EMBAIXO na vertical — a faixa carimbada com chamado/justificativa fica no rodapé da foto
+// e nunca pode ser cortada.
+async function fotoNoTamanhoPadraoPPT(dataUrl){
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = dataUrl;
+  });
+  const iw = img.naturalWidth || 4, ih = img.naturalHeight || 3;
+  const moldura = iw >= ih ? PPT_FOTO_PAISAGEM : PPT_FOTO_RETRATO;
+  const alvo = moldura.wIn / moldura.hIn;
+  let sw = iw, sh = ih;
+  if (iw / ih > alvo) sw = Math.round(ih * alvo); else sh = Math.round(iw / alvo);
+  const sx = Math.round((iw - sw) / 2), sy = ih - sh;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.min(sw, 1400); canvas.height = Math.round(canvas.width / alvo);
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return { data: canvas.toDataURL('image/jpeg', 0.85).replace(/^data:/, ''), wIn: moldura.wIn, hIn: moldura.hIn };
 }
 // baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
 // justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
@@ -5570,13 +5671,7 @@ async function baixarFotosParaApresentacao(d){
           const r = await chamarFotosApi({ acao: 'ver', id });
           FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
         }
-        const dims = await new Promise((resolve, reject) => {
-          const el = new Image();
-          el.onload = () => resolve({ w: el.naturalWidth || 4, h: el.naturalHeight || 3 });
-          el.onerror = reject;
-          el.src = FOTO_CACHE[id];
-        });
-        out[id] = { data: FOTO_CACHE[id].replace(/^data:/, ''), w: dims.w, h: dims.h };
+        out[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]);
         ok++;
         showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
       } catch(e) { console.error('Não foi possível baixar a foto ' + id + ' para a apresentação.', e); }
@@ -5652,16 +5747,14 @@ function buildApresentacaoPres(dados){
       const col = i % 3, row = Math.floor(i/3);
       const x = startX + col*(colW+gap), y = y0 + row*(rowH+0.25);
       s.addShape('roundRect', { x, y, w:colW, h:rowH, rectRadius:0.08, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
-      s.addText(String(t[1]), { x:x+0.2, y:y+0.25, w:colW-0.4, h:1.05, fontFace:'Cambria', fontSize:32, bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
-      s.addText(t[0].toUpperCase(), { x:x+0.2, y:y+1.35, w:colW-0.4, h:0.55, fontFace:'Arial', fontSize:10.5, bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
+      s.addText(String(t[1]), { x:x+0.2, y:y+0.25, w:colW-0.4, h:1.05, valign:'middle', fontFace:'Cambria', fontSize:pptFonteQueCabe(String(t[1]), colW-0.4, 1.05, 32, 12, 1), bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
+      s.addText(t[0].toUpperCase(), { x:x+0.2, y:y+1.35, w:colW-0.4, h:0.55, fontFace:'Arial', fontSize:pptFonteQueCabe(t[0].toUpperCase(), colW-0.4, 0.55, 10.5, 7, 2), bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
     });
     pptRodape(s, rodapeTxt);
   }
 
   // --- slide 3: infrações por GO ---
   if (d.porGo && d.porGo.length) {
-    const s = pres.addSlide();
-    pptCabecalho(s, 'Infrações por GO (Gestor Operacional)', 'Soma dos GOs = total do período selecionado', eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle' };
     const rows = [[
       { text:'GO', options: Object.assign({}, headerOpts, { align:'left' }) },
@@ -5680,14 +5773,16 @@ function buildApresentacaoPres(dados){
         { text:fmt(g.total), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
       ]);
     });
-    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[5.5,2.2,2.2,2.2,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
-    pptRodape(s, rodapeTxt);
+    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:12.3, colW:[4.3,2.0,2.0,2.0,2.0] }, cont => {
+      const s = pres.addSlide();
+      pptCabecalho(s, 'Infrações por GO (Gestor Operacional)' + pptCont(cont), 'Soma dos GOs = total do período selecionado', eyebrow);
+      pptRodape(s, rodapeTxt);
+      return s;
+    });
   }
 
   // --- slide 4: infrações por semana ---
   if (d.semanasExibicao && d.semanasExibicao.length) {
-    const s = pres.addSlide();
-    pptCabecalho(s, 'Infrações por semana', d.periodType === 'periodo' ? 'Semanas dentro do período selecionado' : 'Todas as semanas presentes nos dados carregados', eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
     const rows = [[
       { text:'Semana', options: Object.assign({}, headerOpts, { align:'left' }) },
@@ -5700,27 +5795,28 @@ function buildApresentacaoPres(dados){
         { text:fmt(sem.total), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
       ]);
     });
-    s.addTable(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
-    pptRodape(s, rodapeTxt);
+    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5] }, cont => {
+      const s = pres.addSlide();
+      pptCabecalho(s, 'Infrações por semana' + pptCont(cont), d.periodType === 'periodo' ? 'Semanas dentro do período selecionado' : 'Todas as semanas presentes nos dados carregados', eyebrow);
+      pptRodape(s, rodapeTxt);
+      return s;
+    });
   }
 
   // --- um slide por GA: "Período: X / Gestor: Y" (o coração do modelo original) ---
   (d.hierBlocks || []).filter(b => b.colaboradores.length).forEach(block => {
-    const s = pres.addSlide();
-    pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel, 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
-    s.addText([
-      { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
-      { text:'   ·   GO: ', options:{ bold:true, color:PPT_NAVY } }, { text:(block.go||'—'), options:{ color:PPT_NAVY } },
-    ], { x:0.5, y:1.62, w:12.3, h:0.35, fontFace:'Arial', fontSize:13, isTextBox:true, margin:0 });
-    s.addTable(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:2.05 });
-    pptRodape(s, rodapeTxt);
+    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6] }, cont => {
+      const s = pres.addSlide();
+      pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
+      pptLinhaGestor(s, [['Gestor: ', block.ga], ['   ·   GO: ', block.go || '—']]);
+      pptRodape(s, rodapeTxt);
+      return s;
+    });
     pptSlidesEvidenciasGA(pres, block, d, dados.fotos || {}, eyebrow, rodapeTxt);
   });
 
   // --- ranking: maior redução de infrações ---
   if (d.rankGa && d.rankGa.length) {
-    const s = pres.addSlide();
-    pptCabecalho(s, 'Ranking · classificação por peso de infrações', 'Peso: >7 dias ×7 · Interjornada ×5 · >2h extras ×2 — quem zera fica em 1º lugar · ' + (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
     const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:'Arial', fontSize:11, valign:'middle', align:'center' };
     const rows = [[
       { text:'GA', options: Object.assign({}, headerOpts, { align:'left' }) },
@@ -5742,8 +5838,12 @@ function buildApresentacaoPres(dados){
           options: Object.assign({}, cel, { align:'center', bold:true, color: melhorou ? PPT_GREEN : piorou ? PPT_RED : PPT_TEXT_MUTED }) },
       ]);
     });
-    s.addTable(rows, { x:0.5, y:1.95, w:12.3, colW:[4.5,1.95,1.95,1.7,2.2], border:{ type:'solid', color:'D8D8D8', pt:0.5 }, autoPage:true, autoPageRepeatHeader:true, autoPageSlideStartY:1.95 });
-    pptRodape(s, rodapeTxt);
+    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:12.3, colW:[4.5,1.95,1.95,1.7,2.2] }, cont => {
+      const s = pres.addSlide();
+      pptCabecalho(s, 'Ranking · classificação por peso de infrações' + pptCont(cont), 'Peso: >7 dias ×7 · Interjornada ×5 · >2h extras ×2 — quem zera fica em 1º lugar · ' + (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
+      pptRodape(s, rodapeTxt);
+      return s;
+    });
   }
 
   // --- Parabéns, gestores de área! (melhores resultados do período, ainda com infração > 0) ---
@@ -5757,7 +5857,7 @@ function buildApresentacaoPres(dados){
       destaques.forEach((g, i) => {
         const x = x0 + i*(cardW+0.3);
         s.addShape('roundRect', { x, y:y0, w:cardW, h:0.9, rectRadius:0.06, fill:{ color:PPT_NAVY }, line:{ type:'none' } });
-        s.addText(g.nome, { x:x+0.15, y:y0, w:cardW-0.3, h:0.9, align:'center', valign:'middle', fontFace:'Arial', fontSize:12.5, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
+        s.addText(g.nome, { x:x+0.15, y:y0, w:cardW-0.3, h:0.9, align:'center', valign:'middle', fontFace:'Arial', fontSize:pptFonteQueCabe(g.nome, cardW-0.3, 0.85, 12.5, 8, 3), bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
         s.addShape('roundRect', { x, y:y0+0.9, w:cardW, h:cardH-0.9, rectRadius:0.06, fill:{ color:PPT_MINT }, line:{ type:'none' } });
         s.addText(String(g.total), { x:x+0.15, y:y0+1.05, w:cardW-0.3, h:1.0, align:'center', fontFace:'Cambria', fontSize:48, bold:true, color:PPT_GREEN, isTextBox:true, margin:0 });
         s.addText(g.total===1?'INFRAÇÃO':'INFRAÇÕES', { x:x+0.15, y:y0+2.05, w:cardW-0.3, h:0.4, align:'center', fontFace:'Arial', fontSize:11, bold:true, color:PPT_GREEN, charSpacing:0.5, isTextBox:true, margin:0 });
