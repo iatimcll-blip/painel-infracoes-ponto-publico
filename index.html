@@ -495,6 +495,8 @@
   .foto-chip{ border-color:var(--good); background:var(--good-tint); }
   .foto-chip .foto-ver{ color:var(--good); font-weight:600; }
   .foto-chip .foto-del{ border-left-color:var(--good); }
+  .fotos-admin-h3{ margin:0 0 8px; font-size:12.5px; font-weight:600; color:var(--text-secondary); }
+  #fotos-lista .foto-chip{ margin-right:4px; }
   .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
   .foto-add input{ display:none; }
   .foto-lightbox{ position:fixed; inset:0; background:rgba(11,11,11,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:200; }
@@ -898,6 +900,28 @@
       <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
+  </section>
+
+  <section data-export="fotos" id="fotos-admin-section" style="display:none">
+    <div class="section-head">
+      <h2>Fotos anexadas · controle do Administrador</h2>
+      <span class="hint" id="fotos-admin-hint">visível só para Administrador — todas as áreas, sem depender do filtro de ciclo</span>
+    </div>
+    <div class="kpi-grid" id="fotos-kpis"></div>
+    <div class="card table-scroll" style="margin-top:10px;">
+      <h3 class="fotos-admin-h3">Por quem anexou</h3>
+      <table>
+        <thead><tr><th>Quem anexou</th><th class="num-col">Fotos</th><th class="num-col">Justificativas</th><th>Áreas (GA)</th><th>Último anexo</th></tr></thead>
+        <tbody id="fotos-por-autor"></tbody>
+      </table>
+    </div>
+    <div class="card table-scroll" style="margin-top:10px;">
+      <h3 class="fotos-admin-h3">Anexos (mais recentes primeiro)</h3>
+      <table>
+        <thead><tr><th>Quando</th><th>Quem anexou</th><th>Colaborador</th><th>GA</th><th>Data da infração</th><th>Chamado</th><th>Fotos</th></tr></thead>
+        <tbody id="fotos-lista"></tbody>
+      </table>
+    </div>
   </section>
 
   <section data-export="verif">
@@ -1650,11 +1674,11 @@ async function syncJustificativasFromServer(){
 async function syncAnexosFromServer(){
   if (!sb || !FOTOS_API_URL) return;
   try {
-    const rows = await fetchAllRows('infracoes_justificativas_anexos', 'id,chave,chamado,fotos,autor');
+    const rows = await fetchAllRows('infracoes_justificativas_anexos', 'id,chave,chamado,fotos,autor,atualizado_em');
     const mapa = {};
     rows.forEach(r => {
       const fotos = Array.isArray(r.fotos) ? r.fotos : [];
-      if (r.chamado || fotos.length) mapa[r.chave] = { chamado: r.chamado || '', fotos, autor: r.autor || null };
+      if (r.chamado || fotos.length) mapa[r.chave] = { chamado: r.chamado || '', fotos, autor: r.autor || null, atualizadoEm: r.atualizado_em || null };
     });
     STATE.anexos = mapa;
   } catch(e) {
@@ -3019,6 +3043,7 @@ function recomputeAndRender(){
     renderTop(d);
     renderVerification();
     renderHierarchy(d);
+    renderFotosAdmin();
     document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
   } catch (e) {
     console.error('Erro ao renderizar o painel:', e);
@@ -4340,8 +4365,9 @@ async function salvarAnexosNoServidor(chave, chamado, fotos){
     if (data && data.erro === 'sessao-invalida') { try { localStorage.removeItem(STORAGE_FOTO_TOKEN); } catch(e) {} }
     throw new Error((data && data.erro) || 'recusado');
   }
-  if (chamado || fotos.length) STATE.anexos[chave] = { chamado, fotos, autor: AUTH.currentUser };
+  if (chamado || fotos.length) STATE.anexos[chave] = { chamado, fotos, autor: AUTH.currentUser, atualizadoEm: new Date().toISOString() };
   else delete STATE.anexos[chave];
+  renderFotosAdmin();
 }
 function msgErroFotos(e){
   const m = (e && e.message) || '';
@@ -4443,7 +4469,8 @@ async function anexarFotos(div, files){
         nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.jpg',
         cabecalho: 'Chamado: ' + chamado + '\nColaborador: ' + nome + '\nGA: ' + (h.ga || '—') + '\nData da infração: ' + dataFmt,
       });
-      fotos.push({ id: r.id, nome: r.nome });
+      // quem anexou e quando, POR FOTO (alimenta o painel "Fotos anexadas" do Admin)
+      fotos.push({ id: r.id, nome: r.nome, por: AUTH.currentUser || null, em: new Date().toISOString() });
     } catch(e) { console.error('Falha ao enviar foto.', e); falhou = e; break; }
   }
   if (fotos.length !== atual.fotos.length) {
@@ -4523,6 +4550,93 @@ function atualizarDescricaoFotos(chave, texto){
 }
 hierBlocksContainer.addEventListener('focusout', evt => {
   if (evt.target.classList && evt.target.classList.contains('just-chamado')) salvarChamado(evt.target);
+});
+
+/* ---------------- painel "Fotos anexadas" (só Admin) ----------------
+   Pedido do usuário (2026-10-15): "dashboard para o painel administrador, um contabilizador de
+   fotos quando anexadas e quem anexou". Lê STATE.anexos (todas as áreas, todos os ciclos — não
+   depende do filtro do topo). Quem/quando vem de cada foto (por/em, gravados desde esta
+   mudança); fotos mais antigas caem pro autor/data da linha inteira. */
+function listaFotosAnexadas(){
+  const itens = [];
+  Object.entries(STATE.anexos || {}).forEach(([chave, a]) => {
+    if (!a || !a.fotos || !a.fotos.length) return;
+    const nome = chave.split('::')[0];
+    const iso = chave.includes('|') ? chave.split('|').pop() : '';
+    const ga = (STATE.hierMap[nome] || {}).ga || '—';
+    a.fotos.forEach(f => itens.push({
+      chave, nome, iso, ga, chamado: a.chamado || '', id: f.id, arquivo: f.nome || '',
+      por: f.por || a.autor || '—', em: f.em || a.atualizadoEm || null,
+    }));
+  });
+  return itens;
+}
+function renderFotosAdmin(){
+  const section = document.getElementById('fotos-admin-section');
+  if (!section) return;
+  const visivel = !!FOTOS_API_URL && isAdmin();
+  section.style.display = visivel ? '' : 'none';
+  if (!visivel) return;
+  const itens = listaFotosAnexadas();
+  const justs = new Set(itens.map(i => i.chave));
+  const chamados = new Set(itens.map(i => i.chamado).filter(Boolean));
+  const autores = {};
+  itens.forEach(i => {
+    const a = autores[i.por] || (autores[i.por] = { fotos: 0, justs: new Set(), gas: new Set(), ultimo: null });
+    a.fotos++; a.justs.add(i.chave); if (i.ga !== '—') a.gas.add(i.ga);
+    if (i.em && (!a.ultimo || i.em > a.ultimo)) a.ultimo = i.em;
+  });
+  const hoje = isoKey(new Date());
+  const fotosHoje = itens.filter(i => i.em && isoKey(new Date(i.em)) === hoje).length;
+  const kpi = (label, valor, sub) => '<div class="kpi"><span class="label">'+esc(label)+'</span><span class="value num">'+fmt(valor)+'</span>'+(sub ? '<span class="sub">'+esc(sub)+'</span>' : '')+'</div>';
+  document.getElementById('fotos-kpis').innerHTML =
+    kpi('Fotos anexadas', itens.length, fotosHoje + ' hoje') +
+    kpi('Justificativas com foto', justs.size, '') +
+    kpi('Chamados distintos', chamados.size, '') +
+    kpi('Pessoas que anexaram', Object.keys(autores).length, '');
+  const quando = iso => iso ? (fmtSyncTimestamp(iso) || '—') : '—';
+  const porAutor = Object.entries(autores).sort((x, y) => y[1].fotos - x[1].fotos);
+  document.getElementById('fotos-por-autor').innerHTML = porAutor.length
+    ? porAutor.map(([quem, a]) => '<tr><td>'+esc(quem)+'</td><td class="num-col num">'+fmt(a.fotos)+'</td><td class="num-col num">'+fmt(a.justs.size)+'</td><td>'+esc([...a.gas].join(', ') || '—')+'</td><td>'+esc(quando(a.ultimo))+'</td></tr>').join('')
+    : '<tr><td colspan="5" class="ga-empty">Nenhuma foto anexada ainda.</td></tr>';
+  // 1 linha por justificativa (as fotos dela viram chips clicáveis), da mais recente pra mais antiga
+  const porJust = {};
+  itens.forEach(i => {
+    const j = porJust[i.chave] || (porJust[i.chave] = Object.assign({}, i, { fotos: [], quem: new Set() }));
+    j.fotos.push(i); j.quem.add(i.por);
+    if (i.em && (!j.em || i.em > j.em)) j.em = i.em;
+  });
+  const linhas = Object.values(porJust).sort((x, y) => String(y.em || '').localeCompare(String(x.em || '')));
+  document.getElementById('fotos-lista').innerHTML = linhas.length
+    ? linhas.map(j => '<tr>' +
+        '<td>'+esc(quando(j.em))+'</td>' +
+        '<td>'+esc([...j.quem].join(', '))+'</td>' +
+        '<td>'+esc(j.nome)+'</td>' +
+        '<td>'+esc(j.ga)+'</td>' +
+        '<td class="num">'+esc(j.iso ? fmtDMY(parseISODate(j.iso)) : '—')+'</td>' +
+        '<td class="num">'+esc(j.chamado || '—')+'</td>' +
+        '<td>'+j.fotos.map((f, n) => '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.arquivo)+'">✓ '+(n+1)+'</button></span>').join('')+'</td>' +
+      '</tr>').join('')
+    : '<tr><td colspan="7" class="ga-empty">Nenhuma foto anexada ainda.</td></tr>';
+  const hint = document.getElementById('fotos-admin-hint');
+  if (hint) hint.textContent = itens.length + ' foto(s) em ' + justs.size + ' justificativa(s) — todas as áreas, sem depender do filtro de ciclo';
+}
+function exportFotosExcel(){
+  if (!xlsxDisponivel()) return;
+  const itens = listaFotosAnexadas().sort((x, y) => String(y.em || '').localeCompare(String(x.em || '')));
+  if (!itens.length) { showToast('Nenhuma foto anexada ainda pra exportar.'); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(itens.map(i => ({
+    'Quando': i.em ? (fmtSyncTimestamp(i.em) || '') : '',
+    'Quem anexou': i.por, 'Colaborador': i.nome, 'GA': i.ga,
+    'Data da infração': i.iso ? fmtDMY(parseISODate(i.iso)) : '',
+    'Chamado': i.chamado, 'Arquivo no Drive': i.arquivo,
+  }))), 'Fotos anexadas');
+  XLSX.writeFile(wb, 'fotos-anexadas.xlsx');
+}
+document.getElementById('fotos-admin-section').addEventListener('click', evt => {
+  const ver = evt.target.closest && evt.target.closest('.foto-ver');
+  if (ver) { evt.preventDefault(); verFoto(ver.dataset.id); }
 });
 hierBlocksContainer.addEventListener('keydown', evt => {
   if (evt.key === 'Enter' && evt.target.classList && evt.target.classList.contains('just-chamado')) evt.target.blur();
@@ -5041,6 +5155,8 @@ function exportSectionToExcel(exportId){
   if (exportId === 'feriado-kpi') return exportAuxKpi(STATE_FERIADO, 'feriado');
   if (exportId === 'feriado-graficos') return exportAuxGraficos(STATE_FERIADO, 'feriado');
   if (exportId === 'feriado-hierarquia') return exportAuxHierarquia(STATE_FERIADO, FERIADO_OPTS, 'feriado');
+
+  if (exportId === 'fotos') return exportFotosExcel();
 
   const d = STATE.lastDerived;
   if (!d) { showToast('Nenhum dado carregado pra exportar — anexe uma Base primeiro.'); return; }
