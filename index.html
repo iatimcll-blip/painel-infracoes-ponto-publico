@@ -142,8 +142,8 @@
   .ap-palco{ position:relative; width:100%; min-width:0; aspect-ratio:16/9; background:#1a1d24; border-radius:12px; overflow:hidden; outline:none; }
   .ap-palco:focus-visible{ box-shadow:0 0 0 3px var(--s1); }
   .ap-palco:fullscreen{ border-radius:0; aspect-ratio:auto; display:flex; align-items:center; justify-content:center; background:#000; }
-  .ap-quadro{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
-  .ap-palco:fullscreen .ap-quadro{ position:relative; inset:auto; width:100%; height:100%; }
+  .ap-quadro{ position:absolute; inset:0 0 30px 0; display:flex; align-items:center; justify-content:center; }
+  .ap-palco:fullscreen .ap-quadro{ position:relative; inset:auto; width:100%; height:calc(100% - 30px); }
   .ap-vazio{ color:#c9ced8; font-size:14px; padding:20px; text-align:center; }
   .ap-escala{ position:relative; flex:none; box-shadow:0 10px 40px rgba(0,0,0,.35); }
   .ap-slide{ position:absolute; left:0; top:0; width:1280px; height:720px; overflow:hidden; transform-origin:0 0; background:#fff; font-family:'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif; }
@@ -156,7 +156,7 @@
   .ap-seta:hover{ background:rgba(0,0,0,.55); }
   .ap-seta:disabled{ opacity:.25; cursor:default; }
   .ap-ant{ left:10px; } .ap-prox{ right:10px; }
-  .ap-contador{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.5); color:#fff; font-size:12px; padding:3px 10px; border-radius:999px; font-family:var(--mono); z-index:2; }
+  .ap-contador{ position:absolute; bottom:5px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.5); color:#fff; font-size:12px; padding:3px 10px; border-radius:999px; font-family:var(--mono); z-index:2; }
   .ap-miniaturas{ display:flex; gap:8px; overflow-x:auto; padding:4px 2px 8px; min-width:0; max-width:100%; }
   .ap-mini{ flex:none; width:160px; height:90px; position:relative; border:2px solid transparent; border-radius:6px; overflow:hidden; cursor:pointer; background:#fff; padding:0; }
   .ap-mini.ativa{ border-color:var(--s1); }
@@ -6371,7 +6371,30 @@ async function montarPreviaApresentacao(){
     if (APRES.pendente) { APRES.pendente = false; agendarPreviaApresentacao(); }
   }
 }
+// a aba inteira cabe na janela, sem rolar a página na vertical (pedido do usuário): a altura do
+// palco = o que sobra da janela abaixo de onde ele começa, descontando as miniaturas e o espaço
+// final; o slide é escalado pra caber nesse palco (nunca mais alto que o 16:9 da largura).
+// Uma segunda passada desconta qualquer sobra que ainda faça a página rolar (rodapé, margens).
+function dimensionarPalcoApresentacao(){
+  const palco = document.getElementById('ap-palco');
+  if (!palco || activeTab !== 'apresentacao') return;
+  if (document.fullscreenElement) { palco.style.height = ''; return; }
+  const mini = document.getElementById('ap-miniaturas');
+  const MIN = 160;
+  if (mini) mini.style.display = '';
+  const topo = palco.getBoundingClientRect().top + window.scrollY;
+  const ideal = palco.clientWidth * 9 / 16;
+  const livre = window.innerHeight - topo - 16;
+  let altMini = mini ? mini.offsetHeight + 12 : 0;
+  // tela baixa: as miniaturas saem pra sobrar altura pro slide (setas/teclado/dedo continuam)
+  if (mini && livre - altMini < 300) { mini.style.display = 'none'; altMini = 0; }
+  let h = Math.max(MIN, Math.min(ideal, livre - altMini));
+  palco.style.height = h + 'px';
+  const sobra = document.documentElement.scrollHeight - window.innerHeight;
+  if (sobra > 0) { h = Math.max(MIN, h - sobra); palco.style.height = h + 'px'; }
+}
 function ajustarEscalaApresentacao(){
+  dimensionarPalcoApresentacao();
   const quadro = document.getElementById('ap-quadro');
   const caixa = quadro.querySelector('.ap-escala');
   if (!caixa) return;
@@ -6448,7 +6471,7 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'feriado') renderFeriado();
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
   // Infrações) e monta a prévia
-  else if (alvo === 'apresentacao') { recomputeAndRender(); montarPreviaApresentacao(); }
+  else if (alvo === 'apresentacao') { window.scrollTo(0, 0); recomputeAndRender(); ajustarEscalaApresentacao(); montarPreviaApresentacao(); }
 });
 
 /* ==========================================================================
