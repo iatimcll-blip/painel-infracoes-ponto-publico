@@ -136,6 +136,33 @@
   .tab-btn:hover{ color:var(--text-primary); }
   .tab-btn.active{ color:var(--s1); border-bottom-color:var(--s1); }
   .tab-panel{ display:none; flex-direction:column; gap:28px; }
+  /* ---------- aba Apresentação ---------- */
+  .ap-bloco{ display:flex; flex-direction:column; gap:12px; min-width:0; width:100%; }
+  .ap-acoes{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .ap-palco{ position:relative; width:100%; min-width:0; aspect-ratio:16/9; background:#1a1d24; border-radius:12px; overflow:hidden; outline:none; }
+  .ap-palco:focus-visible{ box-shadow:0 0 0 3px var(--s1); }
+  .ap-palco:fullscreen{ border-radius:0; aspect-ratio:auto; display:flex; align-items:center; justify-content:center; background:#000; }
+  .ap-quadro{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .ap-palco:fullscreen .ap-quadro{ position:relative; inset:auto; width:100%; height:100%; }
+  .ap-vazio{ color:#c9ced8; font-size:14px; padding:20px; text-align:center; }
+  .ap-escala{ position:relative; flex:none; box-shadow:0 10px 40px rgba(0,0,0,.35); }
+  .ap-slide{ position:absolute; left:0; top:0; width:1280px; height:720px; overflow:hidden; transform-origin:0 0; background:#fff; font-family:'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif; }
+  .ap-slide .ap-t{ position:absolute; display:flex; flex-direction:column; overflow:visible; }
+  .ap-slide .ap-t > div{ white-space:pre-wrap; overflow-wrap:break-word; line-height:1.2; }
+  .ap-slide img, .ap-slide svg, .ap-slide .ap-f{ position:absolute; }
+  .ap-slide table{ position:absolute; border-collapse:collapse; table-layout:fixed; }
+  .ap-slide td{ padding:4.8px 9.6px; overflow-wrap:break-word; line-height:1.2; }
+  .ap-seta{ position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:0; border-radius:10px; background:rgba(0,0,0,.35); color:#fff; font-size:34px; line-height:1; cursor:pointer; z-index:2; }
+  .ap-seta:hover{ background:rgba(0,0,0,.55); }
+  .ap-seta:disabled{ opacity:.25; cursor:default; }
+  .ap-ant{ left:10px; } .ap-prox{ right:10px; }
+  .ap-contador{ position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.5); color:#fff; font-size:12px; padding:3px 10px; border-radius:999px; font-family:var(--mono); z-index:2; }
+  .ap-miniaturas{ display:flex; gap:8px; overflow-x:auto; padding:4px 2px 8px; min-width:0; max-width:100%; }
+  .ap-mini{ flex:none; width:160px; height:90px; position:relative; border:2px solid transparent; border-radius:6px; overflow:hidden; cursor:pointer; background:#fff; padding:0; }
+  .ap-mini.ativa{ border-color:var(--s1); }
+  .ap-mini .ap-slide{ transform:scale(0.125); pointer-events:none; }
+  .ap-mini span.ap-n{ position:absolute; right:4px; bottom:3px; font-size:10px; background:rgba(0,0,0,.55); color:#fff; padding:0 5px; border-radius:4px; font-family:var(--mono); z-index:1; }
+  @media (max-width:640px){ .ap-seta{ width:34px; height:50px; font-size:26px; } .ap-mini{ width:120px; height:67.5px; } .ap-mini .ap-slide{ transform:scale(0.09375); } }
   .tab-panel.active{ display:flex; }
   .aux-attach-btn{ margin-left:auto; }
   .aux-attach-btn[hidden]{ display:none; }
@@ -812,6 +839,7 @@
     <button type="button" class="tab-btn" data-tab="bh" role="tab" aria-selected="false">Banco de Horas</button>
     <button type="button" class="tab-btn" data-tab="dsr" role="tab" aria-selected="false">DSR</button>
     <button type="button" class="tab-btn" data-tab="feriado" role="tab" aria-selected="false">Feriados</button>
+    <button type="button" class="tab-btn" data-tab="apresentacao" role="tab" aria-selected="false">Apresentação</button>
   </nav>
 
   <div id="tab-infracoes" class="tab-panel active">
@@ -1094,6 +1122,30 @@
       </div>
       <div class="hier-blocks" id="feriado-go-blocks"></div>
     </section>
+  </div>
+
+  <!-- Apresentação: a MESMA apresentação do botão de PowerPoint, desenhada na tela pra passar os
+       slides (pedido do usuário). Não é <section> de propósito — fica fora do "Copiar/Excel/recolher"
+       automático dos blocos. -->
+  <div id="tab-apresentacao" class="tab-panel">
+    <div class="ap-bloco">
+      <div class="section-head">
+        <h2>Apresentação</h2>
+        <span class="hint" id="ap-hint">mesma apresentação do PowerPoint para baixar — segue o filtro de ciclo/semana/período do topo</span>
+        <div class="ap-acoes">
+          <button type="button" class="he-btn" id="ap-atualizar">Atualizar</button>
+          <button type="button" class="he-btn" id="ap-tela-cheia">Tela cheia</button>
+          <button type="button" class="he-btn primary" id="ap-baixar">Baixar PPT</button>
+        </div>
+      </div>
+      <div class="ap-palco" id="ap-palco" tabindex="0" aria-roledescription="carrossel" aria-label="Slides da apresentação">
+        <div class="ap-quadro" id="ap-quadro"><div class="ap-vazio">Abrindo a apresentação…</div></div>
+        <button type="button" class="ap-seta ap-ant" id="ap-ant" aria-label="Slide anterior">‹</button>
+        <button type="button" class="ap-seta ap-prox" id="ap-prox" aria-label="Próximo slide">›</button>
+        <div class="ap-contador" id="ap-contador"></div>
+      </div>
+      <div class="ap-miniaturas" id="ap-miniaturas"></div>
+    </div>
   </div>
 
 </div>
@@ -3060,7 +3112,7 @@ function recomputeAndRender(){
   renderSyncTimestamp();
 
   try {
-    if (activeTab === 'infracoes') {
+    if (activeTab === 'infracoes' || activeTab === 'apresentacao') {
       renderTopFilterBar(d, {
         estado: STATE,
         render: recomputeAndRender,
@@ -3086,6 +3138,7 @@ function recomputeAndRender(){
     renderVerification();
     renderHierarchy(d);
     renderFotosAdmin();
+    if (activeTab === 'apresentacao') agendarPreviaApresentacao(); // filtro mudou / dado novo chegou
     document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
   } catch (e) {
     console.error('Erro ao renderizar o painel:', e);
@@ -4022,6 +4075,7 @@ function rerenderActiveTab(){
   else if (activeTab === 'bh') renderBH();
   else if (activeTab === 'dsr') renderDSR();
   else if (activeTab === 'feriado') renderFeriado();
+  else if (activeTab === 'apresentacao') recomputeAndRender();
 }
 document.getElementById('he-cancel').addEventListener('click', closeHierEditor);
 document.getElementById('he-save').addEventListener('click', async () => {
@@ -5845,7 +5899,8 @@ async function fotoNoTamanhoPadraoPPT(dataUrl){
 }
 // baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
 // justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
-async function baixarFotosParaApresentacao(d){
+const PPT_FOTO_PRONTA = {};
+async function baixarFotosParaApresentacao(d, silencioso){
   const out = {};
   if (!FOTOS_API_URL || !d || !tokenFotos()) return { fotos: out, total: 0, ok: 0 };
   const ids = [];
@@ -5860,9 +5915,9 @@ async function baixarFotosParaApresentacao(d){
           const r = await chamarFotosApi({ acao: 'ver', id });
           FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
         }
-        out[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]);
+        out[id] = PPT_FOTO_PRONTA[id] || (PPT_FOTO_PRONTA[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]));
         ok++;
-        showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
+        if (!silencioso) showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
       } catch(e) { console.error('Não foi possível baixar a foto ' + id + ' para a apresentação.', e); }
     }
   };
@@ -5922,9 +5977,9 @@ function labelPrincipalApresentacao(dados){
 // Node direto, chamando essa função com um `dados` de teste e conferindo o conteúdo gerado.
 // dados: { infracoes, bh, dsr, feriado } — o *.lastDerived de cada painel (null se aquele
 // painel não tem planilha anexada); só os painéis presentes ganham seção na apresentação.
-function buildApresentacaoPres(dados){
+function buildApresentacaoPres(dados, ClassePres){
   const d = dados.infracoes;
-  const pres = new PptxGenJS();
+  const pres = new (ClassePres || PptxGenJS)();
   pres.layout = 'LAYOUT_WIDE'; // 13.33" x 7.5"
   pres.author = 'Painel Infrações de Ponto';
   const labelPrincipal = labelPrincipalApresentacao(dados);
@@ -6183,6 +6238,199 @@ async function gerarApresentacaoPPT(){
 }
 document.getElementById('apresentacao-btn').addEventListener('click', gerarApresentacaoPPT);
 
+/* ---------------- aba Apresentação: prévia navegável ----------------
+   Pedido do usuário: "mostrará a apresentação montada assim como a que podemos baixar, dentro de
+   uma tela dinâmica onde podemos passar os slides". Em vez de manter um segundo layout (que ia
+   divergir do PPT), buildApresentacaoPres roda com uma "gravadora" no lugar do PptxGenJS: ela
+   só anota cada addText/addShape/addImage/addTable de cada slide, e desenhaSlideHTML reproduz
+   essas chamadas em HTML/SVG no mesmo sistema de coordenadas (polegadas -> 96 px; slide 13,33" x
+   7,5" = 1280 x 720 px, depois escalado pra caber na tela). */
+class PresGravada {
+  constructor(){ this.slides = []; }
+  addSlide(){
+    const s = { background:null, itens:[] };
+    s.addText = (t, o) => { s.itens.push({ tipo:'texto', t, o:o || {} }); return s; };
+    s.addShape = (f, o) => { s.itens.push({ tipo:'forma', f, o:o || {} }); return s; };
+    s.addImage = o => { s.itens.push({ tipo:'imagem', o:o || {} }); return s; };
+    s.addTable = (r, o) => { s.itens.push({ tipo:'tabela', r, o:o || {} }); return s; };
+    this.slides.push(s);
+    return s;
+  }
+}
+const AP_PX = 96; // px por polegada
+function apPx(v){ return (Number(v) || 0) * AP_PX; }
+function apPt(v){ return (Number(v) || 0) * AP_PX / 72; } // pontos -> px
+function apCor(c){ return '#' + String(c || '000000').replace('#', ''); }
+function apFonte(face, bold){
+  const f = String(face || 'Segoe UI');
+  let peso = 400;
+  if (/light/i.test(f)) peso = 300;
+  if (/semibold/i.test(f)) peso = 600;
+  if (bold) peso = 700;
+  return 'font-weight:' + peso + ';';
+}
+function apEstiloRun(base, ro){
+  const o = Object.assign({}, base, ro || {});
+  return apFonte(o.fontFace, o.bold) +
+    'font-size:' + apPt(o.fontSize || 18).toFixed(2) + 'px;' +
+    'color:' + apCor(o.color || '000000') + ';' +
+    (o.italic ? 'font-style:italic;' : '') +
+    (o.charSpacing ? 'letter-spacing:' + apPt(o.charSpacing).toFixed(2) + 'px;' : '');
+}
+function apCaixa(o){
+  return 'left:' + apPx(o.x).toFixed(1) + 'px;top:' + apPx(o.y).toFixed(1) + 'px;width:' + apPx(o.w).toFixed(1) + 'px;height:' + apPx(o.h).toFixed(1) + 'px;';
+}
+function apTexto(t, o){
+  const runs = Array.isArray(t) ? t : [{ text:String(t == null ? '' : t), options:{} }];
+  const just = { top:'flex-start', middle:'center', bottom:'flex-end' }[o.valign] || 'center';
+  const base = { fontFace:o.fontFace, fontSize:o.fontSize, color:o.color, bold:o.bold, italic:o.italic, charSpacing:o.charSpacing };
+  return '<div class="ap-t" style="' + apCaixa(o) + 'justify-content:' + just + ';text-align:' + (o.align || 'left') + ';">' +
+    '<div>' + runs.map(r => '<span style="' + apEstiloRun(base, r.options) + '">' + esc(r.text) + '</span>').join('') + '</div></div>';
+}
+function apForma(f, o){
+  const fill = o.fill && o.fill.color ? apCor(o.fill.color) : 'transparent';
+  const semLinha = !o.line || o.line.type === 'none' || !o.line.color;
+  const borda = semLinha ? '' : 'border:' + apPt(o.line.width || 1).toFixed(2) + 'px solid ' + apCor(o.line.color) + ';box-sizing:border-box;';
+  if (f === 'line') {
+    return '<div class="ap-f" style="left:' + apPx(o.x) + 'px;top:' + apPx(o.y) + 'px;width:' + apPx(o.w) + 'px;height:0;border-top:' + apPt((o.line && o.line.width) || 1).toFixed(2) + 'px solid ' + apCor(o.line && o.line.color) + ';"></div>';
+  }
+  if (f === 'custGeom') {
+    let dPath = '';
+    (o.points || []).forEach((pt, i) => {
+      if (pt.close) { dPath += ' Z'; return; }
+      if (pt.curve && pt.curve.type === 'quadratic') { dPath += ' Q ' + apPx(pt.curve.x1) + ' ' + apPx(pt.curve.y1) + ' ' + apPx(pt.x) + ' ' + apPx(pt.y); return; }
+      dPath += (pt.moveTo || i === 0 ? ' M ' : ' L ') + apPx(pt.x) + ' ' + apPx(pt.y);
+    });
+    return '<svg style="left:' + apPx(o.x) + 'px;top:' + apPx(o.y) + 'px;overflow:visible" width="' + apPx(o.w) + '" height="' + apPx(o.h) + '">' +
+      '<path d="' + dPath.trim() + '" fill="' + fill + '" stroke="' + (semLinha ? 'none' : apCor(o.line.color)) + '" stroke-width="' + (semLinha ? 0 : apPt(o.line.width || 1)) + '"/></svg>';
+  }
+  const raio = f === 'ellipse' ? 'border-radius:50%;' : (f === 'roundRect' ? 'border-radius:' + apPx(o.rectRadius || 0.08).toFixed(1) + 'px;' : '');
+  return '<div class="ap-f" style="' + apCaixa(o) + 'background:' + fill + ';' + raio + borda + '"></div>';
+}
+function apImagem(o){
+  const src = String(o.data || '').startsWith('data:') ? o.data : 'data:' + o.data;
+  return '<img alt="" src="' + src + '" style="' + apCaixa(o) + '">';
+}
+function apTabela(rows, o){
+  const corBorda = apCor((o.border && o.border.color) || 'D8D8D8');
+  const cols = (o.colW || []).map(w => '<col style="width:' + apPx(w).toFixed(1) + 'px">').join('');
+  const corpo = rows.map(linha => '<tr>' + linha.map(c => {
+    const co = c.options || {};
+    return '<td style="' + apEstiloRun({}, { fontFace:co.fontFace, fontSize:co.fontSize || 11, color:co.color || '000000', bold:co.bold, italic:co.italic }) +
+      'background:' + (co.fill && co.fill.color ? apCor(co.fill.color) : 'transparent') + ';text-align:' + (co.align || 'left') + ';vertical-align:' + ({ top:'top', bottom:'bottom' }[co.valign] || 'middle') + ';border:0.67px solid ' + corBorda + ';">' + esc(c.text) + '</td>';
+  }).join('') + '</tr>').join('');
+  return '<table style="left:' + apPx(o.x) + 'px;top:' + apPx(o.y) + 'px;width:' + apPx(o.w) + 'px;"><colgroup>' + cols + '</colgroup>' + corpo + '</table>';
+}
+function desenhaSlideHTML(slide){
+  const fundo = slide.background && slide.background.color ? apCor(slide.background.color) : '#ffffff';
+  return '<div class="ap-slide" style="background:' + fundo + '">' + slide.itens.map(it => {
+    if (it.tipo === 'texto') return apTexto(it.t, it.o);
+    if (it.tipo === 'forma') return apForma(it.f, it.o);
+    if (it.tipo === 'imagem') return apImagem(it.o);
+    if (it.tipo === 'tabela') return apTabela(it.r, it.o);
+    return '';
+  }).join('') + '</div>';
+}
+
+const APRES = { slides:[], atual:0, montando:false, pendente:false };
+function agendarPreviaApresentacao(){
+  clearTimeout(agendarPreviaApresentacao._t);
+  agendarPreviaApresentacao._t = setTimeout(montarPreviaApresentacao, 300);
+}
+async function montarPreviaApresentacao(){
+  if (APRES.montando) { APRES.pendente = true; return; }
+  APRES.montando = true;
+  const quadro = document.getElementById('ap-quadro');
+  try {
+    const d = STATE.lastDerived;
+    if (!d) {
+      APRES.slides = [];
+      quadro.innerHTML = '<div class="ap-vazio">Nenhum dado de Infrações carregado — anexe a Base pra montar a apresentação.</div>';
+      document.getElementById('ap-miniaturas').innerHTML = '';
+      document.getElementById('ap-contador').textContent = '';
+      return;
+    }
+    if (!APRES.slides.length) quadro.innerHTML = '<div class="ap-vazio">Montando a apresentação…</div>';
+    const dados = { infracoes: d, bh: null, dsr: null, feriado: null };
+    const temFotos = FOTOS_API_URL && (d.hierBlocks || []).some(b => justificativasComFotoDoBloco(b).length);
+    let aviso = '';
+    if (temFotos && tokenFotos()) dados.fotos = (await baixarFotosParaApresentacao(d, true)).fotos;
+    else if (temFotos) aviso = ' · fotos das evidências só aparecem pra quem entrou como GA/Admin';
+    const pres = buildApresentacaoPres(dados, PresGravada);
+    APRES.slides = pres.slides;
+    APRES.atual = Math.min(APRES.atual, APRES.slides.length - 1);
+    document.getElementById('ap-hint').textContent = APRES.slides.length + ' slides · ' + d.cicloAtualLabel + ' — igual ao PowerPoint para baixar' + aviso;
+    document.getElementById('ap-miniaturas').innerHTML = APRES.slides.map((sl, i) =>
+      '<button type="button" class="ap-mini" data-i="' + i + '" aria-label="Ir para o slide ' + (i + 1) + '">' + desenhaSlideHTML(sl) + '<span class="ap-n">' + (i + 1) + '</span></button>').join('');
+    mostrarSlideApresentacao(APRES.atual);
+  } catch(e) {
+    console.error('Não foi possível montar a prévia da apresentação.', e);
+    quadro.innerHTML = '<div class="ap-vazio">Não foi possível montar a apresentação — detalhes no console (F12).</div>';
+  } finally {
+    APRES.montando = false;
+    if (APRES.pendente) { APRES.pendente = false; agendarPreviaApresentacao(); }
+  }
+}
+function ajustarEscalaApresentacao(){
+  const quadro = document.getElementById('ap-quadro');
+  const caixa = quadro.querySelector('.ap-escala');
+  if (!caixa) return;
+  const W = quadro.clientWidth, H = quadro.clientHeight;
+  const esc_ = Math.min(W / 1280, H / 720) * (document.fullscreenElement ? 1 : 0.94);
+  caixa.style.width = (1280 * esc_) + 'px';
+  caixa.style.height = (720 * esc_) + 'px';
+  caixa.firstElementChild.style.transform = 'scale(' + esc_ + ')';
+}
+function mostrarSlideApresentacao(i){
+  if (!APRES.slides.length) return;
+  APRES.atual = Math.max(0, Math.min(APRES.slides.length - 1, i));
+  const quadro = document.getElementById('ap-quadro');
+  quadro.innerHTML = '<div class="ap-escala">' + desenhaSlideHTML(APRES.slides[APRES.atual]) + '</div>';
+  ajustarEscalaApresentacao();
+  document.getElementById('ap-contador').textContent = (APRES.atual + 1) + ' / ' + APRES.slides.length;
+  document.getElementById('ap-ant').disabled = APRES.atual === 0;
+  document.getElementById('ap-prox').disabled = APRES.atual === APRES.slides.length - 1;
+  document.querySelectorAll('#ap-miniaturas .ap-mini').forEach(b => b.classList.toggle('ativa', Number(b.dataset.i) === APRES.atual));
+  const mini = document.querySelector('#ap-miniaturas .ap-mini.ativa');
+  if (mini && mini.scrollIntoView) mini.scrollIntoView({ block:'nearest', inline:'nearest' });
+}
+document.getElementById('ap-ant').addEventListener('click', () => mostrarSlideApresentacao(APRES.atual - 1));
+document.getElementById('ap-prox').addEventListener('click', () => mostrarSlideApresentacao(APRES.atual + 1));
+document.getElementById('ap-miniaturas').addEventListener('click', evt => {
+  const b = evt.target.closest('.ap-mini');
+  if (b) mostrarSlideApresentacao(Number(b.dataset.i));
+});
+document.getElementById('ap-atualizar').addEventListener('click', () => { recomputeAndRender(); montarPreviaApresentacao(); });
+document.getElementById('ap-baixar').addEventListener('click', gerarApresentacaoPPT);
+document.getElementById('ap-tela-cheia').addEventListener('click', () => {
+  const palco = document.getElementById('ap-palco');
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (palco.requestFullscreen) palco.requestFullscreen().catch(() => showToast('O navegador não permitiu a tela cheia.'));
+});
+document.addEventListener('fullscreenchange', () => setTimeout(ajustarEscalaApresentacao, 50));
+window.addEventListener('resize', () => { if (activeTab === 'apresentacao') ajustarEscalaApresentacao(); });
+// setas do teclado (fora de campos de texto), PageUp/PageDown e espaço — como no PowerPoint
+document.addEventListener('keydown', evt => {
+  if (activeTab !== 'apresentacao' || !APRES.slides.length) return;
+  const el = document.activeElement;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+  if (['ArrowRight', 'PageDown', ' '].includes(evt.key)) { evt.preventDefault(); mostrarSlideApresentacao(APRES.atual + 1); }
+  else if (['ArrowLeft', 'PageUp'].includes(evt.key)) { evt.preventDefault(); mostrarSlideApresentacao(APRES.atual - 1); }
+  else if (evt.key === 'Home') mostrarSlideApresentacao(0);
+  else if (evt.key === 'End') mostrarSlideApresentacao(APRES.slides.length - 1);
+});
+// deslizar o dedo no celular/tablet
+(() => {
+  const palco = document.getElementById('ap-palco');
+  let x0 = null;
+  palco.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, { passive:true });
+  palco.addEventListener('touchend', e => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 50) mostrarSlideApresentacao(APRES.atual + (dx < 0 ? 1 : -1));
+  });
+})();
+
 /* ---------------- abas ---------------- */
 document.getElementById('tab-bar').addEventListener('click', evt => {
   const btn = evt.target.closest('.tab-btn');
@@ -6198,6 +6446,9 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'bh') renderBH();
   else if (alvo === 'dsr') renderDSR();
   else if (alvo === 'feriado') renderFeriado();
+  // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
+  // Infrações) e monta a prévia
+  else if (alvo === 'apresentacao') { recomputeAndRender(); montarPreviaApresentacao(); }
 });
 
 /* ==========================================================================
