@@ -142,8 +142,12 @@
   /* o slide preenche a tela (pedido do usuário: "não ficar uma tira pequena"): topo inteiro numa
      linha só — filtros à esquerda, botões (tema/PPT/Configurações) à direita —, sem título,
      subtítulo, avisos nem eyebrow; miniaturas escondidas por padrão (botão "Miniaturas") */
-  body.modo-apresentacao{ padding-block:8px 8px; }
-  body.modo-apresentacao .wrap{ gap:8px; }
+  body.modo-apresentacao{ padding-block:8px 8px; height:100vh; height:100dvh; box-sizing:border-box; overflow-x:hidden; display:flex; flex-direction:column; }
+  body.modo-apresentacao .wrap{ gap:8px; flex:1 1 auto; min-height:0; }
+  body.modo-apresentacao #tab-apresentacao.active{ flex:1 1 auto; min-height:0; }
+  body.modo-apresentacao .ap-bloco{ flex:1 1 auto; min-height:0; }
+  body.modo-apresentacao .ap-area{ flex:1 1 auto; min-height:240px; }
+  body.modo-apresentacao .ap-palco{ aspect-ratio:auto; height:auto; }
   body.modo-apresentacao header{ flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; }
   body.modo-apresentacao .eyebrow-row,
   body.modo-apresentacao .title-row > div:first-child,
@@ -176,7 +180,8 @@
   @media (prefers-reduced-motion: reduce){ .apc-corredor{ animation:none; } .apc-feito, .apc-corredor{ transition:none; } }
   .ap-acoes{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
   .ap-area{ display:flex; gap:12px; min-width:0; align-items:stretch; }
-  .ap-area .ap-palco{ flex:1 1 auto; }
+  .ap-area{ width:100%; }
+  .ap-area .ap-palco{ flex:1 1 0; width:auto; }
   .ap-indice{ flex:0 0 270px; display:flex; flex-direction:column; min-height:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .api-topo{ padding:10px 10px 8px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:6px; }
   .api-titulo{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
@@ -6588,22 +6593,13 @@ const corredor = {
 // palco = o que sobra da janela abaixo de onde ele começa, descontando as miniaturas e o espaço
 // final; o slide é escalado pra caber nesse palco (nunca mais alto que o 16:9 da largura).
 // Uma segunda passada desconta qualquer sobra que ainda faça a página rolar (rodapé, margens).
+// o tamanho do palco agora é do próprio layout (CSS do body.modo-apresentacao: a página tem a
+// altura exata da tela e o palco estica pra área livre) — vale pra qualquer tela e qualquer zoom.
+// Antes isto media a página em JS e encolhia o palco quando algum elemento flutuante (ex.: o
+// Jarvis) aumentava a altura total, deixando uma "tira" com espaço vazio embaixo.
 function dimensionarPalcoApresentacao(){
   const palco = document.getElementById('ap-palco');
-  if (!palco || activeTab !== 'apresentacao') return;
-  if (document.fullscreenElement) { palco.style.height = ''; return; }
-  const mini = document.getElementById('ap-miniaturas');
-  const MIN = 160;
-  if (mini) mini.style.display = '';
-  const topo = palco.getBoundingClientRect().top + window.scrollY;
-  const ideal = palco.clientWidth * 9 / 16;
-  const livre = window.innerHeight - topo - 16;
-  let altMini = mini ? mini.offsetHeight + 12 : 0;
-  if (mini && getComputedStyle(mini).display === 'none') altMini = 0;
-  let h = Math.max(MIN, Math.min(ideal, livre - altMini));
-  palco.style.height = h + 'px';
-  const sobra = document.documentElement.scrollHeight - window.innerHeight;
-  if (sobra > 0) { h = Math.max(MIN, h - sobra); palco.style.height = h + 'px'; }
+  if (palco) palco.style.height = '';
 }
 function ajustarEscalaApresentacao(){
   dimensionarPalcoApresentacao();
@@ -6728,6 +6724,9 @@ document.getElementById('ap-tela-cheia').addEventListener('click', () => {
   else if (palco.requestFullscreen) palco.requestFullscreen().catch(() => showToast('O navegador não permitiu a tela cheia.'));
 });
 document.addEventListener('fullscreenchange', () => setTimeout(ajustarEscalaApresentacao, 50));
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => { if (activeTab === 'apresentacao') ajustarEscalaApresentacao(); }).observe(document.getElementById('ap-quadro'));
+}
 window.addEventListener('resize', () => { if (activeTab === 'apresentacao') ajustarEscalaApresentacao(); });
 // setas do teclado (fora de campos de texto), PageUp/PageDown e espaço — como no PowerPoint
 document.addEventListener('keydown', evt => {
