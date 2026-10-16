@@ -506,6 +506,8 @@
   .legenda-item label{ flex:1; display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-secondary); min-width:0; overflow-wrap:anywhere; }
   .legenda-item textarea{ width:100%; resize:vertical; font-family:var(--sans); font-size:12.5px; color:var(--text-primary); background:var(--page); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
   .legenda-item textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .legenda-erro{ color:var(--critical); font-size:11px; min-height:0; }
+  .legenda-item textarea.invalida{ border-color:var(--critical); }
   .legenda-acoes{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
   .foto-progresso{ flex-basis:100%; display:flex; align-items:center; gap:8px; }
   .foto-progresso .fp-trilho{ flex:1; max-width:320px; height:6px; background:var(--grid); border-radius:999px; overflow:hidden; }
@@ -4553,13 +4555,34 @@ async function anexarFotos(div, files){
     catch(e) { console.error('Fotos enviadas ao Drive, mas não deu pra registrar no painel.', e); falhou = falhou || e; }
   }
   if (falhou) prog.erro('Falhou — ' + msgErroFotos(falhou));
-  else prog.set(100, 'Concluído ✓');
-  await new Promise(r => setTimeout(r, falhou ? 2500 : 900));
+  else prog.set(100, 'Concluído ✓ — ' + lote.length + ' foto(s) anexada(s) e enviada(s) ao Drive');
+  await new Promise(r => setTimeout(r, falhou ? 2500 : 1600));
   prog.parar();
   redesenharAnexos(div);
   const enviadas = (STATE.anexos[chave] || { fotos: [] }).fotos.length - atual.fotos.length;
   if (falhou) showToast((enviadas > 0 ? enviadas + ' foto(s) anexada(s), mas ' : '') + msgErroFotos(falhou));
-  else showToast(enviadas + ' foto(s) anexada(s) — chamado ' + chamado + '.');
+  else showToast('✓ ' + enviadas + ' foto(s) anexada(s) e enviada(s) ao Drive — chamado ' + chamado + '.');
+}
+// a legenda tem que EXPLICAR a foto (pedido do usuário: "não poderá ser o número utilizado no
+// chamado, terá que ser um texto explicativo"). Tira o nº do chamado e as palavras "chamado/nº/
+// número/protocolo/OS" e exige que sobre texto de verdade: pelo menos 2 palavras e 10 letras.
+// Devolve o motivo (texto pro aviso) ou '' se estiver ok.
+function motivoLegendaInvalida(texto, chamado){
+  const t = String(texto || '').trim();
+  if (!t) return 'Escreva uma legenda explicando o que a foto mostra.';
+  const semAcento = v => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  let resto = semAcento(t);
+  const ch = semAcento(chamado || '').replace(/[^a-z0-9]/g, '');
+  if (ch && resto.replace(/[^a-z0-9]/g, '') === ch) return 'A legenda não pode ser o número do chamado — descreva o que a foto mostra.';
+  if (ch) resto = resto.replace(new RegExp(ch.split('').join('[^a-z0-9]*'), 'g'), ' ');
+  resto = resto.replace(/\b(chamados?|n[ou]?|nr|numero|num|protocolo|os|ticket|id)\b/g, ' ');
+  const palavras = (resto.match(/[a-z]{2,}/g) || []);
+  const letras = palavras.join('').length;
+  if (palavras.length < 2 || letras < 10) {
+    return /\d/.test(t) ? 'A legenda não pode ser só o número do chamado ou números — escreva um texto explicativo (mín. 2 palavras e 10 letras).'
+                         : 'Escreva um texto explicativo um pouco maior (mín. 2 palavras e 10 letras).';
+  }
+  return '';
 }
 // janela que pede a legenda explicativa de CADA foto escolhida (obrigatória — o botão "Anexar"
 // só libera com todas preenchidas). Devolve [{ file, legenda }] ou null se a pessoa cancelar.
@@ -4577,6 +4600,7 @@ function pedirLegendasFotos(files, chamado){
             '<img src="' + urls[i] + '" alt="">' +
             '<label>Foto ' + (i + 1) + ' — ' + esc(f.name || '') +
               '<textarea maxlength="200" rows="2" placeholder="Ex.: Tela do sistema mostrando a OS aberta às 18h40" data-i="' + i + '"></textarea>' +
+              '<span class="legenda-erro" data-erro="' + i + '"></span>' +
             '</label>' +
           '</div>').join('') +
         '<div class="legenda-acoes"><button type="button" class="he-btn" data-acao="cancelar">Cancelar</button>' +
@@ -4585,12 +4609,25 @@ function pedirLegendasFotos(files, chamado){
     document.body.appendChild(ov);
     const campos = [...ov.querySelectorAll('textarea')];
     const ok = ov.querySelector('[data-acao="ok"]');
-    const validar = () => { ok.disabled = campos.some(c => !c.value.trim()); };
-    campos.forEach(c => c.addEventListener('input', validar));
+    // valida cada legenda (texto explicativo, nunca só o nº do chamado) e mostra o motivo embaixo
+    // do campo — o aviso só aparece depois que a pessoa começa a digitar naquele campo
+    const tocados = new Set();
+    const validar = () => {
+      let tudoOk = true;
+      campos.forEach((c, i) => {
+        const msg = motivoLegendaInvalida(c.value, chamado);
+        if (msg) tudoOk = false;
+        const el = ov.querySelector('[data-erro="' + i + '"]');
+        el.textContent = tocados.has(i) ? msg : '';
+        c.classList.toggle('invalida', !!msg && tocados.has(i));
+      });
+      ok.disabled = !tudoOk;
+    };
+    campos.forEach((c, i) => c.addEventListener('input', () => { tocados.add(i); validar(); }));
     const fechar = res => { urls.forEach(u => URL.revokeObjectURL(u)); ov.remove(); resolve(res); };
     ov.querySelector('[data-acao="cancelar"]').addEventListener('click', () => fechar(null));
     ok.addEventListener('click', () => {
-      if (campos.some(c => !c.value.trim())) return;
+      if (campos.some(c => motivoLegendaInvalida(c.value, chamado))) { campos.forEach((c, i) => tocados.add(i)); validar(); return; }
       fechar(files.map((file, i) => ({ file, legenda: campos[i].value.trim().replace(/\s+/g, ' ') })));
     });
     ov.addEventListener('keydown', evt => { if (evt.key === 'Escape') fechar(null); });
