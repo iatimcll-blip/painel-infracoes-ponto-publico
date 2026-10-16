@@ -504,6 +504,19 @@
   .foto-progresso.fp-erro .fp-texto{ color:var(--critical); white-space:normal; }
   .fotos-admin-h3{ margin:0 0 8px; font-size:12.5px; font-weight:600; color:var(--text-secondary); }
   #fotos-lista .foto-chip{ margin-right:4px; }
+  .fotos-lista-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+  .fotos-lista-head .fotos-admin-h3{ margin:0; }
+  .fotos-lista-acoes{ display:flex; gap:6px; }
+  .fotos-lista-acoes button{ font-size:11px; padding:4px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface-raised); color:var(--text-primary); cursor:pointer; font-family:var(--sans); }
+  .fotos-lista-acoes button:hover{ background:var(--grid); }
+  .fotos-ga-grupo{ border:1px solid var(--border); border-radius:8px; margin-bottom:6px; background:var(--surface); }
+  .fotos-ga-grupo > summary{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; cursor:pointer; list-style:none; }
+  .fotos-ga-grupo > summary::-webkit-details-marker{ display:none; }
+  .fotos-ga-grupo > summary::before{ content:'▸'; color:var(--text-muted); font-size:11px; transition:transform .15s; }
+  .fotos-ga-grupo[open] > summary::before{ transform:rotate(90deg); }
+  .fotos-ga-grupo .fg-nome{ font-weight:600; font-size:12.5px; }
+  .fotos-ga-grupo .fg-info{ font-size:11px; color:var(--text-secondary); }
+  .fotos-ga-grupo .table-scroll{ padding:0 12px 10px; }
   .foto-ok{ display:inline-flex; align-items:center; font-size:10.5px; font-weight:700; color:#fff; background:var(--good); border-radius:999px; padding:3px 9px; letter-spacing:.02em; }
   .foto-add input{ display:none; }
   .foto-lightbox{ position:fixed; inset:0; background:rgba(11,11,11,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:200; }
@@ -812,12 +825,15 @@
         <tbody id="fotos-por-autor"></tbody>
       </table>
     </div>
-    <div class="card table-scroll" style="margin-top:10px;">
-      <h3 class="fotos-admin-h3">Anexos (mais recentes primeiro)</h3>
-      <table>
-        <thead><tr><th>Quando</th><th>Quem anexou</th><th>Colaborador</th><th>GA</th><th>Data da infração</th><th>Chamado</th><th>Fotos</th></tr></thead>
-        <tbody id="fotos-lista"></tbody>
-      </table>
+    <div class="card" style="margin-top:10px;">
+      <div class="fotos-lista-head">
+        <h3 class="fotos-admin-h3">Anexos por GA (mais recentes primeiro)</h3>
+        <div class="fotos-lista-acoes">
+          <button type="button" id="fotos-ga-expandir">Expandir todos</button>
+          <button type="button" id="fotos-ga-recolher">Recolher todos</button>
+        </div>
+      </div>
+      <div id="fotos-lista"></div>
     </div>
   </section>
 
@@ -4669,17 +4685,34 @@ function renderFotosAdmin(){
     if (i.em && (!j.em || i.em > j.em)) j.em = i.em;
   });
   const linhas = Object.values(porJust).sort((x, y) => String(y.em || '').localeCompare(String(x.em || '')));
-  document.getElementById('fotos-lista').innerHTML = linhas.length
-    ? linhas.map(j => '<tr>' +
-        '<td>'+esc(quando(j.em))+'</td>' +
-        '<td>'+esc([...j.quem].join(', '))+'</td>' +
-        '<td>'+esc(j.nome)+'</td>' +
-        '<td>'+esc(j.ga)+'</td>' +
-        '<td class="num">'+esc(j.iso ? fmtDMY(parseISODate(j.iso)) : '—')+'</td>' +
-        '<td class="num">'+esc(j.chamado || '—')+'</td>' +
-        '<td>'+j.fotos.map((f, n) => '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.arquivo)+'">✓ '+(n+1)+'</button></span>').join('')+'</td>' +
-      '</tr>').join('')
-    : '<tr><td colspan="7" class="ga-empty">Nenhuma foto anexada ainda.</td></tr>';
+  // agrupado por GA, cada grupo com expandir/recolher (pedido do usuário) — SEMPRE começa
+  // recolhido ao abrir a página, só com o resumo na linha do GA. O que a pessoa abrir fica aberto
+  // enquanto a página estiver aberta (FOTOS_GA_ABERTOS), mesmo quando a lista se redesenha
+  // sozinha por um anexo novo; recarregar a página volta tudo pra recolhido.
+  const grupos = {};
+  linhas.forEach(j => {
+    const g = grupos[j.ga] || (grupos[j.ga] = { ga: j.ga, linhas: [], fotos: 0, ultimo: null });
+    g.linhas.push(j); g.fotos += j.fotos.length;
+    if (j.em && (!g.ultimo || j.em > g.ultimo)) g.ultimo = j.em;
+  });
+  const ordemGrupos = Object.values(grupos).sort((x, y) => String(y.ultimo || '').localeCompare(String(x.ultimo || '')));
+  document.getElementById('fotos-lista').innerHTML = ordemGrupos.length
+    ? ordemGrupos.map(g => '<details class="fotos-ga-grupo" data-ga="'+esc(g.ga)+'"'+(FOTOS_GA_ABERTOS.has(g.ga) ? ' open' : '')+'>' +
+        '<summary><span class="fg-nome">'+esc(g.ga)+'</span>' +
+        '<span class="fg-info">'+fmt(g.fotos)+' foto(s) · '+fmt(g.linhas.length)+' justificativa(s) · último: '+esc(quando(g.ultimo))+'</span></summary>' +
+        '<div class="table-scroll"><table>' +
+          '<thead><tr><th>Quando</th><th>Quem anexou</th><th>Colaborador</th><th>Data da infração</th><th>Chamado</th><th>Fotos</th></tr></thead><tbody>' +
+          g.linhas.map(j => '<tr>' +
+            '<td>'+esc(quando(j.em))+'</td>' +
+            '<td>'+esc([...j.quem].join(', '))+'</td>' +
+            '<td>'+esc(j.nome)+'</td>' +
+            '<td class="num">'+esc(j.iso ? fmtDMY(parseISODate(j.iso)) : '—')+'</td>' +
+            '<td class="num">'+esc(j.chamado || '—')+'</td>' +
+            '<td>'+j.fotos.map((f, n) => '<span class="foto-chip"><button type="button" class="foto-ver" data-id="'+esc(f.id)+'" title="'+esc(f.arquivo)+'">✓ '+(n+1)+'</button></span>').join('')+'</td>' +
+          '</tr>').join('') +
+        '</tbody></table></div>' +
+      '</details>').join('')
+    : '<p class="ga-empty">Nenhuma foto anexada ainda.</p>';
   const hint = document.getElementById('fotos-admin-hint');
   if (hint) hint.textContent = itens.length + ' foto(s) em ' + justs.size + ' justificativa(s) — todas as áreas, sem depender do filtro de ciclo';
 }
@@ -4696,6 +4729,20 @@ function exportFotosExcel(){
   }))), 'Fotos anexadas');
   XLSX.writeFile(wb, 'fotos-anexadas.xlsx');
 }
+// GAs que a pessoa expandiu nesta visita — não é salvo: ao abrir/recarregar a página, todos
+// começam recolhidos (pedido do usuário)
+const FOTOS_GA_ABERTOS = new Set();
+document.getElementById('fotos-lista').addEventListener('toggle', evt => {
+  const d = evt.target;
+  if (!d.classList || !d.classList.contains('fotos-ga-grupo')) return;
+  if (d.open) FOTOS_GA_ABERTOS.add(d.dataset.ga); else FOTOS_GA_ABERTOS.delete(d.dataset.ga);
+}, true);
+document.getElementById('fotos-ga-expandir').addEventListener('click', () => {
+  document.querySelectorAll('#fotos-lista .fotos-ga-grupo').forEach(d => { d.open = true; });
+});
+document.getElementById('fotos-ga-recolher').addEventListener('click', () => {
+  document.querySelectorAll('#fotos-lista .fotos-ga-grupo').forEach(d => { d.open = false; });
+});
 document.getElementById('fotos-admin-section').addEventListener('click', evt => {
   const ver = evt.target.closest && evt.target.closest('.foto-ver');
   if (ver) { evt.preventDefault(); verFoto(ver.dataset.id); }
