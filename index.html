@@ -138,11 +138,37 @@
   .tab-panel{ display:none; flex-direction:column; gap:28px; }
   /* ---------- aba Apresentação ---------- */
   .ap-bloco{ display:flex; flex-direction:column; gap:12px; min-width:0; width:100%; }
+  /* modo apresentação (aba Apresentação ativa): topo enxuto pra dar mais altura ao slide */
+  body.modo-apresentacao{ padding-block:12px 12px; }
+  body.modo-apresentacao .wrap{ gap:12px; }
+  body.modo-apresentacao header{ gap:6px; }
+  body.modo-apresentacao .subtitle,
+  body.modo-apresentacao #source-note,
+  body.modo-apresentacao .header-sync-row,
+  body.modo-apresentacao #ap-hint{ display:none; }
+  body.modo-apresentacao h1{ font-size:18px; }
+  body.modo-apresentacao .ap-bloco{ gap:8px; }
+  body.modo-apresentacao .ap-bloco .section-head h2{ font-size:16px; }
+  /* barra de progresso do corredor */
+  .ap-carregando{ position:absolute; inset:0; z-index:5; display:none; align-items:center; justify-content:center; background:rgba(17,20,28,.78); backdrop-filter:blur(2px); }
+  .ap-carregando.ativo{ display:flex; }
+  .apc-caixa{ width:min(560px, 86%); color:#fff; text-align:center; }
+  .apc-titulo{ font-size:15px; font-weight:600; margin-bottom:26px; letter-spacing:.01em; }
+  .apc-pista{ position:relative; height:36px; margin:0 22px; }
+  .apc-trilha{ position:absolute; left:0; right:0; bottom:4px; height:8px; border-radius:999px; background:repeating-linear-gradient(90deg, rgba(255,255,255,.22) 0 14px, rgba(255,255,255,.08) 14px 22px); overflow:hidden; }
+  .apc-feito{ display:block; height:100%; width:0; background:linear-gradient(90deg, #3b82f6, #22c55e); border-radius:999px; transition:width .45s ease; }
+  .apc-corredor{ position:absolute; bottom:8px; left:0; font-size:28px; line-height:1; transform:translateX(-50%) scaleX(-1); transition:left .45s ease; animation:apc-passo .32s ease-in-out infinite alternate; }
+  .apc-chegada{ position:absolute; right:-22px; bottom:6px; font-size:22px; line-height:1; }
+  .ap-carregando.fim .apc-corredor{ animation:apc-pulo .5s ease-out 1; }
+  @keyframes apc-passo{ from{ margin-bottom:0; } to{ margin-bottom:5px; } }
+  @keyframes apc-pulo{ 0%{ margin-bottom:0; } 50%{ margin-bottom:14px; } 100%{ margin-bottom:0; } }
+  .apc-etapa{ margin-top:16px; font-size:12.5px; color:#cbd5e1; font-family:var(--mono); }
+  @media (prefers-reduced-motion: reduce){ .apc-corredor{ animation:none; } .apc-feito, .apc-corredor{ transition:none; } }
   .ap-acoes{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
   .ap-palco{ position:relative; width:100%; min-width:0; aspect-ratio:16/9; background:#1a1d24; border-radius:12px; overflow:hidden; outline:none; }
   .ap-palco:focus-visible{ box-shadow:0 0 0 3px var(--s1); }
   .ap-palco:fullscreen{ border-radius:0; aspect-ratio:auto; display:flex; align-items:center; justify-content:center; background:#000; }
-  .ap-quadro{ position:absolute; inset:0 0 30px 0; display:flex; align-items:center; justify-content:center; }
+  .ap-quadro{ position:absolute; inset:6px 0 28px 0; display:flex; align-items:center; justify-content:center; }
   .ap-palco:fullscreen .ap-quadro{ position:relative; inset:auto; width:100%; height:calc(100% - 30px); }
   .ap-vazio{ color:#c9ced8; font-size:14px; padding:20px; text-align:center; }
   .ap-escala{ position:relative; flex:none; box-shadow:0 10px 40px rgba(0,0,0,.35); }
@@ -5900,7 +5926,7 @@ async function fotoNoTamanhoPadraoPPT(dataUrl){
 // baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
 // justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
 const PPT_FOTO_PRONTA = {};
-async function baixarFotosParaApresentacao(d, silencioso){
+async function baixarFotosParaApresentacao(d, silencioso, aoProgredir){
   const out = {};
   if (!FOTOS_API_URL || !d || !tokenFotos()) return { fotos: out, total: 0, ok: 0 };
   const ids = [];
@@ -5917,6 +5943,7 @@ async function baixarFotosParaApresentacao(d, silencioso){
         }
         out[id] = PPT_FOTO_PRONTA[id] || (PPT_FOTO_PRONTA[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]));
         ok++;
+        if (aoProgredir) aoProgredir(ok, ids.length);
         if (!silencioso) showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
       } catch(e) { console.error('Não foi possível baixar a foto ' + id + ' para a apresentação.', e); }
     }
@@ -6350,27 +6377,69 @@ async function montarPreviaApresentacao(){
       document.getElementById('ap-contador').textContent = '';
       return;
     }
-    if (!APRES.slides.length) quadro.innerHTML = '<div class="ap-vazio">Montando a apresentação…</div>';
+    if (!APRES.slides.length) quadro.innerHTML = '';
+    corredor.mostrar(4, 'Preparando os dados');
+    await apRespirar();
     const dados = { infracoes: d, bh: null, dsr: null, feriado: null };
     const temFotos = FOTOS_API_URL && (d.hierBlocks || []).some(b => justificativasComFotoDoBloco(b).length);
     let aviso = '';
-    if (temFotos && tokenFotos()) dados.fotos = (await baixarFotosParaApresentacao(d, true)).fotos;
-    else if (temFotos) aviso = ' · fotos das evidências só aparecem pra quem entrou como GA/Admin';
+    if (temFotos && tokenFotos()) {
+      corredor.ir(10, 'Buscando as fotos das evidências');
+      dados.fotos = (await baixarFotosParaApresentacao(d, true, (ok, total) => corredor.ir(10 + 60 * ok / total, 'Buscando as fotos das evidências (' + ok + ' de ' + total + ')'))).fotos;
+    } else if (temFotos) aviso = ' · fotos das evidências só aparecem pra quem entrou como GA/Admin';
+    corredor.ir(74, 'Montando os slides');
+    await apRespirar();
     const pres = buildApresentacaoPres(dados, PresGravada);
     APRES.slides = pres.slides;
     APRES.atual = Math.min(APRES.atual, APRES.slides.length - 1);
+    corredor.ir(88, 'Desenhando ' + APRES.slides.length + ' slides');
+    await apRespirar();
     document.getElementById('ap-hint').textContent = APRES.slides.length + ' slides · ' + d.cicloAtualLabel + ' — igual ao PowerPoint para baixar' + aviso;
     document.getElementById('ap-miniaturas').innerHTML = APRES.slides.map((sl, i) =>
       '<button type="button" class="ap-mini" data-i="' + i + '" aria-label="Ir para o slide ' + (i + 1) + '">' + desenhaSlideHTML(sl) + '<span class="ap-n">' + (i + 1) + '</span></button>').join('');
     mostrarSlideApresentacao(APRES.atual);
+    corredor.ir(100, 'Pronto! ' + APRES.slides.length + ' slides');
+    await new Promise(r => setTimeout(r, 650));
   } catch(e) {
     console.error('Não foi possível montar a prévia da apresentação.', e);
     quadro.innerHTML = '<div class="ap-vazio">Não foi possível montar a apresentação — detalhes no console (F12).</div>';
   } finally {
+    corredor.esconder();
     APRES.montando = false;
     if (APRES.pendente) { APRES.pendente = false; agendarPreviaApresentacao(); }
   }
 }
+// deixa o navegador pintar a barra antes de uma etapa pesada (montar/desenhar é síncrono)
+function apRespirar(){ return new Promise(r => requestAnimationFrame(() => setTimeout(r, 30))); }
+// barra de progresso "do corredor" (pedido do usuário): um corredor 🏃 vai da largada até a
+// bandeira 🏁 conforme a apresentação é montada — sobre o palco, com etapa e porcentagem
+const corredor = {
+  el(){
+    let ov = document.getElementById('ap-carregando');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'ap-carregando';
+      ov.className = 'ap-carregando';
+      ov.setAttribute('role', 'progressbar'); ov.setAttribute('aria-valuemin', '0'); ov.setAttribute('aria-valuemax', '100');
+      ov.innerHTML = '<div class="apc-caixa"><div class="apc-titulo">Montando a apresentação</div>' +
+        '<div class="apc-pista"><div class="apc-trilha"><span class="apc-feito"></span></div>' +
+        '<span class="apc-corredor" aria-hidden="true">🏃</span><span class="apc-chegada" aria-hidden="true">🏁</span></div>' +
+        '<div class="apc-etapa"></div></div>';
+      document.getElementById('ap-palco').appendChild(ov);
+    }
+    return ov;
+  },
+  mostrar(pct, etapa){ const ov = this.el(); ov.classList.add('ativo'); ov.classList.remove('fim'); this.ir(pct, etapa); },
+  ir(pct, etapa){
+    const ov = this.el(), v = Math.max(0, Math.min(100, pct));
+    ov.querySelector('.apc-feito').style.width = v + '%';
+    ov.querySelector('.apc-corredor').style.left = v + '%';
+    ov.querySelector('.apc-etapa').textContent = Math.round(v) + '% · ' + etapa;
+    ov.setAttribute('aria-valuenow', String(Math.round(v)));
+    ov.classList.toggle('fim', v >= 100);
+  },
+  esconder(){ const ov = document.getElementById('ap-carregando'); if (ov) ov.classList.remove('ativo'); },
+};
 // a aba inteira cabe na janela, sem rolar a página na vertical (pedido do usuário): a altura do
 // palco = o que sobra da janela abaixo de onde ele começa, descontando as miniaturas e o espaço
 // final; o slide é escalado pra caber nesse palco (nunca mais alto que o 16:9 da largura).
@@ -6399,7 +6468,7 @@ function ajustarEscalaApresentacao(){
   const caixa = quadro.querySelector('.ap-escala');
   if (!caixa) return;
   const W = quadro.clientWidth, H = quadro.clientHeight;
-  const esc_ = Math.min(W / 1280, H / 720) * (document.fullscreenElement ? 1 : 0.94);
+  const esc_ = Math.min(W / 1280, H / 720) * (document.fullscreenElement ? 1 : 0.985);
   caixa.style.width = (1280 * esc_) + 'px';
   caixa.style.height = (720 * esc_) + 'px';
   caixa.firstElementChild.style.transform = 'scale(' + esc_ + ')';
@@ -6472,6 +6541,9 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
   // Infrações) e monta a prévia
   else if (alvo === 'apresentacao') { window.scrollTo(0, 0); recomputeAndRender(); ajustarEscalaApresentacao(); montarPreviaApresentacao(); }
+  // modo apresentação: topo enxuto (sem subtítulo/avisos) pra sobrar mais tela pro slide
+  document.body.classList.toggle('modo-apresentacao', alvo === 'apresentacao');
+  if (alvo === 'apresentacao') setTimeout(ajustarEscalaApresentacao, 0);
 });
 
 /* ==========================================================================
