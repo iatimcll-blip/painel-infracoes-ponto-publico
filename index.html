@@ -1505,6 +1505,7 @@ async function authLogin(username, password){
 }
 function authLogout(){
   limparTokenFotos();
+  fotoCacheLimpar(); // fotos privadas guardadas pra apresentação saem do aparelho junto com o login
   clearAuthSession();
   if (sb) withTimeout(sb.auth.signOut(), 5000, 'logout Supabase').catch(() => {});
 }
@@ -3150,6 +3151,13 @@ function recomputeAndRender(){
         },
       });
     }
+    // aba Apresentação: os blocos de Infrações estão escondidos — não gasta tempo redesenhando
+    // tudo; só a prévia é refeita (ao voltar pra aba Infrações, ela redesenha normalmente)
+    if (activeTab === 'apresentacao') {
+      document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
+      agendarPreviaApresentacao();
+      return;
+    }
     renderKpis(d);
     renderAnoChart();
     renderGoGa(d);
@@ -3164,7 +3172,6 @@ function recomputeAndRender(){
     renderVerification();
     renderHierarchy(d);
     renderFotosAdmin();
-    if (activeTab === 'apresentacao') agendarPreviaApresentacao(); // filtro mudou / dado novo chegou
     document.getElementById('footer-cycle').textContent = d.cicloAtualLabel;
   } catch (e) {
     console.error('Erro ao renderizar o painel:', e);
@@ -5604,7 +5611,7 @@ function pptCabecalho(s, titulo, subtitulo, regiaoTxt){
   const eyebrow = '#' + (regiaoTxt || 'OPERAÇÕES').toUpperCase();
   s.addText(eyebrow, { x:0.5, y:0.24, w:9.6, h:0.3, fontFace:PPT_FONTE_FORTE, fontSize:pptFonteQueCabe(eyebrow, 9.6, 0.3, 10.5, 7, 1), color:PPT_TEXT_MUTED, charSpacing:2, isTextBox:true, margin:0 });
   const logoW = 0.5 * PPT_LOGO_PROPORCAO, logoX = 12.8 - logoW;
-  s.addImage({ data:PPT_LOGO_AZUL, x:logoX, y:0.18, w:logoW, h:0.5 });
+  if (!s._logoNoMestre) s.addImage({ data:PPT_LOGO_AZUL, x:logoX, y:0.18, w:logoW, h:0.5 });
   // degrau: sai da borda esquerda logo abaixo do eyebrow, sobe e para num ponto antes da logo
   const degrauX = logoX - 1.0;
   s.addShape('custGeom', { x:0, y:0.38, w:logoX - 0.12, h:0.25, line:{ color:PPT_LINHA_DETALHE, width:1 }, points:[
@@ -5792,7 +5799,7 @@ function pptColWidthsAux(opts){
 function pptSecaoTemaAuxiliar(pres, temaKey, temaLabel, d, opts, kpiTiles, eyebrow, rodapeTxt){
   // --- divisória de seção ---
   {
-    const s = pres.addSlide();
+    const s = pres.addSlide({ semLogo:true });
     s.background = { color: PPT_NAVY };
     s.addText(temaLabel, { x:0.5, y:3.15, w:12.3, h:1, align:'center', fontFace:PPT_FONTE_FORTE, fontSize:36, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
     s.addText(d.periodLabel, { x:0.5, y:4.15, w:12.3, h:0.5, align:'center', fontFace:PPT_FONTE, fontSize:14, color:'CADCFC', isTextBox:true, margin:0 });
@@ -5919,9 +5926,9 @@ async function fotoNoTamanhoPadraoPPT(dataUrl){
   const canvas = document.createElement('canvas');
   // PPT leve (pedido do usuário): ~200 dpi no tamanho que a foto ocupa no slide (3,59" de largura
   // ≈ 720 px) é nítido na tela e no projetor — mais que isso só pesa o arquivo
-  canvas.width = Math.min(sw, Math.round(moldura.wIn * 200)); canvas.height = Math.round(canvas.width / alvo);
+  canvas.width = Math.min(sw, Math.round(moldura.wIn * 170)); canvas.height = Math.round(canvas.width / alvo);
   canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  return { data: canvas.toDataURL('image/jpeg', 0.78).replace(/^data:/, ''), wIn: moldura.wIn, hIn: moldura.hIn };
+  return { data: canvas.toDataURL('image/jpeg', 0.75).replace(/^data:/, ''), wIn: moldura.wIn, hIn: moldura.hIn };
 }
 // baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
 // justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
@@ -5937,19 +5944,64 @@ async function baixarFotosParaApresentacao(d, silencioso, aoProgredir){
     while (fila.length) {
       const id = fila.shift();
       try {
-        if (!FOTO_CACHE[id]) {
-          const r = await chamarFotosApi({ acao: 'ver', id });
-          FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
+        // rápido: memória -> navegador (IndexedDB, sobrevive a recarregar a página) -> Google Drive
+        if (!PPT_FOTO_PRONTA[id]) PPT_FOTO_PRONTA[id] = await fotoCacheLer(id);
+        if (!PPT_FOTO_PRONTA[id]) {
+          if (!FOTO_CACHE[id]) {
+            const r = await chamarFotosApi({ acao: 'ver', id });
+            FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
+          }
+          PPT_FOTO_PRONTA[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]);
+          fotoCacheGravar(id, PPT_FOTO_PRONTA[id]);
         }
-        out[id] = PPT_FOTO_PRONTA[id] || (PPT_FOTO_PRONTA[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]));
+        out[id] = PPT_FOTO_PRONTA[id];
         ok++;
         if (aoProgredir) aoProgredir(ok, ids.length);
         if (!silencioso) showToast('Baixando fotos para a apresentação… ' + ok + ' de ' + ids.length);
       } catch(e) { console.error('Não foi possível baixar a foto ' + id + ' para a apresentação.', e); }
     }
   };
-  await Promise.all([trabalhador(), trabalhador(), trabalhador()]);
+  await Promise.all([trabalhador(), trabalhador(), trabalhador(), trabalhador()]);
   return { fotos: out, total: ids.length, ok };
+}
+// cache das fotos JÁ no tamanho do slide, no próprio navegador (IndexedDB) — o arquivo no Drive
+// nunca muda (cada foto tem ID próprio), então depois da 1ª vez a prévia e o download não
+// precisam buscar no Google de novo (a etapa mais lenta). É do aparelho de quem está logado;
+// sair (logout) apaga. Qualquer falha do IndexedDB (aba anônima, bloqueado) só desliga o cache.
+const FOTO_IDB_NOME = 'painelInfracoesFotos', FOTO_IDB_STORE = 'ppt';
+let fotoIdbPromessa = null;
+function fotoIdb(){
+  if (!fotoIdbPromessa) fotoIdbPromessa = new Promise(resolve => {
+    try {
+      const req = indexedDB.open(FOTO_IDB_NOME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(FOTO_IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch(e) { resolve(null); }
+  });
+  return fotoIdbPromessa;
+}
+async function fotoCacheLer(id){
+  const db = await fotoIdb();
+  if (!db) return null;
+  return new Promise(resolve => {
+    try {
+      const r = db.transaction(FOTO_IDB_STORE, 'readonly').objectStore(FOTO_IDB_STORE).get(id);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    } catch(e) { resolve(null); }
+  });
+}
+async function fotoCacheGravar(id, valor){
+  const db = await fotoIdb();
+  if (!db) return;
+  try { db.transaction(FOTO_IDB_STORE, 'readwrite').objectStore(FOTO_IDB_STORE).put(valor, id); } catch(e) {}
+}
+function fotoCacheLimpar(){
+  try { if (fotoIdbPromessa) fotoIdbPromessa.then(db => { if (db) db.close(); }); } catch(e) {}
+  fotoIdbPromessa = null;
+  try { indexedDB.deleteDatabase(FOTO_IDB_NOME); } catch(e) {}
+  Object.keys(PPT_FOTO_PRONTA).forEach(k => delete PPT_FOTO_PRONTA[k]);
 }
 
 // pódio do 2º slide (pedido do usuário): 1º, 2º e 3º lugar entre os GAs, pelo MESMO critério de
@@ -6007,6 +6059,20 @@ function labelPrincipalApresentacao(dados){
 function buildApresentacaoPres(dados, ClassePres){
   const d = dados.infracoes;
   const pres = new (ClassePres || PptxGenJS)();
+  // PPT leve: a logo do canto vai num slide-MESTRE (o arquivo guarda 1 cópia só; antes eram ~20
+  // cópias, mais da metade do peso). Capa/encerramento/divisórias pedem { semLogo:true }. A prévia
+  // da aba Apresentação (gravadora) não tem mestre — lá o pptCabecalho desenha a logo direto.
+  if (typeof pres.defineSlideMaster === 'function') {
+    const logoW = 0.5 * PPT_LOGO_PROPORCAO;
+    pres.defineSlideMaster({ title:'GIGA_CONTEUDO', background:{ color:'FFFFFF' }, objects:[ { image:{ x:12.8 - logoW, y:0.18, w:logoW, h:0.5, data:PPT_LOGO_AZUL } } ] });
+    const addSlideOriginal = pres.addSlide.bind(pres);
+    pres.addSlide = op => {
+      if (op && op.semLogo) return addSlideOriginal();
+      const sl = addSlideOriginal({ masterName:'GIGA_CONTEUDO' });
+      sl._logoNoMestre = true;
+      return sl;
+    };
+  }
   pres.layout = 'LAYOUT_WIDE'; // 13.33" x 7.5"
   pres.author = 'Painel Infrações de Ponto';
   const labelPrincipal = labelPrincipalApresentacao(dados);
@@ -6034,7 +6100,7 @@ function buildApresentacaoPres(dados, ClassePres){
     // e a logo branca, eyebrow com "#", título fino + negrito e a linha clara em "degrau"
     // terminando num ponto, apontando pro painel. Cores tiradas do próprio anexo.
     const CAPA_FUNDO = '010185', CAPA_PAINEL = '003BD6', CAPA_LINHA = 'BBCDEF';
-    const s = pres.addSlide();
+    const s = pres.addSlide({ semLogo:true });
     s.background = { color: CAPA_FUNDO };
     const painelX = 9.75, painelW = 13.33 - painelX, raio = 0.9;
     s.addShape('custGeom', { x:painelX, y:0, w:painelW, h:7.5, fill:{ color:CAPA_PAINEL }, line:{ type:'none' }, points:[
@@ -6212,7 +6278,7 @@ function buildApresentacaoPres(dados, ClassePres){
 
   // --- slide final ---
   {
-    const s = pres.addSlide();
+    const s = pres.addSlide({ semLogo:true });
     s.background = { color: PPT_NAVY };
     s.addImage({ data:PPT_LOGO_BRANCA, x:(13.33 - 1.1 * PPT_LOGO_PROPORCAO) / 2, y:2.95, w:1.1 * PPT_LOGO_PROPORCAO, h:1.1 });
     s.addText('Obrigado!', { x:0, y:4.3, w:13.33, h:0.8, align:'center', fontFace:PPT_FONTE_FORTE, fontSize:34, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
@@ -6359,7 +6425,7 @@ function desenhaSlideHTML(slide){
   }).join('') + '</div>';
 }
 
-const APRES = { slides:[], atual:0, montando:false, pendente:false };
+const APRES = { slides:[], atual:0, montando:false, pendente:false, assinatura:null };
 function agendarPreviaApresentacao(){
   clearTimeout(agendarPreviaApresentacao._t);
   agendarPreviaApresentacao._t = setTimeout(montarPreviaApresentacao, 300);
@@ -6390,16 +6456,27 @@ async function montarPreviaApresentacao(){
     corredor.ir(74, 'Montando os slides');
     await apRespirar();
     const pres = buildApresentacaoPres(dados, PresGravada);
+    // mesmo conteúdo da última montagem (dado do realtime que não mexe na apresentação, troca de
+    // aba e volta, etc.) -> não redesenha nada
+    const assinatura = JSON.stringify(pres.slides.map(sl => [sl.background, sl.itens]));
+    if (assinatura === APRES.assinatura && document.querySelector('#ap-quadro .ap-escala')) {
+      corredor.esconder();
+      return;
+    }
+    APRES.assinatura = assinatura;
     APRES.slides = pres.slides;
     APRES.atual = Math.min(APRES.atual, APRES.slides.length - 1);
     corredor.ir(88, 'Desenhando ' + APRES.slides.length + ' slides');
     await apRespirar();
     document.getElementById('ap-hint').textContent = APRES.slides.length + ' slides · ' + d.cicloAtualLabel + ' — igual ao PowerPoint para baixar' + aviso;
+    // miniaturas: só a moldura agora; o desenho de cada uma entra quando ela aparece na faixa
     document.getElementById('ap-miniaturas').innerHTML = APRES.slides.map((sl, i) =>
-      '<button type="button" class="ap-mini" data-i="' + i + '" aria-label="Ir para o slide ' + (i + 1) + '">' + desenhaSlideHTML(sl) + '<span class="ap-n">' + (i + 1) + '</span></button>').join('');
+      '<button type="button" class="ap-mini" data-i="' + i + '" aria-label="Ir para o slide ' + (i + 1) + '"><span class="ap-n">' + (i + 1) + '</span></button>').join('');
+    observarMiniaturasApresentacao();
     mostrarSlideApresentacao(APRES.atual);
     corredor.ir(100, 'Pronto! ' + APRES.slides.length + ' slides');
-    await new Promise(r => setTimeout(r, 650));
+    const ovC = document.getElementById('ap-carregando');
+    if (ovC && ovC.classList.contains('ativo')) await new Promise(r => setTimeout(r, 650));
   } catch(e) {
     console.error('Não foi possível montar a prévia da apresentação.', e);
     quadro.innerHTML = '<div class="ap-vazio">Não foi possível montar a apresentação — detalhes no console (F12).</div>';
@@ -6408,6 +6485,23 @@ async function montarPreviaApresentacao(){
     APRES.montando = false;
     if (APRES.pendente) { APRES.pendente = false; agendarPreviaApresentacao(); }
   }
+}
+let apObservador = null;
+function observarMiniaturasApresentacao(){
+  const faixa = document.getElementById('ap-miniaturas');
+  const desenhar = b => {
+    if (b.dataset.pronta) return;
+    const sl = APRES.slides[Number(b.dataset.i)];
+    if (!sl) return;
+    b.insertAdjacentHTML('afterbegin', desenhaSlideHTML(sl));
+    b.dataset.pronta = '1';
+  };
+  if (apObservador) apObservador.disconnect();
+  if (typeof IntersectionObserver !== 'function') { faixa.querySelectorAll('.ap-mini').forEach(desenhar); return; }
+  apObservador = new IntersectionObserver(ents => ents.forEach(e => {
+    if (e.isIntersecting) { desenhar(e.target); apObservador.unobserve(e.target); }
+  }), { root: faixa, rootMargin: '0px 320px' });
+  faixa.querySelectorAll('.ap-mini').forEach(b => apObservador.observe(b));
 }
 // deixa o navegador pintar a barra antes de uma etapa pesada (montar/desenhar é síncrono)
 function apRespirar(){ return new Promise(r => requestAnimationFrame(() => setTimeout(r, 30))); }
@@ -6429,7 +6523,11 @@ const corredor = {
     }
     return ov;
   },
-  mostrar(pct, etapa){ const ov = this.el(); ov.classList.add('ativo'); ov.classList.remove('fim'); this.ir(pct, etapa); },
+  mostrar(pct, etapa){
+    const ov = this.el(); ov.classList.remove('fim'); this.ir(pct, etapa);
+    clearTimeout(this._t);
+    this._t = setTimeout(() => ov.classList.add('ativo'), document.querySelector('#ap-quadro .ap-escala') ? 250 : 0);
+  },
   ir(pct, etapa){
     const ov = this.el(), v = Math.max(0, Math.min(100, pct));
     ov.querySelector('.apc-feito').style.width = v + '%';
@@ -6438,7 +6536,7 @@ const corredor = {
     ov.setAttribute('aria-valuenow', String(Math.round(v)));
     ov.classList.toggle('fim', v >= 100);
   },
-  esconder(){ const ov = document.getElementById('ap-carregando'); if (ov) ov.classList.remove('ativo'); },
+  esconder(){ clearTimeout(this._t); const ov = document.getElementById('ap-carregando'); if (ov) ov.classList.remove('ativo'); },
 };
 // a aba inteira cabe na janela, sem rolar a página na vertical (pedido do usuário): a altura do
 // palco = o que sobra da janela abaixo de onde ele começa, descontando as miniaturas e o espaço
@@ -6540,7 +6638,7 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'feriado') renderFeriado();
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
   // Infrações) e monta a prévia
-  else if (alvo === 'apresentacao') { window.scrollTo(0, 0); recomputeAndRender(); ajustarEscalaApresentacao(); montarPreviaApresentacao(); }
+  else if (alvo === 'apresentacao') { window.scrollTo(0, 0); ajustarEscalaApresentacao(); recomputeAndRender(); agendarPreviaApresentacao(); }
   // modo apresentação: topo enxuto (sem subtítulo/avisos) pra sobrar mais tela pro slide
   document.body.classList.toggle('modo-apresentacao', alvo === 'apresentacao');
   if (alvo === 'apresentacao') setTimeout(ajustarEscalaApresentacao, 0);
