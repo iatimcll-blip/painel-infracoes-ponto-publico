@@ -5770,13 +5770,36 @@ function buildApresentacaoPres(dados){
 
   // --- slide 1: título ---
   {
+    // capa no layout do banner "Nosso Jeito de Ser" da GIGA+ (pedido do usuário, 2026-10-15):
+    // fundo azul-escuro, painel azul GIGA+ à direita com só o canto superior esquerdo arredondado
+    // e a logo branca, eyebrow com "#", título fino + negrito e a linha clara em "degrau"
+    // terminando num ponto, apontando pro painel. Cores tiradas do próprio anexo.
+    const CAPA_FUNDO = '010185', CAPA_PAINEL = '003BD6', CAPA_LINHA = 'BBCDEF';
     const s = pres.addSlide();
-    s.background = { color: PPT_NAVY };
-    s.addImage({ data:PPT_LOGO_BRANCA, x:0.6, y:0.5, w:1.0 * PPT_LOGO_PROPORCAO, h:1.0 });
-    if (regiaoTxt) s.addText(regiaoTxt.toUpperCase(), { x:0.6, y:2.7, w:12, h:0.45, fontFace:'Arial', fontSize:15, bold:true, color:'9FC6E0', charSpacing:1, isTextBox:true, margin:0 });
-    s.addText('Infrações de Ponto', { x:0.6, y:3.15, w:12, h:1.1, fontFace:'Cambria', fontSize:40, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
-    s.addText(taglineTxt, { x:0.6, y:4.25, w:12, h:0.5, fontFace:'Arial', fontSize:16, color:'CADCFC', isTextBox:true, margin:0 });
-    s.addText(labelPrincipal, { x:0.6, y:6.75, w:12, h:0.4, fontFace:'Arial', fontSize:12, color:'7C93B0', isTextBox:true, margin:0 });
+    s.background = { color: CAPA_FUNDO };
+    const painelX = 9.75, painelW = 13.33 - painelX, raio = 0.9;
+    s.addShape('custGeom', { x:painelX, y:0, w:painelW, h:7.5, fill:{ color:CAPA_PAINEL }, line:{ type:'none' }, points:[
+      { x:0, y:raio, moveTo:true }, { x:raio, y:0, curve:{ type:'quadratic', x1:0, y1:0 } },
+      { x:painelW, y:0 }, { x:painelW, y:7.5 }, { x:0, y:7.5 }, { close:true },
+    ] });
+    const logoH = 0.95, logoW = logoH * PPT_LOGO_PROPORCAO;
+    s.addImage({ data:PPT_LOGO_BRANCA, x:painelX + (painelW - logoW) / 2, y:3.75 - logoH / 2, w:logoW, h:logoH });
+    const eyebrowTxt = '#OPERAÇÕES' + (regiaoTxt ? ' · ' + regiaoTxt.toUpperCase() : '');
+    s.addText(eyebrowTxt, { x:0.95, y:2.2, w:8.4, h:0.4, fontFace:'Segoe UI Semibold', fontSize:pptFonteQueCabe(eyebrowTxt, 8.4, 0.4, 14, 9, 1), color:'E3E8F7', charSpacing:2, isTextBox:true, margin:0 });
+    s.addText([
+      { text:'Infrações ', options:{ fontFace:'Segoe UI Light' } },
+      { text:'de Ponto', options:{ fontFace:'Segoe UI', bold:true } },
+    ], { x:0.95, y:2.7, w:6.1, h:1.0, fontSize:46, color:'FFFFFF', valign:'middle', isTextBox:true, margin:0 });
+    // linha em degrau: embaixo do título da borda esquerda até depois dele, sobe e segue na altura
+    // do meio do título até o ponto, perto do painel
+    s.addShape('custGeom', { x:0, y:3.15, w:9.3, h:1.1, line:{ color:CAPA_LINHA, width:1.5 }, points:[
+      { x:0, y:1.0, moveTo:true }, { x:6.95, y:1.0 },
+      { x:7.15, y:0.8, curve:{ type:'quadratic', x1:7.15, y1:1.0 } }, { x:7.15, y:0.3 },
+      { x:7.35, y:0.1, curve:{ type:'quadratic', x1:7.15, y1:0.1 } }, { x:9.2, y:0.1 },
+    ] });
+    s.addShape('ellipse', { x:9.2 - 0.07, y:3.25 - 0.07, w:0.14, h:0.14, fill:{ color:CAPA_LINHA }, line:{ color:'5B6FD6', width:2 } });
+    s.addText(taglineTxt, { x:0.95, y:4.5, w:8.4, h:0.5, fontFace:'Segoe UI', fontSize:pptFonteQueCabe(taglineTxt, 8.4, 0.5, 16, 10, 1), color:CAPA_LINHA, isTextBox:true, margin:0 });
+    s.addText(labelPrincipal, { x:0.95, y:6.55, w:8.4, h:0.4, fontFace:'Segoe UI', fontSize:12, color:'8FA3E0', isTextBox:true, margin:0 });
   }
 
   // --- slides de Infrações (só se essa Base estiver anexada) ---
