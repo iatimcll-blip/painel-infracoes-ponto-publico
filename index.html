@@ -139,16 +139,26 @@
   /* ---------- aba Apresentação ---------- */
   .ap-bloco{ display:flex; flex-direction:column; gap:12px; min-width:0; width:100%; }
   /* modo apresentação (aba Apresentação ativa): topo enxuto pra dar mais altura ao slide */
-  body.modo-apresentacao{ padding-block:12px 12px; }
-  body.modo-apresentacao .wrap{ gap:12px; }
-  body.modo-apresentacao header{ gap:6px; }
+  /* o slide preenche a tela (pedido do usuário: "não ficar uma tira pequena"): topo inteiro numa
+     linha só — filtros à esquerda, botões (tema/PPT/Configurações) à direita —, sem título,
+     subtítulo, avisos nem eyebrow; miniaturas escondidas por padrão (botão "Miniaturas") */
+  body.modo-apresentacao{ padding-block:8px 8px; }
+  body.modo-apresentacao .wrap{ gap:8px; }
+  body.modo-apresentacao header{ flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; }
+  body.modo-apresentacao .eyebrow-row,
+  body.modo-apresentacao .title-row > div:first-child,
   body.modo-apresentacao .subtitle,
   body.modo-apresentacao #source-note,
   body.modo-apresentacao .header-sync-row,
-  body.modo-apresentacao #ap-hint{ display:none; }
-  body.modo-apresentacao h1{ font-size:18px; }
+  body.modo-apresentacao #ap-hint,
+  body.modo-apresentacao .ap-bloco .section-head h2{ display:none; }
+  body.modo-apresentacao .filter-row{ order:1; }
+  body.modo-apresentacao .title-row{ order:2; margin-left:auto; }
   body.modo-apresentacao .ap-bloco{ gap:8px; }
-  body.modo-apresentacao .ap-bloco .section-head h2{ font-size:16px; }
+  body.modo-apresentacao .ap-bloco .section-head{ min-height:0; }
+  body.modo-apresentacao .ap-acoes{ margin-left:0; }
+  body.modo-apresentacao:not(.ap-com-miniaturas) .ap-miniaturas{ display:none; }
+  .ap-mini-toggle[aria-pressed="true"]{ background:var(--s1); color:#fff; border-color:var(--s1); }
   /* barra de progresso do corredor */
   .ap-carregando{ position:absolute; inset:0; z-index:5; display:none; align-items:center; justify-content:center; background:rgba(17,20,28,.78); backdrop-filter:blur(2px); }
   .ap-carregando.ativo{ display:flex; }
@@ -1179,6 +1189,7 @@
         <div class="ap-acoes">
           <select class="ap-ir" id="ap-ir" aria-label="Ir para o slide de um GA ou seção"></select>
           <button type="button" class="he-btn" id="ap-atualizar">Atualizar</button>
+          <button type="button" class="he-btn ap-mini-toggle" id="ap-mini-toggle" aria-pressed="false">Miniaturas</button>
           <button type="button" class="he-btn" id="ap-tela-cheia">Tela cheia</button>
           <button type="button" class="he-btn primary" id="ap-baixar">Baixar PPT</button>
         </div>
@@ -6588,8 +6599,7 @@ function dimensionarPalcoApresentacao(){
   const ideal = palco.clientWidth * 9 / 16;
   const livre = window.innerHeight - topo - 16;
   let altMini = mini ? mini.offsetHeight + 12 : 0;
-  // tela baixa: as miniaturas saem pra sobrar altura pro slide (setas/teclado/dedo continuam)
-  if (mini && livre - altMini < 300) { mini.style.display = 'none'; altMini = 0; }
+  if (mini && getComputedStyle(mini).display === 'none') altMini = 0;
   let h = Math.max(MIN, Math.min(ideal, livre - altMini));
   palco.style.height = h + 'px';
   const sobra = document.documentElement.scrollHeight - window.innerHeight;
@@ -6692,6 +6702,15 @@ document.getElementById('ap-indice-lista').addEventListener('click', evt => {
   if (b) mostrarSlideApresentacao(Number(b.dataset.i));
 });
 document.getElementById('ap-indice-busca').addEventListener('input', desenharIndiceApresentacao);
+const AP_MINI_KEY = 'painelInfracoes.apMiniaturas.v1';
+function aplicarMiniaturasApresentacao(ligar){
+  document.body.classList.toggle('ap-com-miniaturas', ligar);
+  document.getElementById('ap-mini-toggle').setAttribute('aria-pressed', String(ligar));
+  try { localStorage.setItem(AP_MINI_KEY, ligar ? '1' : '0'); } catch(e) {}
+  setTimeout(ajustarEscalaApresentacao, 0);
+}
+try { if (localStorage.getItem(AP_MINI_KEY) === '1') aplicarMiniaturasApresentacao(true); } catch(e) {}
+document.getElementById('ap-mini-toggle').addEventListener('click', () => aplicarMiniaturasApresentacao(!document.body.classList.contains('ap-com-miniaturas')));
 document.getElementById('ap-ir').addEventListener('change', evt => {
   if (evt.target.value !== '') mostrarSlideApresentacao(Number(evt.target.value));
 });
