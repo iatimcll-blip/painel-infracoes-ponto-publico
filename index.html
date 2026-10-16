@@ -165,6 +165,24 @@
   .apc-etapa{ margin-top:16px; font-size:12.5px; color:#cbd5e1; font-family:var(--mono); }
   @media (prefers-reduced-motion: reduce){ .apc-corredor{ animation:none; } .apc-feito, .apc-corredor{ transition:none; } }
   .ap-acoes{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .ap-area{ display:flex; gap:12px; min-width:0; align-items:stretch; }
+  .ap-area .ap-palco{ flex:1 1 auto; }
+  .ap-indice{ flex:0 0 270px; display:flex; flex-direction:column; min-height:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .api-topo{ padding:10px 10px 8px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:6px; }
+  .api-titulo{ font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); }
+  .api-busca{ width:100%; font-size:12.5px; padding:6px 9px; border:1px solid var(--border); border-radius:7px; background:var(--page); color:var(--text-primary); font-family:var(--sans); }
+  .api-busca:focus{ outline:2px solid var(--s1); outline-offset:1px; }
+  .api-lista{ flex:1; overflow-y:auto; padding:6px; min-height:0; }
+  .api-grupo{ font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); padding:8px 8px 4px; }
+  .api-item{ display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:0; background:transparent; color:var(--text-primary); padding:7px 8px; border-radius:7px; cursor:pointer; font-family:var(--sans); font-size:12.5px; }
+  .api-item:hover{ background:var(--grid); }
+  .api-item.ativo{ background:var(--s1); color:#fff; }
+  .api-item.ativo .api-sub{ color:rgba(255,255,255,.85); }
+  .api-nome{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .api-sub{ flex:none; font-family:var(--mono); font-size:10.5px; color:var(--text-muted); }
+  .api-vazio{ padding:10px 8px; font-size:12px; color:var(--text-muted); }
+  .ap-ir{ display:none; font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface-raised); color:var(--text-primary); max-width:220px; }
+  @media (max-width:980px){ .ap-indice{ display:none; } .ap-ir{ display:inline-block; } }
   .ap-palco{ position:relative; width:100%; min-width:0; aspect-ratio:16/9; background:#1a1d24; border-radius:12px; overflow:hidden; outline:none; }
   .ap-palco:focus-visible{ box-shadow:0 0 0 3px var(--s1); }
   .ap-palco:fullscreen{ border-radius:0; aspect-ratio:auto; display:flex; align-items:center; justify-content:center; background:#000; }
@@ -1159,16 +1177,27 @@
         <h2>Apresentação</h2>
         <span class="hint" id="ap-hint">mesma apresentação do PowerPoint para baixar — segue o filtro de ciclo/semana/período do topo</span>
         <div class="ap-acoes">
+          <select class="ap-ir" id="ap-ir" aria-label="Ir para o slide de um GA ou seção"></select>
           <button type="button" class="he-btn" id="ap-atualizar">Atualizar</button>
           <button type="button" class="he-btn" id="ap-tela-cheia">Tela cheia</button>
           <button type="button" class="he-btn primary" id="ap-baixar">Baixar PPT</button>
         </div>
       </div>
+      <div class="ap-area">
       <div class="ap-palco" id="ap-palco" tabindex="0" aria-roledescription="carrossel" aria-label="Slides da apresentação">
         <div class="ap-quadro" id="ap-quadro"><div class="ap-vazio">Abrindo a apresentação…</div></div>
         <button type="button" class="ap-seta ap-ant" id="ap-ant" aria-label="Slide anterior">‹</button>
         <button type="button" class="ap-seta ap-prox" id="ap-prox" aria-label="Próximo slide">›</button>
         <div class="ap-contador" id="ap-contador"></div>
+      </div>
+      <!-- índice ao lado do slide (pedido do usuário): cada GA leva direto aos slides dele -->
+      <aside class="ap-indice" id="ap-indice" aria-label="Índice da apresentação">
+        <div class="api-topo">
+          <div class="api-titulo">Ir para</div>
+          <input type="search" class="api-busca" id="ap-indice-busca" placeholder="Buscar GA…" aria-label="Buscar GA no índice">
+        </div>
+        <div class="api-lista" id="ap-indice-lista"></div>
+      </aside>
       </div>
       <div class="ap-miniaturas" id="ap-miniaturas"></div>
     </div>
@@ -5608,6 +5637,7 @@ function corCelulaTotalPPT(total){
 // negrito ("Infrações de Ponto" -> "Indicadores do período"), linha em degrau terminando num
 // ponto perto da logo — só que em tons neutros.
 function pptCabecalho(s, titulo, subtitulo, regiaoTxt){
+  s._titulo = titulo; // índice da aba Apresentação (seções gerais)
   const eyebrow = '#' + (regiaoTxt || 'OPERAÇÕES').toUpperCase();
   s.addText(eyebrow, { x:0.5, y:0.24, w:9.6, h:0.3, fontFace:PPT_FONTE_FORTE, fontSize:pptFonteQueCabe(eyebrow, 9.6, 0.3, 10.5, 7, 1), color:PPT_TEXT_MUTED, charSpacing:2, isTextBox:true, margin:0 });
   const logoW = 0.5 * PPT_LOGO_PROPORCAO, logoX = 12.8 - logoW;
@@ -5875,6 +5905,7 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
     if (!imgs.length) return; // fotos não puderam ser baixadas (sem login/sem rede) — não gera slide vazio
     const s = pres.addSlide();
     pptCabecalho(s, 'Evidências — ' + j.nome, 'Foto(s) anexada(s) à justificativa (FCA) · ' + d.cicloAtualLabel, eyebrow);
+    s._ga = block.ga; s._evidencia = true;
     s.addText([
       { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
       { text:'   ·   Data da infração: ', options:{ bold:true, color:PPT_NAVY } }, { text:fmtDMY(parseISODate(j.iso)), options:{ color:PPT_NAVY } },
@@ -6101,6 +6132,7 @@ function buildApresentacaoPres(dados, ClassePres){
     // terminando num ponto, apontando pro painel. Cores tiradas do próprio anexo.
     const CAPA_FUNDO = '010185', CAPA_PAINEL = '003BD6', CAPA_LINHA = 'BBCDEF';
     const s = pres.addSlide({ semLogo:true });
+    s._titulo = 'Capa';
     s.background = { color: CAPA_FUNDO };
     const painelX = 9.75, painelW = 13.33 - painelX, raio = 0.9;
     s.addShape('custGeom', { x:painelX, y:0, w:painelW, h:7.5, fill:{ color:CAPA_PAINEL }, line:{ type:'none' }, points:[
@@ -6211,6 +6243,7 @@ function buildApresentacaoPres(dados, ClassePres){
       const s = pres.addSlide();
       pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
       pptLinhaGestor(s, [['Gestor: ', block.ga], ['   ·   GO: ', block.go || '—']]);
+      s._ga = block.ga; // índice da aba Apresentação: slides deste GA
       pptRodape(s, rodapeTxt);
       return s;
     });
@@ -6279,6 +6312,7 @@ function buildApresentacaoPres(dados, ClassePres){
   // --- slide final ---
   {
     const s = pres.addSlide({ semLogo:true });
+    s._titulo = 'Encerramento';
     s.background = { color: PPT_NAVY };
     s.addImage({ data:PPT_LOGO_BRANCA, x:(13.33 - 1.1 * PPT_LOGO_PROPORCAO) / 2, y:2.95, w:1.1 * PPT_LOGO_PROPORCAO, h:1.1 });
     s.addText('Obrigado!', { x:0, y:4.3, w:13.33, h:0.8, align:'center', fontFace:PPT_FONTE_FORTE, fontSize:34, bold:true, color:'FFFFFF', isTextBox:true, margin:0 });
@@ -6473,6 +6507,7 @@ async function montarPreviaApresentacao(){
     document.getElementById('ap-miniaturas').innerHTML = APRES.slides.map((sl, i) =>
       '<button type="button" class="ap-mini" data-i="' + i + '" aria-label="Ir para o slide ' + (i + 1) + '"><span class="ap-n">' + (i + 1) + '</span></button>').join('');
     observarMiniaturasApresentacao();
+    montarIndiceApresentacao();
     mostrarSlideApresentacao(APRES.atual);
     corredor.ir(100, 'Pronto! ' + APRES.slides.length + ' slides');
     const ovC = document.getElementById('ap-carregando');
@@ -6581,9 +6616,85 @@ function mostrarSlideApresentacao(i){
   document.getElementById('ap-ant').disabled = APRES.atual === 0;
   document.getElementById('ap-prox').disabled = APRES.atual === APRES.slides.length - 1;
   document.querySelectorAll('#ap-miniaturas .ap-mini').forEach(b => b.classList.toggle('ativa', Number(b.dataset.i) === APRES.atual));
+  // rola só a faixa de miniaturas (scrollIntoView podia rolar a página inteira)
   const mini = document.querySelector('#ap-miniaturas .ap-mini.ativa');
-  if (mini && mini.scrollIntoView) mini.scrollIntoView({ block:'nearest', inline:'nearest' });
+  const faixa = document.getElementById('ap-miniaturas');
+  if (mini && faixa) {
+    const esq = mini.offsetLeft - faixa.offsetLeft, dir = esq + mini.offsetWidth;
+    if (esq < faixa.scrollLeft) faixa.scrollLeft = esq - 8;
+    else if (dir > faixa.scrollLeft + faixa.clientWidth) faixa.scrollLeft = dir - faixa.clientWidth + 8;
+  }
+  marcarIndiceAtual();
 }
+// índice ao lado do slide: seções gerais (Capa, Pódio, Indicadores, …) + um item por GA, que
+// leva ao PRIMEIRO slide daquele GA; mostra o intervalo de slides e quantos são de evidências.
+// Montado a partir das marcações _titulo/_ga que buildApresentacaoPres deixa em cada slide.
+function montarIndiceApresentacao(){
+  const geral = [], gas = new Map();
+  APRES.slides.forEach((sl, i) => {
+    if (sl._ga) {
+      const g = gas.get(sl._ga) || { nome: sl._ga, ini: i, fim: i, evid: 0 };
+      g.fim = i; if (sl._evidencia) g.evid++;
+      gas.set(sl._ga, g);
+    } else if (sl._titulo && !/\(continuação\)$/.test(sl._titulo)) {
+      const rotulo = sl._titulo.split(' · ')[0].replace(/ \(.*\)$/, '');
+      if (!geral.some(x => x.rotulo === rotulo)) geral.push({ rotulo, i });
+    }
+  });
+  APRES.indice = { geral, gas: [...gas.values()] };
+  desenharIndiceApresentacao();
+  // "Ir para" (tela estreita)
+  const sel = document.getElementById('ap-ir');
+  sel.innerHTML = '<option value="">Ir para…</option>' +
+    '<optgroup label="Geral">' + geral.map(x => '<option value="' + x.i + '">' + esc(x.rotulo) + '</option>').join('') + '</optgroup>' +
+    (APRES.indice.gas.length ? '<optgroup label="Gestores de área">' + APRES.indice.gas.map(g => '<option value="' + g.ini + '">' + esc(g.nome) + '</option>').join('') + '</optgroup>' : '');
+}
+function desenharIndiceApresentacao(){
+  const idx = APRES.indice || { geral: [], gas: [] };
+  const termo = (document.getElementById('ap-indice-busca').value || '').trim().toLowerCase();
+  const gasFiltrados = idx.gas.filter(g => !termo || g.nome.toLowerCase().includes(termo));
+  const faixa = (g) => (g.ini === g.fim ? 'slide ' + (g.ini + 1) : (g.ini + 1) + '–' + (g.fim + 1));
+  document.getElementById('ap-indice-lista').innerHTML =
+    (termo ? '' : '<div class="api-grupo">Geral</div>' + idx.geral.map(x =>
+      '<button type="button" class="api-item" data-i="' + x.i + '" data-chave="geral:' + esc(x.rotulo) + '"><span class="api-nome">' + esc(x.rotulo) + '</span><span class="api-sub">' + (x.i + 1) + '</span></button>').join('')) +
+    '<div class="api-grupo">Gestores de área (' + idx.gas.length + ')</div>' +
+    (gasFiltrados.length ? gasFiltrados.map(g =>
+      '<button type="button" class="api-item" data-i="' + g.ini + '" data-ga="' + esc(g.nome) + '" title="' + esc(g.nome) + ' — slides ' + faixa(g) + (g.evid ? ' · ' + g.evid + ' de evidências com foto' : '') + '">' +
+        '<span class="api-nome">' + esc(g.nome) + '</span><span class="api-sub">' + (g.evid ? '📷' + g.evid + ' · ' : '') + faixa(g) + '</span></button>').join('')
+      : '<div class="api-vazio">Nenhum GA encontrado.</div>');
+  marcarIndiceAtual();
+}
+// destaca no índice o GA (ou a seção) do slide que está na tela e mantém ele visível na lista
+function marcarIndiceAtual(){
+  const lista = document.getElementById('ap-indice-lista');
+  if (!lista || !APRES.slides.length) return;
+  const sl = APRES.slides[APRES.atual] || {};
+  // slide de GA -> o item daquele GA; senão -> a última seção geral que começa até o slide atual
+  // (assim o slide "(continuação)" de uma seção destaca a própria seção)
+  let alvoGeral = null;
+  if (!sl._ga) lista.querySelectorAll('.api-item[data-chave]').forEach(b => { if (Number(b.dataset.i) <= APRES.atual) alvoGeral = b; });
+  let ativo = null;
+  lista.querySelectorAll('.api-item').forEach(b => {
+    const eh = sl._ga ? b.dataset.ga === sl._ga : b === alvoGeral;
+    b.classList.toggle('ativo', eh);
+    if (eh) ativo = b;
+  });
+  if (ativo) {
+    const topo = ativo.offsetTop - lista.offsetTop, base = topo + ativo.offsetHeight;
+    if (topo < lista.scrollTop) lista.scrollTop = topo - 30;
+    else if (base > lista.scrollTop + lista.clientHeight) lista.scrollTop = base - lista.clientHeight + 30;
+  }
+  const sel = document.getElementById('ap-ir');
+  if (sel) sel.value = '';
+}
+document.getElementById('ap-indice-lista').addEventListener('click', evt => {
+  const b = evt.target.closest('.api-item');
+  if (b) mostrarSlideApresentacao(Number(b.dataset.i));
+});
+document.getElementById('ap-indice-busca').addEventListener('input', desenharIndiceApresentacao);
+document.getElementById('ap-ir').addEventListener('change', evt => {
+  if (evt.target.value !== '') mostrarSlideApresentacao(Number(evt.target.value));
+});
 document.getElementById('ap-ant').addEventListener('click', () => mostrarSlideApresentacao(APRES.atual - 1));
 document.getElementById('ap-prox').addEventListener('click', () => mostrarSlideApresentacao(APRES.atual + 1));
 document.getElementById('ap-miniaturas').addEventListener('click', evt => {
