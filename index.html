@@ -627,7 +627,7 @@
   .modal-overlay{ position:fixed; inset:0; background:rgba(11,11,11,.5); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; z-index:100; overflow-y:auto; }
   @media (max-width:480px){ .modal-overlay{ padding:20px 10px; } }
   .modal-overlay.show{ display:flex; }
-  .modal-panel{ background:var(--surface-raised); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; box-shadow:0 24px 64px rgba(0,0,0,.28); max-height:calc(100vh - 96px); display:flex; flex-direction:column; }
+  .modal-panel{ background:var(--surface-raised); border:1px solid var(--border); border-radius:14px; width:100%; max-width:660px; box-shadow:0 24px 64px rgba(0,0,0,.28); max-height:calc(100vh - 96px); display:flex; flex-direction:column; }
   .modal-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--grid); }
   .modal-head .m-name{ font-size:14.5px; font-weight:600; }
   .modal-head .m-sub{ font-size:11.5px; color:var(--text-muted); margin-top:3px; }
@@ -1331,7 +1331,7 @@
         <span class="item"><span class="swatch" style="background:var(--type-hex)"></span>&gt;2h extras</span>
       </div>
       <table class="detail-table">
-        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Descanso</th><th>Infração(ões) do dia</th></tr></thead>
+        <thead><tr><th>Data</th><th>Entrada</th><th>Saída</th><th>Descanso</th><th title="Horas extras do dia — só quando o dia tem &gt;2h extras">Cal de Horas</th><th>Infração(ões) do dia</th></tr></thead>
         <tbody id="modal-rows"></tbody>
       </table>
     </div>
@@ -3758,6 +3758,33 @@ function calcularIntervaloInterjornada(rec, prox){
   return Number.isFinite(horas) ? horas : null;
 }
 const INTERJORNADA_MINIMA_H = 11;
+// "Cal de Horas" (pedido do usuário, 2026-10-22): horas extras do dia, calculadas só quando o dia
+// tem o indicador >2h extras. A Base só traz 1ª entrada e última saída, então: jornada normal
+// 08:00–17:20 com 2h de almoço = 7h20 trabalhadas -> tudo que passar de 9h20 entre a entrada e a
+// saída é hora extra. Farol vermelho quando passa de fato de 2h (mais de 11h20 entre entrada e saída).
+const JORNADA_TRABALHADA_H = 7 + 20 / 60, ALMOCO_H = 2, LIMITE_EXTRAS_H = 2;
+function calcularHorasExtrasDia(rec){
+  if (!rec.entrada || !rec.saida) return null;
+  const pe = rec.entrada.split(':').map(Number), ps = rec.saida.split(':').map(Number);
+  if (pe.some(isNaN) || ps.some(isNaN)) return null;
+  const dE = parseISODate(rec.entradaData || rec.data), dS = parseISODate(rec.saidaData || rec.data);
+  if (!dE || !dS) return null;
+  const tE = new Date(dE.getFullYear(), dE.getMonth(), dE.getDate(), pe[0], pe[1]).getTime();
+  let tS = new Date(dS.getFullYear(), dS.getMonth(), dS.getDate(), ps[0], ps[1]).getTime();
+  if (tS < tE) tS += 86400000; // saída depois da meia-noite sem data própria
+  const corrido = (tS - tE) / 3600000;
+  return Math.max(0, corrido - ALMOCO_H - JORNADA_TRABALHADA_H);
+}
+function calHorasCellHTML(rec){
+  if (!rec.hex) return '<span style="color:var(--text-muted);">—</span>';
+  const extras = calcularHorasExtrasDia(rec);
+  if (extras == null) return '<span style="color:var(--text-muted);" title="Sem entrada/saída pra calcular">—</span>';
+  const passou = extras > LIMITE_EXTRAS_H + 1e-9;
+  return '<span class="interj-farol'+(passou?' farol-vermelho':'')+'" title="'+
+    (passou ? 'Passou de fato de 2h extras — ' : 'Não chegou a passar de 2h extras pelo horário de entrada/saída — ') +
+    'jornada 08:00–17:20 com 2h de almoço (7h20 trabalhadas)">' +
+    (passou ? '<span class="farol-dot"></span>' : '') + fmtHorasDecimais(extras) + '</span>';
+}
 function interjornadaCellHTML(horas){
   if (horas == null) return '<span style="color:var(--text-muted);">—</span>';
   const abaixoDoMinimo = horas < INTERJORNADA_MINIMA_H;
@@ -3774,7 +3801,7 @@ function openDetail(nome, total){
   modalSub.textContent = fmt(total) + ' infrações no ciclo ' + currentDerived.cicloAtualLabel + ' · ' + registros.length + ' dia(s) com registro';
   clear(modalRows);
   if (!registros.length) {
-    modalRows.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
+    modalRows.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
   } else {
     registros.forEach((rec, i) => {
       const chips = [];
@@ -3792,6 +3819,7 @@ function openDetail(nome, total){
         '<td class="time">'+(rec.entrada?esc(rec.entrada):'—')+'</td>' +
         '<td class="time">'+(rec.saida?esc(rec.saida):'—')+'</td>' +
         '<td class="time">'+interjornadaCellHTML(horas)+'</td>' +
+        '<td class="time">'+calHorasCellHTML(rec)+'</td>' +
         '<td><div class="type-chips">'+(chips.join('')||'—')+'</div></td>';
       modalRows.appendChild(tr);
     });
