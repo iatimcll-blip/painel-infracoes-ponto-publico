@@ -565,6 +565,12 @@
      numa linha própria embaixo do campo, nunca espremido ao lado do textarea. */
   .just-autor{ flex-basis:100%; font-size:10px; color:var(--text-muted); font-style:italic; padding-left:2px; }
   .just-input:disabled{ opacity:.55; cursor:not-allowed; background:var(--grid); }
+  .just-trava-aviso{ flex-basis:100%; font-size:11px; color:var(--warning, #b45309); padding-left:47px; }
+  .just-trava-aviso:empty{ display:none; }
+  .just-passos{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; font-size:12px; color:var(--text-secondary); background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin:8px 0 10px; }
+  .just-passos > span{ display:inline-flex; align-items:center; gap:6px; }
+  .just-passos i{ font-style:normal; font-weight:700; font-size:11px; width:18px; height:18px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background:var(--s1); color:#fff; }
+  .just-passos-obs{ flex-basis:100%; font-size:11px; color:var(--text-muted); }
   /* Nº do chamado + até 3 fotos por linha de Justificativa (só GA/Admin veem) — fotos ficam no
      Google Drive privado, ver FOTOS_API_URL. Linha própria embaixo do campo, recuada até o texto. */
   .just-anexos{ flex-basis:100%; display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-left:47px; }
@@ -1042,7 +1048,14 @@
     <div class="hier-toolbar">
       <button type="button" id="hier-expand">Expandir todos</button>
       <button type="button" id="hier-collapse">Recolher todos</button>
-      <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva, pra qualquer usuário — logado ou não.</span>
+      <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva.</span>
+    </div>
+    <div class="just-passos" role="note">
+      <b>Como justificar uma data:</b>
+      <span><i>1</i> Digite o <b>nº do chamado</b> da data</span>
+      <span><i>2</i> A caixa de <b>justificativa</b> é liberada — escreva o que aconteceu</span>
+      <span><i>3</i> Anexe as <b>fotos</b> (até 3, com legenda), se houver</span>
+      <span class="just-passos-obs">Sem o nº do chamado a justificativa fica bloqueada. É preciso entrar como GA ou Administrador (Configurações).</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -4364,6 +4377,7 @@ function renderHierarchy(d){
             justSyncDotHTML(jChave) +
             '<textarea class="just-input just-input-compact" rows="1" data-nome="'+esc(c.nome)+'" data-period-type="'+esc(pc.periodType)+'" data-period-key="'+esc(pc.periodKey)+'" data-data="'+esc(iso)+'" placeholder="Justificar '+esc(label)+' (FCA)…"'+justDisabledAttr(c.nome)+'>'+esc(jTexto)+'</textarea>' +
             justAutorHtml(jChave) +
+            '<span class="just-trava-aviso"></span>' +
             anexosHtml(jChave, c.nome, iso) +
           '</div>';
         }).join('');
@@ -4381,6 +4395,7 @@ function renderHierarchy(d){
       });
       body.appendChild(table);
       body.querySelectorAll('.just-input').forEach(autoGrowTextarea);
+      body.querySelectorAll('.just-date-row').forEach(aplicarTravaChamado);
     }
     details.appendChild(body);
     wrap.appendChild(details);
@@ -4421,6 +4436,7 @@ async function salvarCampoJustificativa(ta, key, flashAlvo){
   // justDisabledAttr), então na prática isto nunca deveria disparar sozinho; é só uma segunda
   // camada contra algum jeito futuro do campo ficar editável por engano.
   if (!campoJustEhEditavelPara(ta.dataset.nome)) return 'sem-permissao';
+  if (ta.dataset.travadoChamado) return 'sem-permissao'; // sem nº do chamado (ver aplicarTravaChamado)
   const texto = ta.value.trim();
   const antes = (STATE.justificativas[key] || {}).texto || '';
   if (texto === antes) return 'sem-mudanca'; // nada mudou — não grava (e não pisca "salvo") à toa
@@ -4547,7 +4563,11 @@ function redesenharAnexos(div){
   if (!div || !div.isConnected) return;
   const tmp = document.createElement('div');
   tmp.innerHTML = anexosHtml(div.dataset.chave, div.dataset.nome, div.dataset.data);
-  if (tmp.firstElementChild) div.replaceWith(tmp.firstElementChild);
+  if (tmp.firstElementChild) {
+    const row = div.closest('.just-date-row');
+    div.replaceWith(tmp.firstElementChild);
+    aplicarTravaChamado(row);
+  }
 }
 async function chamarFotosApi(payload){
   // corpo como texto puro (sem header Content-Type custom) = requisição "simples", sem preflight
@@ -4821,6 +4841,25 @@ function barraProgressoFotos(div){
     parar,
   };
 }
+// justificativa só liberada com o nº do chamado da data (pedido do usuário, 2026-10-22). Vale nas
+// linhas por data de Infrações; usa o que está DIGITADO no campo do chamado (libera na hora, sem
+// esperar salvar). Sem campo de chamado (quem não entrou como GA/Admin) a caixa fica travada.
+function aplicarTravaChamado(row){
+  if (!row) return;
+  const ta = row.querySelector('.just-input');
+  const aviso = row.querySelector('.just-trava-aviso');
+  if (!ta) return;
+  const semPermissaoArea = !campoJustEhEditavelPara(ta.dataset.nome);
+  const campo = row.querySelector('.just-chamado');
+  const temChamado = !!(campo && campo.value.trim());
+  const travar = !semPermissaoArea && !temChamado;
+  if (semPermissaoArea) { if (aviso) aviso.textContent = ''; return; } // já travada pela regra de área
+  ta.disabled = travar;
+  ta.dataset.travadoChamado = travar ? '1' : '';
+  ta.title = travar ? 'Informe o nº do chamado desta data para liberar a justificativa.' : '';
+  if (aviso) aviso.textContent = !travar ? ''
+    : (campo ? '🔒 Digite o nº do chamado abaixo para liberar a justificativa.' : '🔒 Para justificar, entre como GA ou Administrador e informe o nº do chamado.');
+}
 async function salvarChamado(input){
   const div = input.closest('.just-anexos');
   const chave = div.dataset.chave;
@@ -4828,7 +4867,7 @@ async function salvarChamado(input){
   const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
   if (chamado === atual.chamado) return;
   if (!campoJustEhEditavelPara(div.dataset.nome)) return;
-  if (!exigirTokenFotos()) { input.value = atual.chamado; return; }
+  if (!exigirTokenFotos()) { input.value = atual.chamado; aplicarTravaChamado(div.closest('.just-date-row')); return; }
   try {
     await salvarAnexosNoServidor(chave, chamado, atual.fotos);
     const row = div.closest('.just-date-row');
@@ -4836,6 +4875,7 @@ async function salvarChamado(input){
   } catch(e) {
     console.error('Não foi possível salvar o nº do chamado.', e);
     input.value = atual.chamado;
+    aplicarTravaChamado(div.closest('.just-date-row'));
     showToast(msgErroFotos(e));
   }
 }
@@ -5018,7 +5058,7 @@ hierBlocksContainer.addEventListener('change', evt => {
   evt.target.value = '';
 });
 hierBlocksContainer.addEventListener('input', evt => {
-  if (evt.target.classList && evt.target.classList.contains('just-chamado')) atualizarBotaoFoto(evt.target.closest('.just-anexos'));
+  if (evt.target.classList && evt.target.classList.contains('just-chamado')) { atualizarBotaoFoto(evt.target.closest('.just-anexos')); aplicarTravaChamado(evt.target.closest('.just-date-row')); }
 });
 hierBlocksContainer.addEventListener('click', evt => {
   const bloqueado = evt.target.closest && evt.target.closest('.foto-add.bloqueado');
