@@ -1053,9 +1053,9 @@
     <div class="just-passos" role="note">
       <b>Como justificar uma data:</b>
       <span><i>1</i> Digite o <b>nº do chamado</b> da data</span>
-      <span><i>2</i> A caixa de <b>justificativa</b> é liberada — escreva o que aconteceu</span>
-      <span><i>3</i> Anexe as <b>fotos</b> (até 3, com legenda), se houver</span>
-      <span class="just-passos-obs">Sem o nº do chamado a justificativa fica bloqueada. É preciso entrar como GA ou Administrador (Configurações).</span>
+      <span><i>2</i> Anexe <b>no mínimo 2 fotos</b> (máx. 3), cada uma com legenda explicativa</span>
+      <span><i>3</i> A caixa de <b>justificativa</b> é liberada — escreva o que aconteceu</span>
+      <span class="just-passos-obs">Sem o nº do chamado e pelo menos 2 fotos a justificativa fica bloqueada (🔒). Remover fotos e ficar com menos de 2 bloqueia de novo. É preciso entrar como GA ou Administrador (Configurações).</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -1467,6 +1467,8 @@ const SUPABASE_WRITE_EMAIL = 'admin@painel-infracoes.local';
 // campo de chamado e o botão de foto nem aparecem).
 const FOTOS_API_URL = 'https://script.google.com/macros/s/AKfycbwRenm970-ichjTQFk5Nkz1_Nn32utD5zoqN2wXoNgCPJ8Q0F1F56sM-jFg0yFozCYN6w/exec';
 const FOTOS_MAX = 3;
+// mínimo de fotos por data pra liberar a justificativa (pedido do usuário, 2026-10-22)
+const FOTOS_MIN_JUSTIFICAR = 2;
 // formatos de foto aceitos no anexo (pedido do usuário: "o arquivo a ser anexado será sempre nos
 // formatos de foto"). Tudo vira JPEG antes de subir (ver prepararFotoComCarimbo).
 const FOTOS_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif';
@@ -4658,7 +4660,8 @@ async function prepararFotoComCarimbo(file, info){
     const linhas1 = quebrarTexto(ctx, l1, w - pad * 2, 2);
     ctx.font = fonte + 'px sans-serif';
     const linhasL = info.legenda ? quebrarTexto(ctx, 'Legenda: ' + info.legenda, w - pad * 2, 2) : [];
-    const linhasJ = quebrarTexto(ctx, 'Justificativa: ' + (info.justificativa || '—'), w - pad * 2, 4);
+    // a justificativa agora costuma ser escrita DEPOIS das fotos — só carimba se já existir
+    const linhasJ = info.justificativa ? quebrarTexto(ctx, 'Justificativa: ' + info.justificativa, w - pad * 2, 4) : [];
     const faixa = pad * 2 + lh * (linhas1.length + linhasL.length + linhasJ.length);
     canvas.width = w; canvas.height = h + faixa;
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h + faixa);
@@ -4683,7 +4686,6 @@ async function anexarFotos(div, files){
   const chamado = (div.querySelector('.just-chamado').value || '').trim();
   const justificativa = ta ? ta.value.trim() : '';
   if (!chamado) { showToast('Digite o número do chamado antes de anexar a foto.'); div.querySelector('.just-chamado').focus(); return; }
-  if (!justificativa) { showToast('Escreva a justificativa antes de anexar a foto.'); if (ta) ta.focus(); return; }
   if (!exigirTokenFotos()) return;
   const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
   const vagas = FOTOS_MAX - atual.fotos.length;
@@ -4852,13 +4854,22 @@ function aplicarTravaChamado(row){
   const semPermissaoArea = !campoJustEhEditavelPara(ta.dataset.nome);
   const campo = row.querySelector('.just-chamado');
   const temChamado = !!(campo && campo.value.trim());
-  const travar = !semPermissaoArea && !temChamado;
+  // 2ª trava (2026-10-22): além do chamado, pelo menos FOTOS_MIN_JUSTIFICAR fotos já anexadas
+  const anexos = row.querySelector('.just-anexos');
+  const nFotos = anexos ? ((STATE.anexos[anexos.dataset.chave] || {}).fotos || []).length : 0;
+  const faltamFotos = Math.max(0, FOTOS_MIN_JUSTIFICAR - nFotos);
+  const travar = !semPermissaoArea && (!temChamado || faltamFotos > 0);
   if (semPermissaoArea) { if (aviso) aviso.textContent = ''; return; } // já travada pela regra de área
   ta.disabled = travar;
   ta.dataset.travadoChamado = travar ? '1' : '';
-  ta.title = travar ? 'Informe o nº do chamado desta data para liberar a justificativa.' : '';
-  if (aviso) aviso.textContent = !travar ? ''
-    : (campo ? '🔒 Digite o nº do chamado abaixo para liberar a justificativa.' : '🔒 Para justificar, entre como GA ou Administrador e informe o nº do chamado.');
+  let msg = '';
+  if (travar) {
+    if (!campo) msg = '🔒 Para justificar, entre como GA ou Administrador, informe o nº do chamado e anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos.';
+    else if (!temChamado) msg = '🔒 Passo 1 de 2: digite o nº do chamado abaixo. Depois anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos para liberar a justificativa.';
+    else msg = '🔒 Passo 2 de 2: anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos (' + (faltamFotos === 1 ? 'falta 1' : 'faltam ' + faltamFotos) + ') para liberar a justificativa.';
+  }
+  ta.title = msg.replace('🔒 ', '');
+  if (aviso) aviso.textContent = msg;
 }
 async function salvarChamado(input){
   const div = input.closest('.just-anexos');
