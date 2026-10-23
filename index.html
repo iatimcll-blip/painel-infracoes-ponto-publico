@@ -210,7 +210,7 @@
   .ap-slide .ap-t > div{ white-space:pre-wrap; overflow-wrap:break-word; line-height:1.2; }
   .ap-slide img, .ap-slide svg, .ap-slide .ap-f{ position:absolute; }
   .ap-slide table{ position:absolute; border-collapse:collapse; table-layout:fixed; }
-  .ap-slide td{ padding:4.8px 9.6px; overflow-wrap:break-word; line-height:1.2; }
+  .ap-slide td{ padding:4.8px 9.6px; overflow-wrap:break-word; line-height:1.2; white-space:pre-line; }
   .ap-seta{ position:absolute; top:50%; transform:translateY(-50%); width:44px; height:64px; border:0; border-radius:10px; background:rgba(0,0,0,.35); color:#fff; font-size:34px; line-height:1; cursor:pointer; z-index:2; }
   .ap-seta:hover{ background:rgba(0,0,0,.55); }
   .ap-seta:disabled{ opacity:.25; cursor:default; }
@@ -3863,14 +3863,26 @@ function calcularHorasExtrasDia(rec, escala){
 function totalHorasExtrasColaborador(nome, d){
   const esc = escalaDoColaborador(nome);
   let total = 0, excedeu = false;
+  const dias = []; // 1 item por data com >2h extras — o PPT mostra o Total de Horas por data
   ((d && d.detalhesByNome && d.detalhesByNome[nome]) || []).forEach(rec => {
     if (!rec.hex) return;
     const h = calcularHorasExtrasDia(rec, esc);
     if (h == null) return;
     total += h;
-    if (h > LIMITE_EXTRAS_H + 1e-9) excedeu = true;
+    const passou = h > LIMITE_EXTRAS_H + 1e-9;
+    if (passou) excedeu = true;
+    dias.push({ iso: rec.data, horas: h, passou });
   });
-  return { total, excedeu };
+  dias.sort((a, b) => a.iso.localeCompare(b.iso));
+  return { total, excedeu, dias };
+}
+// texto da célula "Total de Horas" do PPT: uma linha por data ("07/10  02:30 ▲" — ▲ = passou de
+// 2h naquele dia) e, havendo mais de uma data, a soma na última linha
+function textoHorasPorData(he){
+  if (!he.dias.length) return '—';
+  const linhas = he.dias.map(x => fmtDM(parseISODate(x.iso)) + '  ' + fmtHorasDecimais(x.horas) + (x.passou ? ' ▲' : ''));
+  if (he.dias.length > 1) linhas.push('Total ' + fmtHorasDecimais(he.total));
+  return linhas.join('\n');
 }
 function calHorasCellHTML(rec){
   if (!rec.hex) return '<span style="color:var(--text-muted);">—</span>';
@@ -6016,7 +6028,7 @@ function pptTabelaColaboradoresGA(block, d){
       { text:fmt(c.interj), options: Object.assign({}, cel, { align:'center' }) },
       { text:fmt(c.hex), options: Object.assign({}, cel, { align:'center' }) },
       { text:fmt(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
-      { text: he.total > 0 ? fmtHorasDecimais(he.total) : '—', options: Object.assign({}, cel, { align:'center', bold: he.excedeu, color: he.excedeu ? PPT_RED : (he.total > 0 ? PPT_NAVY : PPT_TEXT_MUTED), fill:{ color: he.excedeu ? PPT_RED_LIGHT : PPT_ROW_BG } }) },
+      { text: textoHorasPorData(he), options: Object.assign({}, cel, { align:'center', fontSize:9.5, bold: he.excedeu, color: he.excedeu ? PPT_RED : (he.dias.length ? PPT_NAVY : PPT_TEXT_MUTED), fill:{ color: he.excedeu ? PPT_RED_LIGHT : PPT_ROW_BG } }) },
       { text: justTexto || '—', options: Object.assign({}, cel, { align:'left', fontSize:9.5, italic: !justTexto, color: justTexto ? PPT_NAVY : PPT_TEXT_MUTED }) },
     ]);
   });
@@ -6456,7 +6468,7 @@ function buildApresentacaoPres(dados, ClassePres){
   (d.hierBlocks || []).filter(b => b.colaboradores.length)
     .slice().sort((x, y) => (x.total - y.total) || String(x.ga).localeCompare(String(y.ga), 'pt-BR'))
     .forEach(block => {
-    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.6,0.95,1.3,1.2,0.85,1.2,4.2] }, cont => {
+    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.55,0.9,1.25,1.15,0.8,1.5,4.15] }, cont => {
       const s = pres.addSlide();
       pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
       pptLinhaGestor(s, [['Gestor: ', block.ga], ['   ·   GO: ', block.go || '—']]);
