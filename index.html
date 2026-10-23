@@ -1883,13 +1883,20 @@ async function loadFromSupabase(){
 
   let resultado;
   try {
-    const [regs, roster, metaRes] = await Promise.all([
+    // rede instável (bug real, 2026-10-23: o painel abria "sem Base" e parecia fora do ar) —
+    // tenta de novo sozinho antes de desistir e cair pra cópia do GitHub
+    const [regs, roster, metaRes] = await withRetry(() => Promise.all([
       fetchAllRows('infracoes_registros', 'data,funcid,nome,funcao,codccusto,bu,subbu,entrada,saida,dias7,interj,he2'),
       fetchAllRows('infracoes_roster', 'nome,ga,go'),
       withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', SYNC_META_KEY).maybeSingle(), 15000, 'ler meta'),
-    ]);
+    ]), 3, 1500);
     STATE.readSyncFailed = false;
-    if (!regs || !regs.length) {
+    if ((!regs || !regs.length) && !(STATE.raw && STATE.raw.length) && await loadFromGithubMirror()) {
+      // veio vazio (ex.: base sendo recarregada por outro processo naquele instante) e não há
+      // nada na tela — mostra a cópia do GitHub em vez de um painel vazio
+      console.warn('Supabase respondeu sem registros — exibindo a cópia do GitHub (dados.json).');
+      resultado = true;
+    } else if (!regs || !regs.length) {
       // consulta funcionou mas veio vazia (ex.: dados zerados) — não pode deixar "usingSupabase"
       // travado em true de uma sincronização anterior nesta mesma aba, senão o aviso "Dados
       // sincronizados" fica mentindo enquanto o Supabase já não tem nada de verdade.
@@ -1911,6 +1918,7 @@ async function loadFromSupabase(){
       STATE.usingDefault = false;
       STATE.usingSupabase = true;
       STATE.lastSync = (metaRes && metaRes.data && metaRes.data.valor) || null;
+      DADOS_DO_SUPABASE = true;
       resultado = true;
     }
   } catch (e) {
@@ -1926,15 +1934,19 @@ async function loadFromSupabase(){
   await escalasPromise;
   return resultado;
 }
-async function loadFromGithubMirror(){
+// true assim que uma leitura do Supabase trouxe a Base — a cópia "rápida" do boot (ver
+// loadFromGithubMirror({ soSeAindaSemDados })) nunca sobrescreve um dado mais novo do Supabase
+let DADOS_DO_SUPABASE = false;
+async function loadFromGithubMirror(opts){
   try {
     const ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null; // ~2,6 MB — 10s era pouco em rede lenta
     const res = await fetch('dados.json', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
     if (timer) clearTimeout(timer);
     if (!res.ok) return false;
     const d = await res.json();
     if (!d || !Array.isArray(d.registros) || !d.registros.length) return false;
+    if (opts && opts.soSeAindaSemDados && (DADOS_DO_SUPABASE || (STATE.raw && STATE.raw.length))) return false;
     // o espelho só roda de hora em hora — sem esta checagem, uma leitura ao vivo falhando bem na
     // hora em que alguém tinha acabado de subir uma Base nova (ou só confirmado uma leitura ao
     // vivo mais recente) fazia o painel "regredir" sozinho pra essa cópia mais velha, sem avisar
@@ -3185,7 +3197,11 @@ function recomputeAndRender(){
     return;
   }
   if (!d) {
-    sourceNote.textContent = 'Nenhuma Base anexada ainda — entre em Configurações para anexar uma.';
+    // leitura falhou (rede) ≠ base realmente vazia — antes as duas viravam "Nenhuma Base anexada",
+    // e o painel parecia fora do ar; agora avisa e o boot tenta de novo sozinho (ver tentarRecarregarDados)
+    sourceNote.textContent = STATE.readSyncFailed
+      ? 'Não foi possível carregar os dados agora (conexão instável) — tentando de novo automaticamente. Se demorar, clique em "Atualizar dados agora".'
+      : 'Nenhuma Base anexada ainda — entre em Configurações para anexar uma.';
     document.getElementById('sync-timestamp').textContent = '';
     clearAllSections();
     STATE.lastDerived = null;
@@ -7920,6 +7936,18 @@ function enhanceSections(){
   });
 }
 
+// se a 1ª leitura não trouxe dado nenhum por falha de rede, tenta de novo a cada 20s (até 6
+// vezes) sem a pessoa precisar recarregar — o painel "volta" sozinho quando a conexão normaliza
+function tentarRecarregarDados(n){
+  if (STATE.lastDerived || !STATE.readSyncFailed || n > 6) return;
+  setTimeout(async () => {
+    if (STATE.lastDerived) return;
+    await loadFromSupabase();
+    recomputeAndRender();
+    if (STATE.lastDerived) showToast('Dados carregados.');
+    else tentarRecarregarDados(n + 1);
+  }, 20000);
+}
 /* ---------------- boot ---------------- */
 function systemPrefersDark(){
   try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
@@ -8324,8 +8352,15 @@ restaurarPosicaoJarvisSalva(); // aplica a posição onde o Jarvis foi largado d
   // se falhar (offline, etc.), o painel já está de pé com o que carregou acima. Renderiza de
   // novo IGUAL nos dois casos — sucesso ou falha —, porque é o recomputeAndRender() que exibe
   // o aviso de "não deu pra confirmar os dados mais recentes" quando a leitura falha.
+  // abre RÁPIDO: sem nada na tela ainda, mostra já a cópia do GitHub (~3s) enquanto o Supabase
+  // carrega — quando o Supabase demora/falha (rede da empresa, instabilidade) a leitura pode levar
+  // ~25s até desistir, e a tela vazia nesse meio-tempo parecia "painel fora do ar" (2026-10-23)
+  if (!STATE.raw || !STATE.raw.length) {
+    loadFromGithubMirror({ soSeAindaSemDados: true }).then(ok => { if (ok && !DADOS_DO_SUPABASE) recomputeAndRender(); }).catch(() => {});
+  }
   await loadFromSupabase();
   recomputeAndRender();
+  tentarRecarregarDados(1);
   await loadAuxPaineis();
   wireRealtimeSync();
   // pedido do usuário: "Sempre que alguém acessar o painel ele deverá se apresentar" — cobre
