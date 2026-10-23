@@ -600,6 +600,9 @@
   .legenda-item textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
   .legenda-erro{ color:var(--critical); font-size:11px; min-height:0; }
   .legenda-item textarea.invalida{ border-color:var(--critical); }
+  .escala-campos{ display:flex; gap:10px; flex-wrap:wrap; margin:6px 0 4px; }
+  .escala-campos label{ display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-secondary); }
+  .escala-campos input, .escala-campos select{ font-size:13px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--page); color:var(--text-primary); }
   .legenda-acoes{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
   .foto-progresso{ flex-basis:100%; display:flex; align-items:center; gap:8px; }
   .foto-progresso .fp-trilho{ flex:1; max-width:320px; height:6px; background:var(--grid); border-radius:999px; overflow:hidden; }
@@ -1878,6 +1881,7 @@ async function loadFromSupabase(){
   // Hierarquia daquele outro dispositivo falhava por qualquer motivo. Justificativa é um "plus"
   // (anotação do GA), não pode ficar refém do dado principal do painel.
   const justsPromise = syncJustificativasFromServer();
+  const escalasPromise = carregarEscalasDoServidor();
 
   let resultado;
   try {
@@ -1921,6 +1925,7 @@ async function loadFromSupabase(){
     else { STATE.readSyncFailed = true; resultado = false; }
   }
   await justsPromise; // garante que o merge de justificativas terminou antes de devolver
+  await escalasPromise;
   return resultado;
 }
 async function loadFromGithubMirror(){
@@ -3777,8 +3782,71 @@ const INTERJORNADA_MINIMA_H = 11;
 // tem o indicador >2h extras. A Base só traz 1ª entrada e última saída, então: jornada normal
 // 08:00–17:20 com 2h de almoço = 7h20 trabalhadas -> tudo que passar de 9h20 entre a entrada e a
 // saída é hora extra. Farol vermelho quando passa de fato de 2h (mais de 11h20 entre entrada e saída).
-const JORNADA_TRABALHADA_H = 7 + 20 / 60, ALMOCO_H = 2, LIMITE_EXTRAS_H = 2;
-function calcularHorasExtrasDia(rec){
+const LIMITE_EXTRAS_H = 2;
+// ESCALAS DE TRABALHO por hierarquia (pedido do usuário, 2026-10-23). Ordem de prioridade:
+//   1) escala configurada pelo botão "Escala" do bloco do GA (salva no servidor, vale pra todos);
+//   2) regra fixa do GA; 3) regra fixa do GO; 4) padrão.
+// Hora extra do dia = (saída − entrada) − almoço − jornada trabalhada da escala, ou seja, tudo que
+// passa do intervalo início→fim da escala (o almoço já está dentro desse intervalo).
+const ESCALA_PADRAO = { inicio:'08:00', fim:'17:20', almoco:120 };
+const ESCALA_REGRAS = [
+  { tipo:'ga', nome:'ALEKSEI THOMAS OLIVEIRA DE ABREU', inicio:'08:00', fim:'17:20', almoco:120 },
+  { tipo:'ga', nome:'WAGNER LUZ FIGUEIREDO', inicio:'08:00', fim:'17:00', almoco:60 },
+  { tipo:'go', nome:'WALMIR FERNANDES DA SILVA', inicio:'08:00', fim:'17:20', almoco:120 },
+  { tipo:'go', nome:'IVANDRO PESSOA DA NOBREGA ALENCAR', inicio:'08:00', fim:'17:00', almoco:60 },
+];
+const ESCALAS_META_KEY = 'escalas_trabalho', STORAGE_ESCALAS = 'painelInfracoes.escalas.v1';
+let ESCALAS_SALVAS = {};
+try { ESCALAS_SALVAS = JSON.parse(localStorage.getItem(STORAGE_ESCALAS) || '{}') || {}; } catch(e) {}
+function nomeNorm(v){ return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+function hhmmParaMin(t){ const p = String(t || '').split(':').map(Number); return (p.length < 2 || p.some(isNaN)) ? null : p[0] * 60 + p[1]; }
+function escalaDoGA(ga, go){
+  const salva = ESCALAS_SALVAS[nomeNorm(ga)];
+  if (salva && salva.inicio && salva.fim) return Object.assign({}, salva, { origem:'configurada' });
+  const rGa = ESCALA_REGRAS.find(r => r.tipo === 'ga' && nomeNorm(r.nome) === nomeNorm(ga));
+  if (rGa) return Object.assign({}, rGa, { origem:'regra do GA' });
+  const rGo = ESCALA_REGRAS.find(r => r.tipo === 'go' && nomeNorm(r.nome) === nomeNorm(go));
+  if (rGo) return Object.assign({}, rGo, { origem:'regra do GO ' + rGo.nome });
+  return Object.assign({}, ESCALA_PADRAO, { origem:'padrão' });
+}
+function escalaDoColaborador(nome){ const h = STATE.hierMap[nome] || {}; return escalaDoGA(h.ga, h.go); }
+// minutos de jornada TRABALHADA da escala (intervalo − almoço) e o intervalo bruto início→fim
+function escalaJanelaMin(esc){
+  const i = hhmmParaMin(esc.inicio), f = hhmmParaMin(esc.fim);
+  if (i == null || f == null) return null;
+  return f >= i ? f - i : f + 1440 - i;
+}
+function escalaRotulo(esc){
+  const jan = escalaJanelaMin(esc), trab = jan == null ? null : jan - (Number(esc.almoco) || 0);
+  return esc.inicio + '–' + esc.fim + ' · almoço ' + fmtHorasDecimais((Number(esc.almoco) || 0) / 60) + (trab == null ? '' : ' · ' + fmtHorasDecimais(trab / 60) + ' trabalhadas');
+}
+async function carregarEscalasDoServidor(){
+  if (!sb) return;
+  try {
+    const { data, error } = await withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', ESCALAS_META_KEY).maybeSingle(), 15000, 'ler escalas');
+    if (error) throw error;
+    ESCALAS_SALVAS = (data && data.valor && typeof data.valor === 'object') ? data.valor : {};
+    try { localStorage.setItem(STORAGE_ESCALAS, JSON.stringify(ESCALAS_SALVAS)); } catch(e) {}
+  } catch(e) { console.error('Não foi possível ler as escalas de trabalho — usando as regras/cópia local.', e); }
+}
+// grava (ou apaga, com esc = null) a escala de 1 GA — só Administrador (tabela infracoes_meta exige
+// a sessão de escrita); relê antes de gravar pra não pisar na escala de outro GA salva por outra pessoa
+async function salvarEscalaGA(ga, esc){
+  if (!isAdmin()) throw new Error('sem-permissao');
+  if (!(await hasSupabaseWriteSession())) throw new Error('sessao-expirada');
+  await carregarEscalasDoServidor();
+  const todas = Object.assign({}, ESCALAS_SALVAS);
+  if (esc) todas[nomeNorm(ga)] = { inicio:esc.inicio, fim:esc.fim, almoco:Number(esc.almoco) || 0, ga, por:AUTH.currentUser || null, em:new Date().toISOString() };
+  else delete todas[nomeNorm(ga)];
+  const { error } = await withTimeout(sb.from('infracoes_meta').upsert({ chave: ESCALAS_META_KEY, valor: todas }, { onConflict: 'chave' }), 15000, 'gravar escala');
+  if (error) throw error;
+  ESCALAS_SALVAS = todas;
+  try { localStorage.setItem(STORAGE_ESCALAS, JSON.stringify(todas)); } catch(e) {}
+}
+function calcularHorasExtrasDia(rec, escala){
+  const esc = escala || escalaDoColaborador(rec.nome);
+  const janelaMin = escalaJanelaMin(esc);
+  if (janelaMin == null) return null;
   if (!rec.entrada || !rec.saida) return null;
   const pe = rec.entrada.split(':').map(Number), ps = rec.saida.split(':').map(Number);
   if (pe.some(isNaN) || ps.some(isNaN)) return null;
@@ -3788,16 +3856,31 @@ function calcularHorasExtrasDia(rec){
   let tS = new Date(dS.getFullYear(), dS.getMonth(), dS.getDate(), ps[0], ps[1]).getTime();
   if (tS < tE) tS += 86400000; // saída depois da meia-noite sem data própria
   const corrido = (tS - tE) / 3600000;
-  return Math.max(0, corrido - ALMOCO_H - JORNADA_TRABALHADA_H);
+  return Math.max(0, corrido - janelaMin / 60);
+}
+// Total de Horas do colaborador no período = soma do "Cal de Horas" dos dias com >2h extras
+// (o mesmo número da janela de detalhe, dia a dia); excedeu = algum dia passou de fato de 2h
+function totalHorasExtrasColaborador(nome, d){
+  const esc = escalaDoColaborador(nome);
+  let total = 0, excedeu = false;
+  ((d && d.detalhesByNome && d.detalhesByNome[nome]) || []).forEach(rec => {
+    if (!rec.hex) return;
+    const h = calcularHorasExtrasDia(rec, esc);
+    if (h == null) return;
+    total += h;
+    if (h > LIMITE_EXTRAS_H + 1e-9) excedeu = true;
+  });
+  return { total, excedeu };
 }
 function calHorasCellHTML(rec){
   if (!rec.hex) return '<span style="color:var(--text-muted);">—</span>';
-  const extras = calcularHorasExtrasDia(rec);
+  const escRec = escalaDoColaborador(rec.nome);
+  const extras = calcularHorasExtrasDia(rec, escRec);
   if (extras == null) return '<span style="color:var(--text-muted);" title="Sem entrada/saída pra calcular">—</span>';
   const passou = extras > LIMITE_EXTRAS_H + 1e-9;
   return '<span class="interj-farol'+(passou?' farol-vermelho':'')+'" title="'+
     (passou ? 'Passou de fato de 2h extras — ' : 'Não chegou a passar de 2h extras pelo horário de entrada/saída — ') +
-    'jornada 08:00–17:20 com 2h de almoço (7h20 trabalhadas)">' +
+    'escala ' + esc(escalaRotulo(escRec)) + ' (' + esc(escRec.origem) + ')">' +
     (passou ? '<span class="farol-dot"></span>' : '') + fmtHorasDecimais(extras) + '</span>';
 }
 function interjornadaCellHTML(horas){
@@ -4313,6 +4396,9 @@ function renderHierarchy(d){
         '<div class="ga-stat"><span class="n num">'+block.afetados+'</span><span class="l">Infrações</span></div>' +
         '<div class="ga-stat"><span class="n num">'+block.reincidentes+'</span><span class="l">Reincid.</span></div>' +
         '<div class="ga-stat total"><span class="n num">'+fmt(block.total)+'</span><span class="l">Total</span></div>' +
+        (function(){ const e = escalaDoGA(block.ga, block.go); return '<button type="button" class="copy-img-btn ga-escala-btn" title="Escala de trabalho da hierarquia deste GA: '+esc(escalaRotulo(e))+' ('+esc(e.origem)+') — usada no cálculo de horas extras">' +
+          '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.5V8l2.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+          'Escala ' + esc(e.inicio) + '–' + esc(e.fim) + '</button>'; })() +
         '<button type="button" class="copy-img-btn ga-save-just-btn" title="Salvar todas as justificativas deste bloco">' +
           '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2.5 2.5h8l3 3v8a1 1 0 01-1 1h-10a1 1 0 01-1-1v-10a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M5 2.5v3.5h4.5V2.5M5 10h6v3.5H5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>' +
           'Salvar' +
@@ -4332,7 +4418,9 @@ function renderHierarchy(d){
       '</div>';
     details.appendChild(summary);
 
-    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn):not(.ga-import-just-btn)');
+    const copyBtn = summary.querySelector('.copy-img-btn:not(.ga-export-btn):not(.ga-save-just-btn):not(.ga-import-just-btn):not(.ga-escala-btn)');
+    const escalaBtn = summary.querySelector('.ga-escala-btn');
+    escalaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); abrirEscalaGA(block.ga, block.go); });
     copyBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); copyElementAsImage(details, copyBtn, block.ga); });
     const exportGaBtn = summary.querySelector('.ga-export-btn');
     exportGaBtn.addEventListener('click', evt => { evt.preventDefault(); evt.stopPropagation(); exportGaBlockToExcel(block, d); });
@@ -4870,6 +4958,70 @@ function aplicarTravaChamado(row){
   }
   ta.title = msg.replace('🔒 ', '');
   if (aviso) aviso.textContent = msg;
+}
+// janela "Escala de trabalho" do GA: mostra a escala em uso (e de onde ela vem) e deixa o
+// Administrador mudar início/fim/almoço ou voltar pra regra. GA/Usuário Padrão só visualiza.
+function abrirEscalaGA(ga, go){
+  const atual = escalaDoGA(ga, go);
+  const podeEditar = isAdmin();
+  const ov = document.createElement('div');
+  ov.className = 'legenda-overlay';
+  const opAlmoco = [0, 30, 60, 90, 120, 150, 180].map(m => '<option value="' + m + '"' + (Number(atual.almoco) === m ? ' selected' : '') + '>' + (m ? fmtHorasDecimais(m / 60) : 'sem almoço') + '</option>').join('');
+  ov.innerHTML =
+    '<div class="legenda-painel" role="dialog" aria-modal="true" aria-label="Escala de trabalho">' +
+      '<h3>Escala de trabalho <span>· ' + esc(ga) + '</span></h3>' +
+      '<p class="legenda-nota">GO: ' + esc(go || '—') + ' · em uso agora: <b>' + esc(escalaRotulo(atual)) + '</b> (' + esc(atual.origem) + ')' +
+        (atual.origem === 'configurada' && atual.por ? ' — por ' + esc(atual.por) : '') + '. Usada pra calcular as horas extras (Cal de Horas e Total de Horas).</p>' +
+      '<div class="escala-campos">' +
+        '<label>Início<input type="time" id="esc-inicio" value="' + esc(atual.inicio) + '"' + (podeEditar ? '' : ' disabled') + '></label>' +
+        '<label>Fim<input type="time" id="esc-fim" value="' + esc(atual.fim) + '"' + (podeEditar ? '' : ' disabled') + '></label>' +
+        '<label>Almoço<select id="esc-almoco"' + (podeEditar ? '' : ' disabled') + '>' + opAlmoco + '</select></label>' +
+      '</div>' +
+      '<p class="legenda-nota" id="esc-resumo"></p>' +
+      (podeEditar ? '' : '<p class="legenda-nota"><b>Só o Administrador altera a escala.</b></p>') +
+      '<div class="legenda-acoes">' +
+        '<button type="button" class="he-btn" data-acao="fechar">' + (podeEditar ? 'Cancelar' : 'Fechar') + '</button>' +
+        (podeEditar && atual.origem === 'configurada' ? '<button type="button" class="he-btn" data-acao="regra">Voltar pra regra</button>' : '') +
+        (podeEditar ? '<button type="button" class="he-btn primary" data-acao="salvar">Salvar escala</button>' : '') +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  const ini = ov.querySelector('#esc-inicio'), fim = ov.querySelector('#esc-fim'), alm = ov.querySelector('#esc-almoco');
+  const resumo = () => {
+    const e = { inicio: ini.value, fim: fim.value, almoco: Number(alm.value) };
+    const jan = escalaJanelaMin(e);
+    ov.querySelector('#esc-resumo').textContent = jan == null ? 'Preencha início e fim.'
+      : 'Jornada trabalhada: ' + fmtHorasDecimais((jan - e.almoco) / 60) + ' — hora extra é o que passar de ' + fmtHorasDecimais(jan / 60) + ' entre a entrada e a saída.';
+  };
+  [ini, fim, alm].forEach(el => el.addEventListener('input', resumo));
+  resumo();
+  const fechar = () => ov.remove();
+  ov.addEventListener('keydown', evt => { if (evt.key === 'Escape') fechar(); });
+  ov.querySelector('[data-acao="fechar"]').addEventListener('click', fechar);
+  const aplicar = async (novo, msgOk) => {
+    try {
+      await salvarEscalaGA(ga, novo);
+      fechar();
+      showToast(msgOk);
+      recomputeAndRender();
+    } catch(e) {
+      console.error('Não foi possível salvar a escala.', e);
+      const m = (e && e.message) || '';
+      showToast(m === 'sem-permissao' ? 'Só o Administrador altera a escala.'
+        : m === 'sessao-expirada' ? 'A sincronização expirou — renove em Configurações e tente de novo.'
+        : 'Não foi possível salvar a escala agora — tente de novo em instantes.');
+    }
+  };
+  const btSalvar = ov.querySelector('[data-acao="salvar"]');
+  if (btSalvar) btSalvar.addEventListener('click', () => {
+    const e = { inicio: ini.value, fim: fim.value, almoco: Number(alm.value) };
+    const jan = escalaJanelaMin(e);
+    if (jan == null || jan - e.almoco <= 0) { showToast('Confira o início, o fim e o almoço da escala.'); return; }
+    aplicar(e, 'Escala de ' + ga + ' salva: ' + escalaRotulo(e) + '.');
+  });
+  const btRegra = ov.querySelector('[data-acao="regra"]');
+  if (btRegra) btRegra.addEventListener('click', () => aplicar(null, 'Escala de ' + ga + ' voltou pra regra da hierarquia.'));
+  (ini.disabled ? ov.querySelector('[data-acao="fechar"]') : ini).focus();
 }
 async function salvarChamado(input){
   const div = input.closest('.just-anexos');
@@ -5842,11 +5994,16 @@ function pptTabelaColaboradoresGA(block, d){
     { text:'Interjornada', options: Object.assign({}, headerOpts, { align:'center' }) },
     { text:'>2h extras', options: Object.assign({}, headerOpts, { align:'center' }) },
     { text:'Total', options: Object.assign({}, headerOpts, { align:'center' }) },
+    { text:'Total de Horas', options: Object.assign({}, headerOpts, { align:'center' }) },
     { text:'Justificativa (FCA)', options: Object.assign({}, headerOpts, { align:'left' }) },
   ]];
-  let sD7=0, sInt=0, sHex=0, sTot=0;
+  let sD7=0, sInt=0, sHex=0, sTot=0, sHoras=0;
   block.colaboradores.forEach(c => {
     sD7+=c.d7; sInt+=c.interj; sHex+=c.hex; sTot+=c.total;
+    // horas extras do colaborador no período, pela escala da hierarquia dele (ver escalaDoGA);
+    // vermelho quando algum dia passou de fato de 2h extras
+    const he = totalHorasExtrasColaborador(c.nome, d);
+    sHoras += he.total;
     const cor = corCelulaTotalPPT(c.total);
     const cel = { fill:{ color:PPT_ROW_BG }, fontFace:PPT_FONTE, fontSize:10.5, valign:'middle' };
     // mesma origem do campo Justificativa (FCA) da tela e da exportação Excel do bloco —
@@ -5859,6 +6016,7 @@ function pptTabelaColaboradoresGA(block, d){
       { text:fmt(c.interj), options: Object.assign({}, cel, { align:'center' }) },
       { text:fmt(c.hex), options: Object.assign({}, cel, { align:'center' }) },
       { text:fmt(c.total), options: Object.assign({}, cel, { align:'center', bold:true, fill:{ color: cor ? cor.fill : PPT_ROW_BG }, color: cor ? cor.texto : PPT_NAVY }) },
+      { text: he.total > 0 ? fmtHorasDecimais(he.total) : '—', options: Object.assign({}, cel, { align:'center', bold: he.excedeu, color: he.excedeu ? PPT_RED : (he.total > 0 ? PPT_NAVY : PPT_TEXT_MUTED), fill:{ color: he.excedeu ? PPT_RED_LIGHT : PPT_ROW_BG } }) },
       { text: justTexto || '—', options: Object.assign({}, cel, { align:'left', fontSize:9.5, italic: !justTexto, color: justTexto ? PPT_NAVY : PPT_TEXT_MUTED }) },
     ]);
   });
@@ -5869,6 +6027,7 @@ function pptTabelaColaboradoresGA(block, d){
     { text:fmt(sInt), options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:fmt(sHex), options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:fmt(sTot), options: Object.assign({}, totalOpts, { align:'center' }) },
+    { text: sHoras > 0 ? fmtHorasDecimais(sHoras) : '—', options: Object.assign({}, totalOpts, { align:'center' }) },
     { text:'', options: Object.assign({}, totalOpts, { align:'left' }) },
   ]);
   return rows;
@@ -6297,7 +6456,7 @@ function buildApresentacaoPres(dados, ClassePres){
   (d.hierBlocks || []).filter(b => b.colaboradores.length)
     .slice().sort((x, y) => (x.total - y.total) || String(x.ga).localeCompare(String(y.ga), 'pt-BR'))
     .forEach(block => {
-    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6] }, cont => {
+    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.6,0.95,1.3,1.2,0.85,1.2,4.2] }, cont => {
       const s = pres.addSlide();
       pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
       pptLinhaGestor(s, [['Gestor: ', block.ga], ['   ·   GO: ', block.go || '—']]);
