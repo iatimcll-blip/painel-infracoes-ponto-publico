@@ -6259,28 +6259,7 @@ function buildApresentacaoPres(dados, ClassePres){
   // --- slide 2: pódio (1º ao 3º lugar) — parabeniza os GAs com menor peso de infrações ---
   pptSlidePodio(pres, d, eyebrow, rodapeTxt);
 
-  // --- slide 2: indicadores do período ---
-  {
-    const s = pres.addSlide();
-    pptCabecalho(s, 'Indicadores do período', 'Recalculado a partir da Base anexada · ' + d.cicloAtualLabel, eyebrow);
-    const tiles = [
-      ['Total de infrações', fmt(d.total)],
-      ['Ciclo/semana anterior', d.temAnterior ? fmt(d.totalAnterior) : '—'],
-      ['Variação', d.temAnterior ? (d.variacaoAbs>0?'+':'')+fmt(d.variacaoAbs) : '—'],
-      ['Tipo mais recorrente', d.tipoRecorrente],
-      ['% do efetivo com infração', Math.round(d.pctEfetivo) + '%'],
-      ['Média por colaborador afetado', d.mediaAfetado.toFixed(1).replace('.', ',')],
-    ];
-    const colW = 3.98, gap = 0.2, startX = 0.5, y0 = 2.0, rowH = 2.1;
-    tiles.forEach((t, i) => {
-      const col = i % 3, row = Math.floor(i/3);
-      const x = startX + col*(colW+gap), y = y0 + row*(rowH+0.25);
-      s.addShape('roundRect', { x, y, w:colW, h:rowH, rectRadius:0.08, fill:{ color:PPT_ROW_BG }, line:{ type:'none' } });
-      s.addText(String(t[1]), { x:x+0.2, y:y+0.25, w:colW-0.4, h:1.05, valign:'middle', fontFace:PPT_FONTE_FORTE, fontSize:pptFonteQueCabe(String(t[1]), colW-0.4, 1.05, 32, 12, 1), bold:true, color:PPT_NAVY, isTextBox:true, margin:0 });
-      s.addText(t[0].toUpperCase(), { x:x+0.2, y:y+1.35, w:colW-0.4, h:0.55, fontFace:PPT_FONTE, fontSize:pptFonteQueCabe(t[0].toUpperCase(), colW-0.4, 0.55, 10.5, 7, 2), bold:true, color:PPT_TEXT_MUTED, charSpacing:0.5, isTextBox:true, margin:0 });
-    });
-    pptRodape(s, rodapeTxt);
-  }
+  // (slide "Indicadores do período" retirado a pedido do usuário, 2026-10-22)
 
   // --- slide 3: infrações por GO ---
   if (d.porGo && d.porGo.length) {
@@ -6310,30 +6289,14 @@ function buildApresentacaoPres(dados, ClassePres){
     });
   }
 
-  // --- slide 4: infrações por semana ---
-  if (d.semanasExibicao && d.semanasExibicao.length) {
-    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:PPT_FONTE, fontSize:11, valign:'middle', align:'center' };
-    const rows = [[
-      { text:'Semana', options: Object.assign({}, headerOpts, { align:'left' }) },
-      { text:'Total de infrações', options: headerOpts },
-    ]];
-    d.semanasExibicao.forEach(sem => {
-      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:PPT_FONTE, fontSize:11, valign:'middle' };
-      rows.push([
-        { text:sem.label, options: Object.assign({}, cel, { align:'left' }) },
-        { text:fmt(sem.total), options: Object.assign({}, cel, { align:'center', bold:true, color:PPT_NAVY }) },
-      ]);
-    });
-    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:8, colW:[5.5,2.5] }, cont => {
-      const s = pres.addSlide();
-      pptCabecalho(s, 'Infrações por semana' + pptCont(cont), d.periodType === 'periodo' ? 'Semanas dentro do período selecionado' : 'Todas as semanas presentes nos dados carregados', eyebrow);
-      pptRodape(s, rodapeTxt);
-      return s;
-    });
-  }
+  // (slide "Infrações por semana" retirado a pedido do usuário, 2026-10-22)
 
   // --- um slide por GA: "Período: X / Gestor: Y" (o coração do modelo original) ---
-  (d.hierBlocks || []).filter(b => b.colaboradores.length).forEach(block => {
+  // ordem: do GA com MENOS casos (infrações no período) pro que tem MAIS (pedido do usuário,
+  // 2026-10-22); empate em ordem alfabética. Na tela a hierarquia continua do maior pro menor.
+  (d.hierBlocks || []).filter(b => b.colaboradores.length)
+    .slice().sort((x, y) => (x.total - y.total) || String(x.ga).localeCompare(String(y.ga), 'pt-BR'))
+    .forEach(block => {
     pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.7,1.1,1.5,1.4,1.0,4.6] }, cont => {
       const s = pres.addSlide();
       pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
@@ -6345,37 +6308,7 @@ function buildApresentacaoPres(dados, ClassePres){
     pptSlidesEvidenciasGA(pres, block, d, dados.fotos || {}, eyebrow, rodapeTxt);
   });
 
-  // --- ranking: maior redução de infrações ---
-  if (d.rankGa && d.rankGa.length) {
-    const headerOpts = { bold:true, color:'FFFFFF', fill:{ color:PPT_NAVY }, fontFace:PPT_FONTE, fontSize:11, valign:'middle', align:'center' };
-    const rows = [[
-      { text:'GA', options: Object.assign({}, headerOpts, { align:'left' }) },
-      { text:'Semana anterior', options: headerOpts },
-      { text:'Semana atual', options: headerOpts },
-      { text:'Peso', options: headerOpts },
-      { text:'Variação', options: headerOpts },
-    ]];
-    d.rankGa.slice(0, 20).forEach(r => {
-      const cel = { fill:{ color:PPT_ROW_BG }, fontFace:PPT_FONTE, fontSize:10.5, valign:'middle' };
-      const melhorou = r.temAnterior && r.delta > 0;
-      const piorou = r.temAnterior && r.delta < 0;
-      rows.push([
-        { text:r.ga, options: Object.assign({}, cel, { align:'left' }) },
-        { text:r.temAnterior?fmt(r.anterior):'—', options: Object.assign({}, cel, { align:'center' }) },
-        { text:fmt(r.atual), options: Object.assign({}, cel, { align:'center' }) },
-        { text:fmt(r.peso), options: Object.assign({}, cel, { align:'center', bold: r.peso===0, color: r.peso===0 ? PPT_GREEN : PPT_NAVY }) },
-        { text: r.temAnterior ? (melhorou ? '▼ '+fmt(r.delta)+' a menos' : piorou ? '▲ '+fmt(Math.abs(r.delta))+' a mais' : 'igual') : '—',
-          options: Object.assign({}, cel, { align:'center', bold:true, color: melhorou ? PPT_GREEN : piorou ? PPT_RED : PPT_TEXT_MUTED }) },
-      ]);
-    });
-    pptTabelaPaginada(rows, { x:0.5, y:1.95, w:12.3, colW:[4.5,1.95,1.95,1.7,2.2] }, cont => {
-      const s = pres.addSlide();
-      pptCabecalho(s, 'Ranking · classificação por peso de infrações' + pptCont(cont), 'Peso: >7 dias ×7 · Interjornada ×5 · >2h extras ×2 — quem zera fica em 1º lugar · ' + (d.weekAtualLabel ? ('Semana atual: ' + d.weekAtualLabel + (d.weekAntLabel ? ' · semana anterior: ' + d.weekAntLabel : '')) : ''), eyebrow);
-      pptRodape(s, rodapeTxt);
-      return s;
-    });
-  }
-
+  // (slide "Ranking" retirado a pedido do usuário, 2026-10-22)
   } // fim do "if (d)" — slides de Infrações
 
   // --- seções dos painéis auxiliares (só entra quem tem planilha anexada) ---
