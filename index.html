@@ -1054,11 +1054,9 @@
       <span class="just-sync-hint">Justificativa (FCA) sincroniza entre dispositivos assim que salva.</span>
     </div>
     <div class="just-passos" role="note">
-      <b>Como justificar uma data:</b>
-      <span><i>1</i> Digite o <b>nº do chamado</b> da data</span>
-      <span><i>2</i> Anexe <b>no mínimo 2 fotos</b> (máx. 3), cada uma com legenda explicativa</span>
-      <span><i>3</i> A caixa de <b>justificativa</b> é liberada — escreva o que aconteceu</span>
-      <span class="just-passos-obs">Sem o nº do chamado e pelo menos 2 fotos a justificativa fica bloqueada (🔒). Remover fotos e ficar com menos de 2 bloqueia de novo. É preciso entrar como GA ou Administrador (Configurações).</span>
+      <b>Justificativa:</b>
+      <span>escreva direto na caixa de cada data</span>
+      <span class="just-passos-obs">Para anexar fotos (até 3, cada uma com legenda) é preciso informar o nº do chamado da data e entrar como GA ou Administrador (Configurações).</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -4947,29 +4945,16 @@ function barraProgressoFotos(div){
 // linhas por data de Infrações; usa o que está DIGITADO no campo do chamado (libera na hora, sem
 // esperar salvar). Sem campo de chamado (quem não entrou como GA/Admin) a caixa fica travada.
 function aplicarTravaChamado(row){
+  // travas da justificativa (nº do chamado + mínimo de 2 fotos) RETIRADAS a pedido do usuário
+  // (2026-10-23): a caixa fica sempre liberada — só continua valendo a regra de área do GA
+  // (justDisabledAttr). Função mantida pra não mexer em quem a chama; só destrava e limpa o aviso.
   if (!row) return;
   const ta = row.querySelector('.just-input');
   const aviso = row.querySelector('.just-trava-aviso');
   if (!ta) return;
-  const semPermissaoArea = !campoJustEhEditavelPara(ta.dataset.nome);
-  const campo = row.querySelector('.just-chamado');
-  const temChamado = !!(campo && campo.value.trim());
-  // 2ª trava (2026-10-22): além do chamado, pelo menos FOTOS_MIN_JUSTIFICAR fotos já anexadas
-  const anexos = row.querySelector('.just-anexos');
-  const nFotos = anexos ? ((STATE.anexos[anexos.dataset.chave] || {}).fotos || []).length : 0;
-  const faltamFotos = Math.max(0, FOTOS_MIN_JUSTIFICAR - nFotos);
-  const travar = !semPermissaoArea && (!temChamado || faltamFotos > 0);
-  if (semPermissaoArea) { if (aviso) aviso.textContent = ''; return; } // já travada pela regra de área
-  ta.disabled = travar;
-  ta.dataset.travadoChamado = travar ? '1' : '';
-  let msg = '';
-  if (travar) {
-    if (!campo) msg = '🔒 Para justificar, entre como GA ou Administrador, informe o nº do chamado e anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos.';
-    else if (!temChamado) msg = '🔒 Passo 1 de 2: digite o nº do chamado abaixo. Depois anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos para liberar a justificativa.';
-    else msg = '🔒 Passo 2 de 2: anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos (' + (faltamFotos === 1 ? 'falta 1' : 'faltam ' + faltamFotos) + ') para liberar a justificativa.';
-  }
-  ta.title = msg.replace('🔒 ', '');
-  if (aviso) aviso.textContent = msg;
+  if (campoJustEhEditavelPara(ta.dataset.nome)) { ta.disabled = false; ta.title = ''; }
+  ta.dataset.travadoChamado = '';
+  if (aviso) aviso.textContent = '';
 }
 // janela "Escala de trabalho" do GA: mostra a escala em uso (e de onde ela vem) e deixa o
 // Administrador mudar início/fim/almoço ou voltar pra regra. GA/Usuário Padrão só visualiza.
