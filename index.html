@@ -6539,10 +6539,14 @@ function buildApresentacaoPres(dados, ClassePres){
   // (slide "Infrações por semana" retirado a pedido do usuário, 2026-10-22)
 
   // --- um slide por GA: "Período: X / Gestor: Y" (o coração do modelo original) ---
-  // ordem: do GA com MENOS casos (infrações no período) pro que tem MAIS (pedido do usuário,
-  // 2026-10-22); empate em ordem alfabética. Na tela a hierarquia continua do maior pro menor.
+  // ordem: MESMO critério do pódio (pedido do usuário, 2026-10-29) — da MENOR para a maior SOMA
+  // DOS PESOS no período (>7 dias ×7 · Interjornada ×5 · >2h extras ×2); empate: menos infrações,
+  // depois ordem alfabética. Assim os 3 primeiros slides de GA são exatamente o 1º, 2º e 3º do
+  // pódio. Na tela a hierarquia continua do maior pro menor.
+  const pesoDoGA = {};
+  (d.porGa || []).forEach(g => { pesoDoGA[g.nome] = g.d7 * PESO_INFRACAO.d7 + g.interj * PESO_INFRACAO.interj + g.hex * PESO_INFRACAO.hex; });
   (d.hierBlocks || []).filter(b => b.colaboradores.length)
-    .slice().sort((x, y) => (x.total - y.total) || String(x.ga).localeCompare(String(y.ga), 'pt-BR'))
+    .slice().sort((x, y) => ((pesoDoGA[x.ga] || 0) - (pesoDoGA[y.ga] || 0)) || (x.total - y.total) || String(x.ga).localeCompare(String(y.ga)))
     .forEach(block => {
     pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.55,0.9,1.25,1.15,0.8,1.5,4.15] }, cont => {
       const s = pres.addSlide();
