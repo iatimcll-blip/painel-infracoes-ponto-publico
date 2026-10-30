@@ -6204,19 +6204,62 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
       { x:0.65, y:2.045, w:12.0, h:0.5, fontFace:PPT_FONTE, fontSize:fJust, color:PPT_NAVY, valign:'middle', isTextBox:true, margin:0 });
     // tamanho PADRÃO (pedido do usuário): paisagem 9,12 × 7,65 cm, retrato 9,12 × 10,19 cm
     // (largura × altura) — a imagem já chega recortada nessa proporção (ver baixarFotosParaApresentacao)
-    // foto + legenda logo embaixo (obrigatória desde 2026-10-15); fotos centradas na altura do retrato
-    const areaY = 2.65, areaH = PPT_FOTO_RETRATO.hIn, gap = 0.3, n = imgs.length, legH = 0.42;
-    const larguras = imgs.map(img => img.wIn), totalW = larguras.reduce((a, b) => a + b, 0) + (n - 1) * gap;
-    let x = 0.5 + (12.3 - totalW) / 2;
-    imgs.forEach(img => {
-      const y = areaY + (areaH - img.hIn) / 2;
-      s.addImage({ data: img.data, x, y, w: img.wIn, h: img.hIn });
-      if (img.legenda) {
-        const fLeg = pptFonteQueCabe(img.legenda, img.wIn, legH, 10, 7.5, 3);
-        s.addText(pptCortarParaCaber(img.legenda, img.wIn, legH, fLeg), { x, y: y + img.hIn + 0.04, w: img.wIn, h: legH, align:'center', valign:'top', fontFace:PPT_FONTE, fontSize:fLeg, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
-      }
-      x += img.wIn + gap;
+    // disposição das fotos (pedido do usuário, 2026-10-29):
+    //  - VERTICAIS: tamanho padrão (9,12 × 10,19 cm), lado a lado, legenda embaixo — como sempre foi;
+    //  - HORIZONTAIS: maiores, ocupando a largura que sobra; mais de uma -> uma EMBAIXO da outra,
+    //    com a legenda AO LADO (não rouba altura); uma só -> o maior possível, legenda embaixo.
+    // Área útil: da faixa da justificativa (y 2,65") até logo acima do rodapé (y 7,06").
+    const AREA_X = 0.5, AREA_W = 12.3, AREA_Y = 2.65, AREA_H = 7.06 - 2.65, GAP = 0.3, LEG_H = 0.42;
+    const verticais = imgs.filter(img => img.hIn > img.wIn), horizontais = imgs.filter(img => img.hIn <= img.wIn);
+    const legendaEmbaixo = (img, x, y, w) => {
+      if (!img.legenda) return;
+      const f = pptFonteQueCabe(img.legenda, w, LEG_H, 10, 7.5, 3);
+      s.addText(pptCortarParaCaber(img.legenda, w, LEG_H, f), { x, y: y + 0.04, w, h: LEG_H, align:'center', valign:'top', fontFace:PPT_FONTE, fontSize:f, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+    };
+    // bloco das verticais (à direita quando há horizontais; centralizado quando só há verticais)
+    const largV = verticais.reduce((t, img) => t + img.wIn, 0) + Math.max(0, verticais.length - 1) * GAP;
+    let xV = horizontais.length ? AREA_X + AREA_W - largV : AREA_X + (AREA_W - largV) / 2;
+    const altV = PPT_FOTO_RETRATO.hIn;
+    verticais.forEach(img => {
+      const y = AREA_Y + (AREA_H - LEG_H - altV) / 2 + (altV - img.hIn) / 2;
+      s.addImage({ data: img.data, x: xV, y, w: img.wIn, h: img.hIn });
+      legendaEmbaixo(img, xV, y + img.hIn, img.wIn);
+      xV += img.wIn + GAP;
     });
+    // coluna das horizontais: toda a largura que sobra
+    if (horizontais.length) {
+      const colW = AREA_W - (verticais.length ? largV + 0.4 : 0);
+      const n = horizontais.length;
+      if (n === 1) {
+        const img = horizontais[0], r = img.wIn / img.hIn;
+        const h = Math.min(AREA_H - LEG_H, colW / r), w = h * r;
+        const x = AREA_X + (colW - w) / 2, y = AREA_Y + (AREA_H - LEG_H - h) / 2;
+        s.addImage({ data: img.data, x, y, w, h });
+        legendaEmbaixo(img, x, y + h, w);
+      } else {
+        const GAP_V = 0.15, LEG_W_MIN = 2.2;
+        const slotH = (AREA_H - (n - 1) * GAP_V) / n;
+        // mede todas antes e alinha pela ESQUERDA (fotos empilhadas com a mesma borda), o conjunto
+        // centralizado na coluna
+        const blocos = horizontais.map(img => {
+          const r = img.wIn / img.hIn, temLeg = !!img.legenda;
+          const h = Math.min(slotH, (colW - (temLeg ? LEG_W_MIN + 0.2 : 0)) / r), w = h * r;
+          return { img, temLeg, h, w };
+        });
+        const maxW = Math.max(...blocos.map(b => b.w));
+        const legWComum = blocos.some(b => b.temLeg) ? Math.min(3.6, colW - maxW - 0.2) : 0;
+        const x0 = AREA_X + (colW - (maxW + (legWComum ? 0.2 + legWComum : 0))) / 2;
+        blocos.forEach(({ img, temLeg, h, w }, i) => {
+          const legW = temLeg ? Math.min(3.6, colW - w - 0.2, Math.max(legWComum, 0) + (maxW - w)) : 0;
+          const x = x0, y = AREA_Y + i * (slotH + GAP_V) + (slotH - h) / 2;
+          s.addImage({ data: img.data, x, y, w, h });
+          if (temLeg) {
+            const f = pptFonteQueCabe(img.legenda, legW, h, 11, 7.5, 0);
+            s.addText(pptCortarParaCaber(img.legenda, legW, h, f), { x: x + w + 0.2, y, w: legW, h, align:'left', valign:'middle', fontFace:PPT_FONTE, fontSize:f, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
+          }
+        });
+      }
+    }
     pptRodape(s, rodapeTxt);
   });
 }
