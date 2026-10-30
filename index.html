@@ -6235,6 +6235,17 @@ async function fotoNoTamanhoPadraoPPT(dataUrl){
   });
   const iw = img.naturalWidth || 4, ih = img.naturalHeight || 3;
   const moldura = iw >= ih ? PPT_FOTO_PAISAGEM : PPT_FOTO_RETRATO;
+  // HORIZONTAL (pedido do usuário, 2026-10-29): NÃO recorta — prints/fotos largos (ex.: tela 16:9)
+  // perdiam as laterais no recorte pra moldura 9,12 × 7,65 cm. Agora a imagem inteira é reduzida
+  // pra caber na moldura (largura ou altura máxima), mantendo a proporção: aparece completa.
+  if (iw >= ih) {
+    const escala = Math.min(moldura.wIn / iw, moldura.hIn / ih);
+    const wIn = iw * escala, hIn = ih * escala;
+    const cv = document.createElement('canvas');
+    cv.width = Math.min(iw, Math.round(wIn * 170)); cv.height = Math.max(1, Math.round(cv.width * ih / iw));
+    cv.getContext('2d').drawImage(img, 0, 0, iw, ih, 0, 0, cv.width, cv.height);
+    return { data: cv.toDataURL('image/jpeg', 0.78).replace(/^data:/, ''), wIn, hIn };
+  }
   const alvo = moldura.wIn / moldura.hIn;
   let sw = iw, sh = ih;
   if (iw / ih > alvo) sw = Math.round(ih * alvo); else sh = Math.round(iw / alvo);
@@ -6285,6 +6296,9 @@ async function baixarFotosParaApresentacao(d, silencioso, aoProgredir){
 // precisam buscar no Google de novo (a etapa mais lenta). É do aparelho de quem está logado;
 // sair (logout) apaga. Qualquer falha do IndexedDB (aba anônima, bloqueado) só desliga o cache.
 const FOTO_IDB_NOME = 'painelInfracoesFotos', FOTO_IDB_STORE = 'ppt';
+// muda quando o jeito de preparar a foto muda (v2: horizontais sem recorte) — as versões antigas
+// guardadas no navegador deixam de ser usadas e são refeitas
+const FOTO_CACHE_VERSAO = 'v2:';
 let fotoIdbPromessa = null;
 function fotoIdb(){
   if (!fotoIdbPromessa) fotoIdbPromessa = new Promise(resolve => {
@@ -6302,7 +6316,7 @@ async function fotoCacheLer(id){
   if (!db) return null;
   return new Promise(resolve => {
     try {
-      const r = db.transaction(FOTO_IDB_STORE, 'readonly').objectStore(FOTO_IDB_STORE).get(id);
+      const r = db.transaction(FOTO_IDB_STORE, 'readonly').objectStore(FOTO_IDB_STORE).get(FOTO_CACHE_VERSAO + id);
       r.onsuccess = () => resolve(r.result || null);
       r.onerror = () => resolve(null);
     } catch(e) { resolve(null); }
@@ -6311,7 +6325,7 @@ async function fotoCacheLer(id){
 async function fotoCacheGravar(id, valor){
   const db = await fotoIdb();
   if (!db) return;
-  try { db.transaction(FOTO_IDB_STORE, 'readwrite').objectStore(FOTO_IDB_STORE).put(valor, id); } catch(e) {}
+  try { db.transaction(FOTO_IDB_STORE, 'readwrite').objectStore(FOTO_IDB_STORE).put(valor, FOTO_CACHE_VERSAO + id); } catch(e) {}
 }
 function fotoCacheLimpar(){
   try { if (fotoIdbPromessa) fotoIdbPromessa.then(db => { if (db) db.close(); }); } catch(e) {}
