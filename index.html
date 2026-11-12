@@ -1906,7 +1906,7 @@ async function loadFromSupabase(){
   // Hierarquia daquele outro dispositivo falhava por qualquer motivo. Justificativa é um "plus"
   // (anotação do GA), não pode ficar refém do dado principal do painel.
   const justsPromise = syncJustificativasFromServer();
-  const escalasPromise = carregarEscalasDoServidor();
+  const escalasPromise = Promise.all([carregarEscalasDoServidor(), carregarHierForaDoServidor()]);
 
   let resultado;
   try {
@@ -2873,13 +2873,37 @@ document.getElementById('file-hier').addEventListener('change', async evt => {
     const sufixoFidelidade = ressalvas.length ? ' · ' + ressalvas.join(' · ') : '';
     if (await hasSupabaseWriteSession()) {
       try {
+        // a planilha anexada passa a ser a hierarquia OFICIAL: quem está no painel e não veio
+        // nela é removido (pedido do usuário, 2026-11-12). Trava de segurança: uma planilha com
+        // menos da metade das pessoas atuais provavelmente é um recorte/arquivo errado — nesse
+        // caso só atualiza, sem remover ninguém.
+        const nomesArquivo = new Set(parsed.entries.map(e => e.nome));
+        const removidos = Object.keys(STATE.hierMap).filter(n => !nomesArquivo.has(n));
+        const podeRemover = parsed.entries.length >= Object.keys(STATE.hierMap).length * 0.5;
+        let removidosOk = 0;
+        if (removidos.length && podeRemover) {
+          removidos.forEach(n => { delete STATE.hierMap[n]; HIER_FORA.add(n); limparHierPendente(n); });
+        }
+        nomesArquivo.forEach(n => HIER_FORA.delete(n)); // voltou na planilha -> volta pro painel
+        salvarHierForaLocal();
+        saveToStorage();
         await withRetry(() => upsertHierToSupabase(STATE.hierMap), 3, 2000);
+        if (removidos.length && podeRemover) {
+          for (let i = 0; i < removidos.length; i += 200) {
+            const { error } = await withTimeout(sb.from('infracoes_roster').delete().in('nome', removidos.slice(i, i + 200)), 20000, 'remover da hierarquia');
+            if (error) throw error;
+          }
+          removidosOk = removidos.length;
+        }
+        await withRetry(() => salvarHierForaNoServidor(), 3, 2000);
+        if (removidos.length && !podeRemover) ressalvas.push(removidos.length + ' pessoa(s) fora da planilha NÃO foram removidas (planilha com menos da metade da hierarquia atual — confira o arquivo)');
+        if (removidosOk) ressalvas.push(removidosOk + ' removido(s) da hierarquia (não estão na planilha)');
         await recordSyncTimestamp('hierarquia', file.name);
         STATE.usingSupabase = true;
         STATE.pendingSync = null;
         parsed.entries.forEach(e => limparHierPendente(e.nome));
         recomputeAndRender();
-        showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"' + sufixoFidelidade);
+        showToast('Hierarquia sincronizada: ' + updated + ' atualizado(s), ' + added + ' novo(s) de "' + file.name + '"' + (ressalvas.length ? ' · ' + ressalvas.join(' · ') : ''));
       } catch(syncErr) {
         console.error('Hierarquia salva localmente, mas falhou ao sincronizar com o Supabase depois de tentar algumas vezes.', syncErr);
         STATE.pendingSync = { tipo: 'hierarquia', arquivo: file.name };
@@ -2929,6 +2953,8 @@ function enrichRows(raw, hierMap){
     const c = cicloOf(r.data);
     const w = weekOf(r.data);
     if (!c || !w) return; // data inválida/ausente - ignora a linha em vez de quebrar o cálculo
+    // removido da hierarquia pela planilha anexada -> fora do painel/PPT (ver HIER_FORA)
+    if (!hierMap[r.nome] && HIER_FORA.has(r.nome)) return;
     const h = hierMap[r.nome] || {};
     // ">2h extras" só conta como infração quando o Cal de Horas passa DE FATO de 2h (pedido do
     // usuário, 2026-11-12): a Base marca >2h em dias que, pela entrada/saída e a escala do GA,
@@ -3875,6 +3901,28 @@ function escalaJanelaMin(esc){
 function escalaRotulo(esc){
   const jan = escalaJanelaMin(esc), trab = jan == null ? null : jan - (Number(esc.almoco) || 0);
   return esc.inicio + '–' + esc.fim + ' · almoço ' + fmtHorasDecimais((Number(esc.almoco) || 0) / 60) + (trab == null ? '' : ' · ' + fmtHorasDecimais(trab / 60) + ' trabalhadas');
+}
+// COLABORADORES REMOVIDOS DA HIERARQUIA (pedido do usuário, 2026-11-12): quem estava no painel e
+// não veio na planilha de Hierarquia anexada sai da hierarquia E some do painel/PPT (as infrações
+// dele não entram em nenhum total). A lista fica no servidor (infracoes_meta), pra valer em todo
+// dispositivo. Diferente de quem chega novo na Base sem hierarquia ("SEM HIERARQUIA"), que
+// continua aparecendo pra ser encaixado. Se a pessoa voltar numa planilha futura, sai da lista.
+const HIER_FORA_META_KEY = 'hierarquia_removidos', STORAGE_HIER_FORA = 'painelInfracoes.hierRemovidos.v1';
+let HIER_FORA = new Set();
+try { HIER_FORA = new Set(JSON.parse(localStorage.getItem(STORAGE_HIER_FORA) || '[]') || []); } catch(e) {}
+function salvarHierForaLocal(){ try { localStorage.setItem(STORAGE_HIER_FORA, JSON.stringify([...HIER_FORA])); } catch(e) {} }
+async function carregarHierForaDoServidor(){
+  if (!sb) return;
+  try {
+    const { data, error } = await withTimeout(sb.from('infracoes_meta').select('valor').eq('chave', HIER_FORA_META_KEY).maybeSingle(), 15000, 'ler removidos da hierarquia');
+    if (error) throw error;
+    HIER_FORA = new Set((data && Array.isArray(data.valor)) ? data.valor : []);
+    salvarHierForaLocal();
+  } catch(e) { console.error('Não foi possível ler a lista de removidos da hierarquia — usando a cópia local.', e); }
+}
+async function salvarHierForaNoServidor(){
+  const { error } = await withTimeout(sb.from('infracoes_meta').upsert({ chave: HIER_FORA_META_KEY, valor: [...HIER_FORA].sort() }, { onConflict: 'chave' }), 15000, 'gravar removidos da hierarquia');
+  if (error) throw error;
 }
 async function carregarEscalasDoServidor(){
   if (!sb) return;
