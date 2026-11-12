@@ -530,6 +530,13 @@
   .ga-parabens-icon{ font-size:26px; line-height:1; }
   .ga-parabens b{ display:block; font-size:15px; }
   .ga-parabens span:not(.ga-parabens-icon){ font-size:12.5px; color:var(--text); }
+  .ga-parabens{ cursor:pointer; }
+  .parabens-overlay{ position:fixed; inset:0; z-index:220; background:rgba(11,11,11,.6); display:none; align-items:center; justify-content:center; padding:16px; }
+  .parabens-overlay.show{ display:flex; }
+  .parabens-card{ display:flex; flex-direction:column; align-items:center; gap:14px; width:min(440px, 100%); }
+  .parabens-card img{ width:100%; height:auto; border-radius:16px; box-shadow:0 18px 50px rgba(0,0,0,.4); }
+  .parabens-ver{ background:#F4C84C; color:#123D2F; border:none; border-radius:999px; padding:11px 22px; font-weight:700; font-size:14px; cursor:pointer; }
+  .parabens-ver:hover{ filter:brightness(1.06); }
 
   /* coluna Justificativa (FCA) — cresce sozinha (autoGrowTextarea) até um teto bem mais alto
      que as outras colunas, de propósito: é onde o GA escreve o relato do caso, não uma nota
@@ -1333,6 +1340,13 @@
   </div>
 </div>
 
+<!-- "Parabéns! Você não tem infrações." — GA sem infrações no período (pedido do usuário, 2026-11-12) -->
+<div class="parabens-overlay" id="parabens-overlay" role="dialog" aria-modal="true" aria-label="Parabéns! Você não tem infrações.">
+  <div class="parabens-card">
+    <img src="assets/parabens-sem-infracoes.png" alt="Parabéns! Você não tem infrações." width="1080" height="1080">
+    <button type="button" class="parabens-ver" id="parabens-ver">Ver minhas informações</button>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-name">
     <div class="modal-head">
@@ -1943,6 +1957,7 @@ async function loadFromSupabase(){
 // true assim que uma leitura do Supabase trouxe a Base — a cópia "rápida" do boot (ver
 // loadFromGithubMirror({ soSeAindaSemDados })) nunca sobrescreve um dado mais novo do Supabase
 let DADOS_DO_SUPABASE = false;
+let DADOS_DO_ESPELHO = false; // dados.json do GitHub carregado (cópia oficial, não o cache local)
 async function loadFromGithubMirror(opts){
   try {
     const ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
@@ -1991,6 +2006,7 @@ async function loadFromGithubMirror(opts){
     STATE.readSyncFailed = false;
     STATE.lastSync = d.gerado_em ? { quando: d.gerado_em, por: 'cópia do GitHub', tipo: 'base', arquivo: null } : null;
     console.info('Dados carregados da cópia do GitHub (dados.json).');
+    DADOS_DO_ESPELHO = true;
     return true;
   } catch (e) {
     console.error('A cópia do GitHub também não pôde ser lida.', e);
@@ -4405,6 +4421,20 @@ document.getElementById('hier-blocks').addEventListener('toggle', evt => {
   if (!d.classList || !d.classList.contains('ga-block')) return;
   if (d.open) HIER_GA_ABERTOS.add(d.dataset.ga); else HIER_GA_ABERTOS.delete(d.dataset.ga);
 }, true);
+// janela com a imagem de "Parabéns" — fecha no botão, no fundo ou com Esc, e o GA segue vendo
+// todas as informações do painel normalmente
+let parabensMostradoPara = null;
+function abrirParabensGA(){
+  const ov = document.getElementById('parabens-overlay');
+  ov.classList.add('show');
+  document.getElementById('parabens-ver').focus();
+}
+function fecharParabensGA(){ document.getElementById('parabens-overlay').classList.remove('show'); }
+document.getElementById('parabens-ver').addEventListener('click', fecharParabensGA);
+document.getElementById('parabens-overlay').addEventListener('click', evt => { if (evt.target.id === 'parabens-overlay') fecharParabensGA(); });
+document.addEventListener('keydown', evt => {
+  if (evt.key === 'Escape' && document.getElementById('parabens-overlay').classList.contains('show')) fecharParabensGA();
+});
 function renderHierarchy(d){
   currentDerived = d;
   const wrap = document.getElementById('hier-blocks');
@@ -4425,9 +4455,17 @@ function renderHierarchy(d){
       const parabens = document.createElement('div');
       parabens.className = 'ga-parabens';
       parabens.setAttribute('role', 'status');
+      parabens.title = 'Clique para ver a imagem de novo';
       parabens.innerHTML = '<span class="ga-parabens-icon">🎉</span><div><b>Parabéns! Você não tem infrações.</b>' +
         '<span>Nenhum colaborador da sua área precisa de justificativa neste período.</span></div>';
+      parabens.addEventListener('click', abrirParabensGA);
       wrap.appendChild(parabens);
+      // imagem de Parabéns: 1x por acesso de cada GA, e só com os dados oficiais (Supabase ou
+      // dados.json do GitHub) — nunca com o cache local do navegador, que pode estar desatualizado
+      if ((DADOS_DO_SUPABASE || DADOS_DO_ESPELHO) && parabensMostradoPara !== AUTH.currentUser) {
+        parabensMostradoPara = AUTH.currentUser;
+        abrirParabensGA();
+      }
     }
   }
 
