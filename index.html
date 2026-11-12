@@ -526,6 +526,10 @@
   .colab-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .colab-dates{ margin-top:2px; font-family:var(--mono); font-size:10px; font-weight:400; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ga-empty{ margin:6px 0 12px; font-size:12px; color:var(--text-muted); font-style:italic; }
+  .ga-parabens{ display:flex; align-items:center; gap:12px; padding:14px 16px; margin-bottom:12px; border-radius:10px; background:var(--good-tint); color:var(--good); }
+  .ga-parabens-icon{ font-size:26px; line-height:1; }
+  .ga-parabens b{ display:block; font-size:15px; }
+  .ga-parabens span:not(.ga-parabens-icon){ font-size:12.5px; color:var(--text); }
 
   /* coluna Justificativa (FCA) — cresce sozinha (autoGrowTextarea) até um teto bem mais alto
      que as outras colunas, de propósito: é onde o GA escreve o relato do caso, não uma nota
@@ -2903,8 +2907,18 @@ function enrichRows(raw, hierMap){
     const w = weekOf(r.data);
     if (!c || !w) return; // data inválida/ausente - ignora a linha em vez de quebrar o cálculo
     const h = hierMap[r.nome] || {};
-    const total = (r.d7||0) + (r.interj||0) + (r.hex||0);
+    // ">2h extras" só conta como infração quando o Cal de Horas passa DE FATO de 2h (pedido do
+    // usuário, 2026-11-12): a Base marca >2h em dias que, pela entrada/saída e a escala do GA,
+    // ficaram em até 2h — esses viram 0. Sem entrada/saída pra calcular, mantém o que a Base diz.
+    // >7 dias e Interjornada seguem exatamente a Base. hexBase guarda o valor original.
+    let hex = r.hex || 0;
+    if (hex) {
+      const extras = calcularHorasExtrasDia(r, escalaDoGA(h.ga, h.go || h.ga));
+      if (extras != null && extras <= LIMITE_EXTRAS_H + 1e-9) hex = 0;
+    }
+    const total = (r.d7||0) + (r.interj||0) + hex;
     out.push(Object.assign({}, r, {
+      hex, hexBase: r.hex || 0,
       ga: h.ga || null, go: h.go || h.ga || null,
       cicloKey: c.key, cicloLabel: c.label,
       weekKey: w.key, weekLabel: w.label, weekShortLabel: w.shortLabel,
@@ -3901,7 +3915,9 @@ function textoHorasPorData(he){
   return linhas.join('\n');
 }
 function calHorasCellHTML(rec){
-  if (!rec.hex) return '<span style="color:var(--text-muted);">—</span>';
+  // hexBase = o que a Base marcou; mostra as horas mesmo quando ficou em até 2h (e por isso não
+  // contou como infração, ver enrichRows), pra ficar claro o motivo
+  if (!(rec.hexBase != null ? rec.hexBase : rec.hex)) return '<span style="color:var(--text-muted);">—</span>';
   const escRec = escalaDoColaborador(rec.nome);
   const extras = calcularHorasExtrasDia(rec, escRec);
   if (extras == null) return '<span style="color:var(--text-muted);" title="Sem entrada/saída pra calcular">—</span>';
@@ -4399,6 +4415,21 @@ function renderHierarchy(d){
   const hierBlocksVisiveis = isGA() ? d.hierBlocks.filter(b => b.ga === currentGaNome()) : d.hierBlocks;
   const totalColaboradoresVisiveis = isGA() ? hierBlocksVisiveis.reduce((s,b) => s+b.equipe, 0) : d.roster;
   document.getElementById('hier-total-hint').textContent = totalColaboradoresVisiveis + ' colaboradores no total · ' + hierBlocksVisiveis.length + ' GA(s)';
+
+  // GA logado sem NENHUMA infração no período -> "Parabéns" (pedido do usuário, 2026-11-12).
+  // b.colaboradores já traz só quem tem total > 0, e ">2h extras" só conta quando passa de fato
+  // de 2h (ver enrichRows).
+  if (isGA() && hierBlocksVisiveis.length) {
+    const temInfracao = hierBlocksVisiveis.some(b => b.colaboradores.length > 0);
+    if (!temInfracao) {
+      const parabens = document.createElement('div');
+      parabens.className = 'ga-parabens';
+      parabens.setAttribute('role', 'status');
+      parabens.innerHTML = '<span class="ga-parabens-icon">🎉</span><div><b>Parabéns! Você não tem infrações.</b>' +
+        '<span>Nenhum colaborador da sua área precisa de justificativa neste período.</span></div>';
+      wrap.appendChild(parabens);
+    }
+  }
 
   hierBlocksVisiveis.forEach(block => {
     const details = document.createElement('details');
