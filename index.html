@@ -6645,13 +6645,26 @@ function buildApresentacaoPres(dados, ClassePres){
   // pódio. Na tela a hierarquia continua do maior pro menor.
   const pesoDoGA = {};
   (d.porGa || []).forEach(g => { pesoDoGA[g.nome] = g.d7 * PESO_INFRACAO.d7 + g.interj * PESO_INFRACAO.interj + g.hex * PESO_INFRACAO.hex; });
-  (d.hierBlocks || []).filter(b => b.colaboradores.length)
+  // TODOS os GAs entram (pedido do usuário, 2026-11-12) — antes só os que tinham infração. GA sem
+  // nenhuma infração ganha o slide com a faixa "Parabéns" e a tabela da equipe (tudo zerado).
+  (d.hierBlocks || [])
     .slice().sort((x, y) => ((pesoDoGA[x.ga] || 0) - (pesoDoGA[y.ga] || 0)) || (x.total - y.total) || String(x.ga).localeCompare(String(y.ga)))
     .forEach(block => {
-    pptTabelaPaginada(pptTabelaColaboradoresGA(block, d), { x:0.5, y:2.05, w:12.3, colW:[2.55,0.9,1.25,1.15,0.8,1.5,4.15] }, cont => {
+    const semInfracao = !block.colaboradores.length;
+    const blocoTabela = semInfracao ? Object.assign({}, block, { colaboradores: block.semInfracao || [] }) : block;
+    const yTabela = semInfracao ? 2.85 : 2.05;
+    pptTabelaPaginada(pptTabelaColaboradoresGA(blocoTabela, d), { x:0.5, y:yTabela, w:12.3, colW:[2.55,0.9,1.25,1.15,0.8,1.5,4.15] }, cont => {
       const s = pres.addSlide();
       pptCabecalho(s, 'Infrações — ' + d.cicloAtualLabel + pptCont(cont), 'Acompanhamento do quantitativo de infrações por gestor de área', eyebrow);
       pptLinhaGestor(s, [['Gestor: ', block.ga], ['   ·   GO: ', block.go || '—']]);
+      if (semInfracao) {
+        // mesmas cores da imagem de Parabéns da tela (verde-escuro + amarelo)
+        s.addShape('roundRect', { x:0.5, y:2.05, w:12.3, h:0.62, rectRadius:0.08, fill:{ color:'123D2F' }, line:{ type:'none' } });
+        s.addText([
+          { text:'✓  Parabéns!  ', options:{ bold:true, color:'F4C84C' } },
+          { text:'Nenhuma infração no período — ' + fmt(block.equipe) + ' colaborador(es) na equipe.', options:{ color:'FFFFFF' } },
+        ], { x:0.75, y:2.05, w:11.8, h:0.62, fontFace:PPT_FONTE, fontSize:15, valign:'middle', isTextBox:true, margin:0 });
+      }
       s._ga = block.ga; // índice da aba Apresentação: slides deste GA
       pptRodape(s, rodapeTxt);
       return s;
