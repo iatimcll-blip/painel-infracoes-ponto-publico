@@ -6639,16 +6639,16 @@ function buildApresentacaoPres(dados, ClassePres){
   // (slide "Infrações por semana" retirado a pedido do usuário, 2026-10-22)
 
   // --- um slide por GA: "Período: X / Gestor: Y" (o coração do modelo original) ---
-  // ordem: MESMO critério do pódio (pedido do usuário, 2026-10-29) — da MENOR para a maior SOMA
-  // DOS PESOS no período (>7 dias ×7 · Interjornada ×5 · >2h extras ×2); empate: menos infrações,
-  // depois ordem alfabética. Assim os 3 primeiros slides de GA são exatamente o 1º, 2º e 3º do
-  // pódio. Na tela a hierarquia continua do maior pro menor.
+  // (até 2026-11-12 a ordem seguia o pódio, do menor peso pro maior — trocada a pedido do usuário,
+  // ver o sort abaixo). Peso = >7 dias ×7 · Interjornada ×5 · >2h extras ×2, usado só no desempate.
   const pesoDoGA = {};
   (d.porGa || []).forEach(g => { pesoDoGA[g.nome] = g.d7 * PESO_INFRACAO.d7 + g.interj * PESO_INFRACAO.interj + g.hex * PESO_INFRACAO.hex; });
   // TODOS os GAs entram (pedido do usuário, 2026-11-12) — antes só os que tinham infração. GA sem
   // nenhuma infração ganha o slide com a faixa "Parabéns" e a tabela da equipe (tudo zerado).
+  // ordem (pedido do usuário, 2026-11-12): de quem tem MAIS infrações para quem tem MENOS;
+  // empate: maior soma dos pesos primeiro, depois ordem alfabética. GAs sem infração ficam no fim.
   (d.hierBlocks || [])
-    .slice().sort((x, y) => ((pesoDoGA[x.ga] || 0) - (pesoDoGA[y.ga] || 0)) || (x.total - y.total) || String(x.ga).localeCompare(String(y.ga)))
+    .slice().sort((x, y) => (y.total - x.total) || ((pesoDoGA[y.ga] || 0) - (pesoDoGA[x.ga] || 0)) || String(x.ga).localeCompare(String(y.ga)))
     .forEach(block => {
     const semInfracao = !block.colaboradores.length;
     const blocoTabela = semInfracao ? Object.assign({}, block, { colaboradores: block.semInfracao || [] }) : block;
