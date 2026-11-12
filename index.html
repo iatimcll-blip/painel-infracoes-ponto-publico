@@ -531,6 +531,13 @@
   .ga-parabens b{ display:block; font-size:15px; }
   .ga-parabens span:not(.ga-parabens-icon){ font-size:12.5px; color:var(--text); }
   .ga-parabens{ cursor:pointer; }
+  .ga-sem-infra{ margin:10px 0 6px; border-top:1px solid var(--grid); padding-top:8px; }
+  .ga-sem-infra > summary{ cursor:pointer; font-size:12.5px; font-weight:600; color:var(--text-muted); padding:4px 0; }
+  .ga-sem-infra ul{ list-style:none; margin:6px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:2px 18px; }
+  .ga-sem-infra li{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--grid); font-size:12.5px; }
+  .ga-sem-infra-nome{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ga-sem-infra-vazio{ color:var(--text-muted); font-style:italic; font-size:11.5px; flex:none; }
+  .ga-sem-infra .total-link{ flex:none; }
   .parabens-overlay{ position:fixed; inset:0; z-index:220; background:rgba(11,11,11,.6); display:none; align-items:center; justify-content:center; padding:16px; }
   .parabens-overlay.show{ display:flex; }
   .parabens-card{ display:flex; flex-direction:column; align-items:center; gap:14px; width:min(440px, 100%); }
@@ -3109,7 +3116,10 @@ function deriveAll(){
 
   const hierBlocks = porGa.map(ga => ({
     ga: ga.nome, go: ga.go, total: ga.total, equipe: ga.equipe, afetados: ga.afetados, reincidentes: ga.reincidentes,
-    colaboradores: colaboradores.filter(c => c.ga === ga.nome && c.total > 0).sort((a,b)=>b.total-a.total)
+    colaboradores: colaboradores.filter(c => c.ga === ga.nome && c.total > 0).sort((a,b)=>b.total-a.total),
+    // equipe sem infração no período — o GA ainda pode abrir a janela de detalhes (entrada, saída,
+    // Cal de Horas) de cada um (pedido do usuário, 2026-11-12)
+    semInfracao: colaboradores.filter(c => c.ga === ga.nome && c.total <= 0).sort((a,b)=>a.nome.localeCompare(b.nome))
   }));
 
   const topColaboradores = [...colaboradores].filter(c=>c.total>0).sort((a,b)=>b.total-a.total).slice(0,20);
@@ -3956,7 +3966,9 @@ function interjornadaCellHTML(horas){
 function openDetail(nome, total){
   const registros = (currentDerived.detalhesByNome[nome] || []);
   modalName.textContent = nome;
-  modalSub.textContent = fmt(total) + ' infrações no ciclo ' + currentDerived.cicloAtualLabel + ' · ' + registros.length + ' dia(s) com registro';
+  const pt = currentDerived.periodType;
+  const noPeriodo = pt === 'semana' ? ' na semana ' : (pt === 'periodo' ? ' no período ' : ' no ciclo ');
+  modalSub.textContent = (total > 0 ? fmt(total) + ' infrações' : 'Sem infrações') + noPeriodo + currentDerived.cicloAtualLabel + ' · ' + registros.length + ' dia(s) com registro';
   clear(modalRows);
   if (!registros.length) {
     modalRows.innerHTML = '<tr><td colspan="6" style="color:var(--text-muted); font-style:italic;">Sem dias de exceção registrados neste ciclo.</td></tr>';
@@ -4583,6 +4595,25 @@ function renderHierarchy(d){
       body.appendChild(table);
       body.querySelectorAll('.just-input').forEach(autoGrowTextarea);
       body.querySelectorAll('.just-date-row').forEach(aplicarTravaChamado);
+    }
+    // colaboradores da equipe SEM infração no período — cada um abre a mesma janela de detalhes
+    // (dias, entrada, saída, Cal de Horas) da semana/ciclo/período selecionado. Aberta por padrão
+    // quando o GA não tem nenhuma infração (pedido do usuário, 2026-11-12).
+    if (block.semInfracao && block.semInfracao.length) {
+      const sem = document.createElement('details');
+      sem.className = 'ga-sem-infra';
+      sem.open = !block.colaboradores.length;
+      const itens = block.semInfracao.map(c => {
+        const nDias = ((d.detalhesByNome || {})[c.nome] || []).length;
+        return '<li><span class="ga-sem-infra-nome" title="'+esc(c.nome)+'">'+esc(c.nome)+'</span>' +
+          (nDias
+            ? '<button type="button" class="total-link" data-nome="'+esc(c.nome)+'" data-total="0">Ver '+nDias+' dia(s)' +
+              '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 8h8M8 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'
+            : '<span class="ga-sem-infra-vazio">sem registro no período</span>') +
+        '</li>';
+      }).join('');
+      sem.innerHTML = '<summary>Colaboradores sem infração no período ('+block.semInfracao.length+')</summary><ul>'+itens+'</ul>';
+      body.appendChild(sem);
     }
     details.appendChild(body);
     wrap.appendChild(details);
