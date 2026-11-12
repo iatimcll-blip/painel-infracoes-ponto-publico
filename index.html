@@ -6529,11 +6529,18 @@ function fotoCacheLimpar(){
 // peso do Ranking (>7 dias ×7 · Interjornada ×5 · >2h extras ×2), só que somando o PERÍODO
 // inteiro em exibição. Menor peso = melhor; empate desempata por menos infrações e depois nome.
 // Quem zerou fica na frente. Layout clássico: 2º à esquerda, 1º no centro (mais alto), 3º à direita.
+// Devolve até 3 lugares, cada um com 1 ou mais GAs. Com 2 ou mais GAs SEM nenhuma infração, todos
+// eles dividem o 1º lugar (pedido do usuário, 2026-11-12) e o 2º/3º vão pros próximos.
 function podioGAs(d){
-  return (d.porGa || [])
+  const ordenados = (d.porGa || [])
     .map(g => ({ nome: g.nome, total: g.total, peso: g.d7 * PESO_INFRACAO.d7 + g.interj * PESO_INFRACAO.interj + g.hex * PESO_INFRACAO.hex, equipe: g.equipe }))
-    .sort((a, b) => a.peso - b.peso || a.total - b.total || a.nome.localeCompare(b.nome))
-    .slice(0, 3);
+    .sort((a, b) => a.peso - b.peso || a.total - b.total || a.nome.localeCompare(b.nome));
+  const zerados = ordenados.filter(g => g.total === 0);
+  if (zerados.length >= 2) {
+    const resto = ordenados.filter(g => g.total > 0).slice(0, 2);
+    return [{ gas: zerados, total: 0, peso: 0 }].concat(resto.map(g => ({ gas: [g], total: g.total, peso: g.peso })));
+  }
+  return ordenados.slice(0, 3).map(g => ({ gas: [g], total: g.total, peso: g.peso }));
 }
 function pptSlidePodio(pres, d, eyebrow, rodapeTxt){
   const top = podioGAs(d);
@@ -6553,12 +6560,16 @@ function pptSlidePodio(pres, d, eyebrow, rodapeTxt){
     s.addShape('rect', { x, y:topo, w:larg, h:ALTURA[i], fill:{ color:PEDESTAL[i] }, line:{ type:'none' } });
     s.addShape('rect', { x, y:topo, w:larg, h:0.08, fill:{ color:MEDALHA[i] }, line:{ type:'none' } });
     s.addText((i + 1) + 'º', { x, y:topo + 0.12, w:larg, h:Math.min(1.2, ALTURA[i] - 0.2), align:'center', valign:'middle', fontFace:PPT_FONTE_FORTE, fontSize:i === 0 ? 54 : 44, color:'FFFFFF', isTextBox:true, margin:0 });
-    // acima do pedestal: medalha, nome do GA e números
-    const yNum = topo - 0.4, yNome = yNum - 0.62, yMed = yNome - 0.82;
+    // acima do pedestal: medalha, nome(s) do(s) GA(s) e números — vários GAs no mesmo lugar
+    // (empate em zero infrações) ficam um embaixo do outro, e a caixa cresce até um teto
+    const k = g.gas.length;
+    const nomesTxt = g.gas.map(x => x.nome).join('\n');
+    const hNome = Math.min(0.58 + 0.28 * (k - 1), 1.6);
+    const yNum = topo - 0.4, yNome = yNum - hNome - 0.04, yMed = yNome - 0.82;
     s.addShape('ellipse', { x:x + larg / 2 - 0.36, y:yMed, w:0.72, h:0.72, fill:{ color:MEDALHA[i] }, line:{ color:'FFFFFF', width:2 } });
     s.addText(String(i + 1), { x:x + larg / 2 - 0.36, y:yMed, w:0.72, h:0.72, align:'center', valign:'middle', fontFace:PPT_FONTE_FORTE, fontSize:22, color:'FFFFFF', isTextBox:true, margin:0 });
-    s.addText(g.nome, { x:x + 0.05, y:yNome, w:larg - 0.1, h:0.58, align:'center', valign:'bottom', fontFace:PPT_FONTE_FORTE, fontSize:pptFonteQueCabe(g.nome, larg - 0.1, 0.58, 14, 8, 2), color:PPT_NAVY, isTextBox:true, margin:0 });
-    const nums = g.total === 0 ? 'Zero infrações no período' : (fmt(g.total) + (g.total === 1 ? ' infração' : ' infrações') + ' · peso ' + fmt(g.peso));
+    s.addText(nomesTxt, { x:x + 0.05, y:yNome, w:larg - 0.1, h:hNome, align:'center', valign:'bottom', fontFace:PPT_FONTE_FORTE, fontSize:pptFonteQueCabe(nomesTxt, larg - 0.1, hNome, k > 1 ? 12 : 14, 7, k > 1 ? 0 : 2), color:PPT_NAVY, isTextBox:true, margin:0 });
+    const nums = g.total === 0 ? (k > 1 ? k + ' GAs com zero infrações no período' : 'Zero infrações no período') : (fmt(g.total) + (g.total === 1 ? ' infração' : ' infrações') + ' · peso ' + fmt(g.peso));
     s.addText(nums, { x:x + 0.05, y:yNum, w:larg - 0.1, h:0.32, align:'center', fontFace:PPT_FONTE, fontSize:pptFonteQueCabe(nums, larg - 0.1, 0.32, 11.5, 8, 1), color: g.total === 0 ? PPT_GREEN : PPT_TEXT_MUTED, bold: g.total === 0, isTextBox:true, margin:0 });
   });
   s.addShape('line', { x:0.5, y:base, w:12.3, h:0, line:{ color:PPT_LINHA_DETALHE, width:1 } });
