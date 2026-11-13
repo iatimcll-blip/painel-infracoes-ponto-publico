@@ -612,7 +612,7 @@
   .legenda-painel h3 span{ font-weight:400; color:var(--text-muted); font-family:var(--mono); font-size:12px; }
   .legenda-nota{ margin:0 0 12px; font-size:12px; color:var(--text-secondary); }
   .legenda-item{ display:flex; gap:10px; align-items:flex-start; margin-bottom:10px; }
-  .legenda-item img{ width:72px; height:72px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex:none; }
+  .legenda-item img, .legenda-item video{ width:72px; height:72px; object-fit:cover; border-radius:6px; border:1px solid var(--border); flex:none; background:#000; }
   .legenda-item label{ flex:1; display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--text-secondary); min-width:0; overflow-wrap:anywhere; }
   .legenda-item textarea{ width:100%; resize:vertical; font-family:var(--sans); font-size:12.5px; color:var(--text-primary); background:var(--page); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
   .legenda-item textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
@@ -647,6 +647,7 @@
   .foto-add input{ display:none; }
   .foto-lightbox{ position:fixed; inset:0; background:rgba(11,11,11,.82); display:none; align-items:center; justify-content:center; padding:16px; z-index:200; }
   .foto-lightbox.show{ display:flex; }
+  .foto-lightbox video{ max-width:100%; max-height:calc(100vh - 32px); border-radius:8px; background:#000; }
   .foto-lightbox img{ max-width:100%; max-height:calc(100vh - 32px); border-radius:8px; box-shadow:0 24px 64px rgba(0,0,0,.4); }
   .foto-lightbox .fl-msg{ color:#fff; font-size:13px; }
 
@@ -1074,9 +1075,9 @@
     <div class="just-passos" role="note">
       <b>Como justificar uma data:</b>
       <span><i>1</i> Digite o <b>nº do chamado</b> da data</span>
-      <span><i>2</i> Anexe <b>no mínimo 2 fotos</b> (máx. 3), cada uma com legenda explicativa</span>
+      <span><i>2</i> Anexe <b>no mínimo 2 fotos ou vídeos</b> (máx. 3; vídeo MP4/MOV até 20 MB), cada um com legenda explicativa</span>
       <span><i>3</i> A caixa de <b>justificativa</b> é liberada — escreva o que aconteceu</span>
-      <span class="just-passos-obs">Sem o nº do chamado e pelo menos 2 fotos a justificativa fica bloqueada (🔒). Remover fotos e ficar com menos de 2 bloqueia de novo. É preciso entrar como GA ou Administrador (Configurações).</span>
+      <span class="just-passos-obs">Sem o nº do chamado e pelo menos 2 fotos/vídeos a justificativa fica bloqueada (🔒). Remover e ficar com menos de 2 bloqueia de novo. É preciso entrar como GA ou Administrador (Configurações).</span>
     </div>
     <div class="hier-blocks" id="hier-blocks"></div>
   </section>
@@ -1499,9 +1500,34 @@ const FOTOS_MAX = 3;
 const FOTOS_MIN_JUSTIFICAR = 2;
 // formatos de foto aceitos no anexo (pedido do usuário: "o arquivo a ser anexado será sempre nos
 // formatos de foto"). Tudo vira JPEG antes de subir (ver prepararFotoComCarimbo).
-const FOTOS_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif';
+// VÍDEOS (pedido do usuário, 2026-11-13): evidência também pode ser vídeo — MP4 ou MOV (formatos que
+// o PowerPoint reproduz embutido). Vídeo NÃO é carimbado nem convertido: sobe como veio, até
+// VIDEO_MAX_MB (limite do envio pro Google Apps Script). Conta no mesmo limite de 3 evidências e
+// no mínimo de 2 da trava da justificativa.
+const VIDEO_MAX_MB = 20;
+const FOTOS_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,video/mp4,video/quicktime,.mp4,.m4v,.mov';
 function ehArquivoDeFoto(f){
   return /^image\/(jpeg|pjpeg|png|webp|heic|heif)$/i.test(f.type || '') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || '');
+}
+function ehArquivoDeVideo(f){
+  return /^video\/(mp4|quicktime|x-m4v)$/i.test(f.type || '') || /\.(mp4|m4v|mov)$/i.test(f.name || '');
+}
+function ehArquivoDeMidia(f){ return ehArquivoDeFoto(f) || ehArquivoDeVideo(f); }
+function mimeDoVideo(f){
+  if (/^video\//i.test(f.type || '')) return f.type.toLowerCase() === 'video/x-m4v' ? 'video/mp4' : f.type.toLowerCase();
+  return /\.mov$/i.test(f.name || '') ? 'video/quicktime' : 'video/mp4';
+}
+function extDoVideo(mime){ return mime === 'video/quicktime' ? 'mov' : 'mp4'; }
+// o Chrome recusa tocar "video/quicktime" mesmo quando o MOV tem vídeo H.264 comum (o normal de
+// celular) — pra TOCAR/gerar a capa no navegador o MOV é rotulado como MP4; o arquivo não muda
+function srcReproduzivel(dataUrl){ return String(dataUrl || '').replace(/^data:video\/quicktime/i, 'data:video/mp4'); }
+function arquivoParaBase64(file){
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(fr.error || new Error('leitura-falhou'));
+    fr.readAsDataURL(file);
+  });
 }
 // token de sessão (supabase_fotos_justificativas.sql, painel_sessoes) que o Apps Script confere
 // antes de aceitar/mostrar/apagar uma foto — obtido no login de GA/Admin, já que a senha só
@@ -4805,13 +4831,13 @@ function anexosHtml(chave, nome, iso){
   const chips = a.fotos.map((f, i) =>
     // mostra o nome do arquivo gravado no Drive (CH-<chamado>_..._n.jpg) — pedido do usuário:
     // "deixar ao lado o nome do arquivo anexo (número do chamado informado)"
-    '<span class="foto-chip"><button type="button" class="foto-ver foto-ver-nome" data-id="'+esc(f.id)+'" title="'+esc((f.legenda ? 'Legenda: ' + f.legenda + ' — ' : '') + 'abrir ' + (f.nome || ('Foto '+(i+1))))+'">✓ '+esc(f.nome || ('Foto '+(i+1)))+'</button>' +
+    '<span class="foto-chip"><button type="button" class="foto-ver foto-ver-nome" data-id="'+esc(f.id)+'" title="'+esc((f.legenda ? 'Legenda: ' + f.legenda + ' — ' : '') + 'abrir ' + (f.nome || ('Foto '+(i+1))))+'">'+(f.tipo === 'video' ? '🎬 ' : '✓ ')+esc(f.nome || ('Foto '+(i+1)))+'</button>' +
     (editavel ? '<button type="button" class="foto-del" data-id="'+esc(f.id)+'" title="Remover esta foto">×</button>' : '') +
     '</span>').join('');
   // só libera anexar com o nº do chamado preenchido (pedido do usuário) — o botão nasce
   // bloqueado e destrava ao digitar (ver atualizarBotaoFoto).
   const add = (editavel && a.fotos.length < FOTOS_MAX)
-    ? '<label class="foto-add'+(a.chamado ? '' : ' bloqueado')+'" title="'+(a.chamado ? 'Anexar foto (máx. '+FOTOS_MAX+' por justificativa)' : 'Digite o nº do chamado para liberar o anexo de fotos')+'">📎 Anexar foto ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="'+FOTOS_ACCEPT+'" multiple'+(a.chamado ? '' : ' disabled')+'></label>'
+    ? '<label class="foto-add'+(a.chamado ? '' : ' bloqueado')+'" title="'+(a.chamado ? 'Anexar foto ou vídeo MP4/MOV (máx. '+FOTOS_MAX+' por justificativa; vídeo até '+VIDEO_MAX_MB+' MB)' : 'Digite o nº do chamado para liberar o anexo de fotos e vídeos')+'">📎 Anexar foto/vídeo ('+a.fotos.length+'/'+FOTOS_MAX+')<input type="file" class="foto-input" accept="'+FOTOS_ACCEPT+'" multiple'+(a.chamado ? '' : ' disabled')+'></label>'
     : '';
   return '<div class="just-anexos" data-chave="'+esc(chave)+'" data-nome="'+esc(nome)+'" data-data="'+esc(iso)+'">' +
     '<input type="text" class="just-chamado" maxlength="60" placeholder="Nº do chamado" value="'+esc(a.chamado)+'"'+chamadoAttrs+'>' +
@@ -4953,14 +4979,26 @@ async function anexarFotos(div, files){
   if (!exigirTokenFotos()) return;
   const atual = STATE.anexos[chave] || { chamado: '', fotos: [] };
   const vagas = FOTOS_MAX - atual.fotos.length;
-  if (vagas <= 0) { showToast('Esta justificativa já tem ' + FOTOS_MAX + ' fotos (o máximo).'); return; }
-  // só formatos de foto (pedido do usuário) — PDF, vídeo, documento etc. são recusados
+  if (vagas <= 0) { showToast('Esta justificativa já tem ' + FOTOS_MAX + ' evidências (o máximo).'); return; }
+  // fotos (JPG, PNG, WEBP, HEIC) e vídeos (MP4, MOV) — PDF, documento etc. são recusados
   const todos = [...files];
-  const lista = todos.filter(ehArquivoDeFoto);
-  const recusados = todos.filter(f => !ehArquivoDeFoto(f));
-  if (!lista.length) { showToast('Só é possível anexar fotos (JPG, PNG, WEBP ou HEIC) — "' + (recusados[0] && recusados[0].name) + '" não é uma foto.'); return; }
-  if (recusados.length) showToast(recusados.length + ' arquivo(s) ignorado(s) por não serem foto: ' + recusados.map(f => f.name).join(', ') + '.');
-  if (lista.length > vagas) showToast('Só cabem mais ' + vagas + ' foto(s) — as demais foram ignoradas.');
+  const grandes = todos.filter(f => ehArquivoDeVideo(f) && f.size > VIDEO_MAX_MB * 1024 * 1024);
+  const lista = todos.filter(f => ehArquivoDeMidia(f) && !grandes.includes(f));
+  const recusados = todos.filter(f => !ehArquivoDeMidia(f));
+  if (grandes.length) showToast('Vídeo grande demais (máx. ' + VIDEO_MAX_MB + ' MB): ' + grandes.map(f => f.name + ' — ' + (f.size / 1048576).toFixed(1) + ' MB').join(', ') + '. Grave um vídeo mais curto.');
+  if (!lista.length) { if (!grandes.length) showToast('Só é possível anexar fotos (JPG, PNG, WEBP, HEIC) ou vídeos (MP4, MOV) — "' + (recusados[0] && recusados[0].name) + '" não é aceito.'); return; }
+  if (recusados.length) showToast(recusados.length + ' arquivo(s) ignorado(s) por não serem foto nem vídeo: ' + recusados.map(f => f.name).join(', ') + '.');
+  if (lista.length > vagas) showToast('Só cabem mais ' + vagas + ' evidência(s) — as demais foram ignoradas.');
+  // vídeo precisa do script do Google atualizado (versão 2 aceita vídeo); confere antes de enviar
+  if (lista.some(ehArquivoDeVideo)) {
+    try { await chamarFotosApi({ acao: 'versao' }); }
+    catch(e) {
+      showToast((e && e.message) === 'acao-desconhecida'
+        ? 'Anexo de vídeo ainda não liberado: o script do Google Drive precisa ser atualizado pelo Administrador. Fotos continuam funcionando.'
+        : msgErroFotos(e));
+      return;
+    }
+  }
   // legenda explicativa OBRIGATÓRIA por foto (pedido do usuário) — sem legenda não envia
   const comLegenda = await pedirLegendasFotos(lista.slice(0, vagas), chamado);
   if (!comLegenda) return; // cancelou
@@ -4978,20 +5016,23 @@ async function anexarFotos(div, files){
   for (const [idx, { file, legenda }] of lote.entries()) {
     // cada foto ocupa uma fatia igual da barra (95% no total; os 5% finais = registrar no painel)
     const ini = idx / lote.length * 95, fatia = 95 / lote.length;
-    const rotulo = 'Foto ' + (idx + 1) + ' de ' + lote.length;
+    const video = ehArquivoDeVideo(file);
+    const rotulo = (video ? 'Vídeo ' : 'Foto ') + (idx + 1) + ' de ' + lote.length;
     try {
       prog.set(ini + fatia * 0.05, rotulo + ' · preparando…');
-      const base64 = await prepararFotoComCarimbo(file, { chamado, nome, dataFmt, justificativa, legenda });
+      // foto: reduzida + carimbo (chamado/legenda/justificativa); vídeo: sobe como veio
+      const mime = video ? mimeDoVideo(file) : 'image/jpeg';
+      const base64 = video ? await arquivoParaBase64(file) : await prepararFotoComCarimbo(file, { chamado, nome, dataFmt, justificativa, legenda });
       const n = fotos.length + 1;
       prog.set(ini + fatia * 0.15, rotulo + ' · enviando ao Drive…');
       prog.avancarAte(ini + fatia * 0.95); // o envio não informa progresso real — anda devagar até o fim da fatia
       const r = await chamarFotosApi({
-        acao: 'upload', chave, base64, justificativa, ga: h.ga || '', nomeOriginal: file.name || '',
-        nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.jpg',
+        acao: 'upload', chave, base64, mime, justificativa, ga: h.ga || '', nomeOriginal: file.name || '',
+        nomeArquivo: 'CH-' + slugArquivo(chamado) + '_' + slugArquivo(nome) + '_' + iso + '_' + n + '.' + (video ? extDoVideo(mime) : 'jpg'),
         cabecalho: 'Chamado: ' + chamado + '\nLegenda: ' + legenda + '\nColaborador: ' + nome + '\nGA: ' + (h.ga || '—') + '\nData da infração: ' + dataFmt,
       });
-      // quem anexou, quando e a legenda, POR FOTO (painel "Fotos anexadas" do Admin e PPT)
-      fotos.push({ id: r.id, nome: r.nome, legenda, por: AUTH.currentUser || null, em: new Date().toISOString() });
+      // quem anexou, quando, a legenda e o TIPO, por evidência (painel do Admin e PPT)
+      fotos.push(Object.assign({ id: r.id, nome: r.nome, legenda, por: AUTH.currentUser || null, em: new Date().toISOString() }, video ? { tipo: 'video', mime } : {}));
       prog.set(ini + fatia, rotulo + ' · enviada ✓');
     } catch(e) { console.error('Falha ao enviar foto.', e); falhou = e; break; }
   }
@@ -5001,13 +5042,13 @@ async function anexarFotos(div, files){
     catch(e) { console.error('Fotos enviadas ao Drive, mas não deu pra registrar no painel.', e); falhou = falhou || e; }
   }
   if (falhou) prog.erro('Falhou — ' + msgErroFotos(falhou));
-  else prog.set(100, 'Concluído ✓ — ' + lote.length + ' foto(s) anexada(s) e enviada(s) ao Drive');
+  else prog.set(100, 'Concluído ✓ — ' + lote.length + ' evidência(s) anexada(s) e enviada(s) ao Drive');
   await new Promise(r => setTimeout(r, falhou ? 2500 : 1600));
   prog.parar();
   redesenharAnexos(div);
   const enviadas = (STATE.anexos[chave] || { fotos: [] }).fotos.length - atual.fotos.length;
-  if (falhou) showToast((enviadas > 0 ? enviadas + ' foto(s) anexada(s), mas ' : '') + msgErroFotos(falhou));
-  else showToast('✓ ' + enviadas + ' foto(s) anexada(s) e enviada(s) ao Drive — chamado ' + chamado + '.');
+  if (falhou) showToast((enviadas > 0 ? enviadas + ' evidência(s) anexada(s), mas ' : '') + msgErroFotos(falhou));
+  else showToast('✓ ' + enviadas + ' evidência(s) anexada(s) e enviada(s) ao Drive — chamado ' + chamado + '.');
 }
 // a legenda tem que EXPLICAR a foto (pedido do usuário: "não poderá ser o número utilizado no
 // chamado, terá que ser um texto explicativo"). Tira o nº do chamado e as palavras "chamado/nº/
@@ -5043,7 +5084,7 @@ function pedirLegendasFotos(files, chamado){
         '<p class="legenda-nota">Escreva uma legenda explicando cada foto — é obrigatória e aparece na apresentação.</p>' +
         files.map((f, i) =>
           '<div class="legenda-item">' +
-            '<img src="' + urls[i] + '" alt="">' +
+            (ehArquivoDeVideo(f) ? '<video src="' + urls[i] + '" muted playsinline preload="metadata"></video>' : '<img src="' + urls[i] + '" alt="">') +
             '<label>Foto ' + (i + 1) + ' — ' + esc(f.name || '') +
               '<textarea maxlength="200" rows="2" placeholder="Ex.: Tela do sistema mostrando a OS aberta às 18h40" data-i="' + i + '"></textarea>' +
               '<span class="legenda-erro" data-erro="' + i + '"></span>' +
@@ -5131,9 +5172,9 @@ function aplicarTravaChamado(row){
   ta.dataset.travadoChamado = travar ? '1' : '';
   let msg = '';
   if (travar) {
-    if (!campo) msg = '🔒 Para justificar, entre como GA ou Administrador, informe o nº do chamado e anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos.';
-    else if (!temChamado) msg = '🔒 Passo 1 de 2: digite o nº do chamado abaixo. Depois anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos para liberar a justificativa.';
-    else msg = '🔒 Passo 2 de 2: anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos (' + (faltamFotos === 1 ? 'falta 1' : 'faltam ' + faltamFotos) + ') para liberar a justificativa.';
+    if (!campo) msg = '🔒 Para justificar, entre como GA ou Administrador, informe o nº do chamado e anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos ou vídeos.';
+    else if (!temChamado) msg = '🔒 Passo 1 de 2: digite o nº do chamado abaixo. Depois anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos ou vídeos para liberar a justificativa.';
+    else msg = '🔒 Passo 2 de 2: anexe pelo menos ' + FOTOS_MIN_JUSTIFICAR + ' fotos ou vídeos (' + (faltamFotos === 1 ? 'falta 1' : 'faltam ' + faltamFotos) + ') para liberar a justificativa.';
   }
   ta.title = msg.replace('🔒 ', '');
   if (aviso) aviso.textContent = msg;
@@ -5255,7 +5296,11 @@ async function verFoto(id){
       const r = await chamarFotosApi({ acao: 'ver', id });
       FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
     }
-    fotoLightbox.innerHTML = '<img alt="Foto anexada à justificativa" src="' + FOTO_CACHE[id] + '">';
+    if (/^data:video\//.test(FOTO_CACHE[id])) {
+      fotoLightbox.innerHTML = '<video controls autoplay playsinline src="' + srcReproduzivel(FOTO_CACHE[id]) + '"></video>';
+      // clicar nos controles do vídeo não fecha a janela
+      fotoLightbox.querySelector('video').addEventListener('click', evt => evt.stopPropagation());
+    } else fotoLightbox.innerHTML = '<img alt="Foto anexada à justificativa" src="' + FOTO_CACHE[id] + '">';
   } catch(e) {
     console.error('Não foi possível abrir a foto.', e);
     fotoLightbox.innerHTML = '<span class="fl-msg">' + esc(msgErroFotos(e)) + '</span>';
@@ -6337,7 +6382,7 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
     const imgs = j.fotos.filter(f => fotos[f.id]).map(f => Object.assign({ legenda: f.legenda || '' }, fotos[f.id]));
     if (!imgs.length) return; // fotos não puderam ser baixadas (sem login/sem rede) — não gera slide vazio
     const s = pres.addSlide();
-    pptCabecalho(s, 'Evidências — ' + j.nome, 'Foto(s) anexada(s) à justificativa (FCA) · ' + d.cicloAtualLabel, eyebrow);
+    pptCabecalho(s, 'Evidências — ' + j.nome, (j.fotos.some(f => f.tipo === 'video') ? 'Fotos e vídeos anexados' : 'Foto(s) anexada(s)') + ' à justificativa (FCA) · ' + d.cicloAtualLabel, eyebrow);
     s._ga = block.ga; s._evidencia = true;
     s.addText([
       { text:'Gestor: ', options:{ bold:true, color:PPT_NAVY } }, { text:block.ga, options:{ color:PPT_NAVY } },
@@ -6358,6 +6403,11 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
     //    com a legenda AO LADO (não rouba altura); uma só -> o maior possível, legenda embaixo.
     // Área útil: da faixa da justificativa (y 2,65") até logo acima do rodapé (y 7,06").
     const AREA_X = 0.5, AREA_W = 12.3, AREA_Y = 2.65, AREA_H = 7.06 - 2.65, GAP = 0.3, LEG_H = 0.42;
+    // vídeo entra EMBUTIDO (toca dentro do PowerPoint, com capa ▶); foto entra como imagem
+    const colocar = (img, pos) => {
+      if (img.tipo === 'video' && typeof s.addMedia === 'function') s.addMedia(Object.assign({ type:'video', data: img.data, cover: img.cover, extn: img.extn }, pos));
+      else s.addImage(Object.assign({ data: img.tipo === 'video' ? img.cover.replace(/^data:/, '') : img.data }, pos));
+    };
     const verticais = imgs.filter(img => img.hIn > img.wIn), horizontais = imgs.filter(img => img.hIn <= img.wIn);
     const legendaEmbaixo = (img, x, y, w) => {
       if (!img.legenda) return;
@@ -6370,7 +6420,7 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
     const altV = PPT_FOTO_RETRATO.hIn;
     verticais.forEach(img => {
       const y = AREA_Y + (AREA_H - LEG_H - altV) / 2 + (altV - img.hIn) / 2;
-      s.addImage({ data: img.data, x: xV, y, w: img.wIn, h: img.hIn });
+      colocar(img, { x: xV, y, w: img.wIn, h: img.hIn });
       legendaEmbaixo(img, xV, y + img.hIn, img.wIn);
       xV += img.wIn + GAP;
     });
@@ -6382,7 +6432,7 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
         const img = horizontais[0], r = img.wIn / img.hIn;
         const h = Math.min(AREA_H - LEG_H, colW / r), w = h * r;
         const x = AREA_X + (colW - w) / 2, y = AREA_Y + (AREA_H - LEG_H - h) / 2;
-        s.addImage({ data: img.data, x, y, w, h });
+        colocar(img, { x, y, w, h });
         legendaEmbaixo(img, x, y + h, w);
       } else {
         const GAP_V = 0.15, LEG_W_MIN = 2.2;
@@ -6400,7 +6450,7 @@ function pptSlidesEvidenciasGA(pres, block, d, fotos, eyebrow, rodapeTxt){
         blocos.forEach(({ img, temLeg, h, w }, i) => {
           const legW = temLeg ? Math.min(3.6, colW - w - 0.2, Math.max(legWComum, 0) + (maxW - w)) : 0;
           const x = x0, y = AREA_Y + i * (slotH + GAP_V) + (slotH - h) / 2;
-          s.addImage({ data: img.data, x, y, w, h });
+          colocar(img, { x, y, w, h });
           if (temLeg) {
             const f = pptFonteQueCabe(img.legenda, legW, h, 11, 7.5, 0);
             s.addText(pptCortarParaCaber(img.legenda, legW, h, f), { x: x + w + 0.2, y, w: legW, h, align:'left', valign:'middle', fontFace:PPT_FONTE, fontSize:f, italic:true, color:PPT_TEXT_MUTED, isTextBox:true, margin:0 });
@@ -6448,6 +6498,32 @@ async function fotoNoTamanhoPadraoPPT(dataUrl){
   canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
   return { data: canvas.toDataURL('image/jpeg', 0.75).replace(/^data:/, ''), wIn: moldura.wIn, hIn: moldura.hIn };
 }
+// vídeo pro slide: embute o vídeo como veio (MP4/MOV) e gera a CAPA (quadro do vídeo com o
+// símbolo ▶) que aparece até dar play. Tamanho segue a regra das fotos SEM recorte: horizontal
+// cabe em 9,12 × 7,65 cm, vertical em 9,12 × 10,19 cm, mantendo a proporção.
+async function videoNoTamanhoPadraoPPT(dataUrl){
+  const mime = (dataUrl.match(/^data:([^;]+);/) || [])[1] || 'video/mp4';
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto';
+  v.src = srcReproduzivel(dataUrl);
+  // se o navegador não ler o vídeo (ex.: HEVC de iPhone no Windows), segue com capa genérica 16:9
+  const leu = await new Promise(ok => { v.onloadedmetadata = () => ok(true); v.onerror = () => ok(false); setTimeout(() => ok(false), 8000); });
+  const vw = (leu && v.videoWidth) || 1280, vh = (leu && v.videoHeight) || 720;
+  if (leu) await new Promise(ok => { v.onseeked = ok; v.currentTime = Math.min(1, (v.duration || 2) / 3); setTimeout(ok, 4000); });
+  const moldura = vw >= vh ? PPT_FOTO_PAISAGEM : PPT_FOTO_RETRATO;
+  const escala = Math.min(moldura.wIn / vw, moldura.hIn / vh);
+  const wIn = vw * escala, hIn = vh * escala;
+  const cv = document.createElement('canvas');
+  cv.width = Math.min(vw, Math.round(wIn * 150)); cv.height = Math.max(1, Math.round(cv.width * vh / vw));
+  const x = cv.getContext('2d');
+  x.fillStyle = '#111'; x.fillRect(0, 0, cv.width, cv.height);
+  if (leu) { try { x.drawImage(v, 0, 0, cv.width, cv.height); } catch(e) {} }
+  // símbolo de play no centro
+  const r = Math.min(cv.width, cv.height) * 0.12, cx = cv.width / 2, cy = cv.height / 2;
+  x.fillStyle = 'rgba(0,0,0,.55)'; x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  x.fillStyle = '#fff'; x.beginPath(); x.moveTo(cx - r * 0.35, cy - r * 0.5); x.lineTo(cx + r * 0.55, cy); x.lineTo(cx - r * 0.35, cy + r * 0.5); x.closePath(); x.fill();
+  return { tipo:'video', data: dataUrl.replace(/^data:/, ''), extn: extDoVideo(mime), cover: cv.toDataURL('image/png'), wIn, hIn };
+}
 // baixa (do Drive, via Apps Script) todas as fotos que vão entrar na apresentação — só das
 // justificativas do período em exibição. Precisa de login de GA/Admin (sessão de fotos).
 const PPT_FOTO_PRONTA = {};
@@ -6469,7 +6545,7 @@ async function baixarFotosParaApresentacao(d, silencioso, aoProgredir){
             const r = await chamarFotosApi({ acao: 'ver', id });
             FOTO_CACHE[id] = 'data:' + (r.mime || 'image/jpeg') + ';base64,' + r.base64;
           }
-          PPT_FOTO_PRONTA[id] = await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]);
+          PPT_FOTO_PRONTA[id] = /^data:video\//.test(FOTO_CACHE[id]) ? await videoNoTamanhoPadraoPPT(FOTO_CACHE[id]) : await fotoNoTamanhoPadraoPPT(FOTO_CACHE[id]);
           fotoCacheGravar(id, PPT_FOTO_PRONTA[id]);
         }
         out[id] = PPT_FOTO_PRONTA[id];
@@ -6831,6 +6907,7 @@ class PresGravada {
     s.addShape = (f, o) => { s.itens.push({ tipo:'forma', f, o:o || {} }); return s; };
     s.addImage = o => { s.itens.push({ tipo:'imagem', o:o || {} }); return s; };
     s.addTable = (r, o) => { s.itens.push({ tipo:'tabela', r, o:o || {} }); return s; };
+    s.addMedia = o => { s.itens.push({ tipo:'midia', o:o || {} }); return s; };
     this.slides.push(s);
     return s;
   }
@@ -6899,12 +6976,20 @@ function apTabela(rows, o){
   }).join('') + '</tr>').join('');
   return '<table style="left:' + apPx(o.x) + 'px;top:' + apPx(o.y) + 'px;width:' + apPx(o.w) + 'px;"><colgroup>' + cols + '</colgroup>' + corpo + '</table>';
 }
-function desenhaSlideHTML(slide){
+// vídeo na prévia: player com a capa; nas miniaturas (soCapa) só a capa, pra não pesar
+function apMidia(o, soCapa){
+  const capa = String(o.cover || '');
+  if (soCapa || !o.data) return '<img alt="" src="' + capa + '" style="' + apCaixa(o) + '">';
+  const src = srcReproduzivel(String(o.data).startsWith('data:') ? o.data : 'data:' + o.data);
+  return '<video controls playsinline preload="metadata" poster="' + capa + '" src="' + src + '" style="position:absolute;' + apCaixa(o) + 'background:#000;object-fit:contain"></video>';
+}
+function desenhaSlideHTML(slide, soCapa){
   const fundo = slide.background && slide.background.color ? apCor(slide.background.color) : '#ffffff';
   return '<div class="ap-slide" style="background:' + fundo + '">' + slide.itens.map(it => {
     if (it.tipo === 'texto') return apTexto(it.t, it.o);
     if (it.tipo === 'forma') return apForma(it.f, it.o);
     if (it.tipo === 'imagem') return apImagem(it.o);
+    if (it.tipo === 'midia') return apMidia(it.o, soCapa);
     if (it.tipo === 'tabela') return apTabela(it.r, it.o);
     return '';
   }).join('') + '</div>';
@@ -6979,7 +7064,7 @@ function observarMiniaturasApresentacao(){
     if (b.dataset.pronta) return;
     const sl = APRES.slides[Number(b.dataset.i)];
     if (!sl) return;
-    b.insertAdjacentHTML('afterbegin', desenhaSlideHTML(sl));
+    b.insertAdjacentHTML('afterbegin', desenhaSlideHTML(sl, true));
     b.dataset.pronta = '1';
   };
   if (apObservador) apObservador.disconnect();

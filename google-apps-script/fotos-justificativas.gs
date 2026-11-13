@@ -22,7 +22,8 @@ const SUPABASE_URL = 'https://ymltjceiviyadckxzbxw.supabase.co';
 // chave pública "anon" — a mesma que já está no index.html; não é segredo.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbHRqY2Vpdml5YWRja3h6Ynh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2NzQyNTMsImV4cCI6MjEwNTI1MDI1M30.dCtuE0oKMe29nH5rCV5hVl9A3AzL-PF-G_G5c-spiVg';
 const NOME_PASTA = 'Painel Infrações - Fotos das Justificativas';
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 25 * 1024 * 1024; // vídeos MP4/MOV até ~20 MB (o painel limita em 20)
+const VERSAO = 2; // 2 = aceita vídeo
 const SEPARADOR_JUST = '--- Justificativa ---';
 
 function configurar() {
@@ -40,6 +41,7 @@ function doPost(e) {
     const sess = validarSessao_(req.token, req.chave || null);
     if (!sess || !sess.ok) return json_({ ok: false, erro: 'sessao-invalida' });
     switch (req.acao) {
+      case 'versao': return json_({ ok: true, versao: VERSAO });
       case 'upload': return json_(upload_(req, sess));
       case 'ver': return json_(ver_(req));
       case 'excluir': return json_(excluir_(req, sess));
@@ -78,7 +80,9 @@ function criarFoto_(req, sess) {
   const bytes = Utilities.base64Decode(req.base64);
   if (bytes.length > MAX_BYTES) return { ok: false, erro: 'foto-grande-demais' };
   const nome = String(req.nomeArquivo || 'foto.jpg').replace(/[^\w.\-]/g, '_').slice(0, 150);
-  const blob = Utilities.newBlob(bytes, 'image/jpeg', nome);
+  // foto (JPEG carimbado pelo painel) ou vídeo (MP4/MOV como veio) — só esses tipos
+  const mime = /^(image\/jpeg|video\/mp4|video\/quicktime)$/.test(String(req.mime || '')) ? req.mime : 'image/jpeg';
+  const blob = Utilities.newBlob(bytes, mime, nome);
   const file = subpastaDoGa_(nomeSubpasta_(req, sess)).createFile(blob);
   const cab = String(req.cabecalho || '').slice(0, 1500);
   const original = String(req.nomeOriginal || '').slice(0, 200);
@@ -87,7 +91,7 @@ function criarFoto_(req, sess) {
     '\nEnviado por: ' + sess.username + ' em ' + agora_() +
     '\nRef: ' + req.chave + '\n' + SEPARADOR_JUST + '\n' + String(req.justificativa || '').slice(0, 2500)
   );
-  return { ok: true, id: file.getId(), nome: file.getName() };
+  return { ok: true, id: file.getId(), nome: file.getName(), mime: mime };
 }
 
 function ver_(req) {
