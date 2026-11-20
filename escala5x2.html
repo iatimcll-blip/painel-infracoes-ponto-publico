@@ -1716,7 +1716,8 @@ $('impFile').addEventListener('change',async ev=>{
 // linhas da planilha padrão: cabeçalho + colaboradores da área de quem baixa (GA: só os dele;
 // administrador: todos). Sem ninguém cadastrado, vai 1 linha de exemplo começando com # (ignorada).
 function modelRows(){
-  const L=emps.slice().sort((a,b)=>azSort(a.ga||'',b.ga||'')||azSort(a.team||'~',b.team||'~')||azSort(a.name,b.name)).map(e=>[e.name,e.role||'',SOB_EXP[e.mode||'auto']||'',e.ga||'',e.go||'',e.team||'',e.city||'',e.uf||'']);
+  const gas=[...new Set(emps.map(e=>e.ga||''))].sort(azSort);
+  const L=gas.flatMap(g=>agruparEquipes(emps.filter(e=>(e.ga||'')===g))).map(e=>[e.name,e.role||'',SOB_EXP[e.mode||'auto']||'',e.ga||'',e.go||'',e.team||'',e.city||'',e.uf||'']);
   if(!L.length)L.push(['# Exemplo (apague esta linha): Maria Silva','Técnico','',GA_LOCK||GA_LIST[0]||'',(GA_LOCK&&GA_GO[GA_LOCK])||GO_LIST[0]||'','E1','Teresina','PI']);
   return[IMP_COLS.slice()].concat(L);
 }

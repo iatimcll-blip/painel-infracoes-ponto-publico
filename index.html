@@ -7238,8 +7238,8 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'escala5x2') {
     const f = document.getElementById('escala5x2-frame');
     const sess = (AUTH.currentRole || '') + '|' + (AUTH.currentGaNome || '');
-    if (!f.getAttribute('src')) f.src = 'escala5x2.html#principal';
-    else if (f.dataset.sess !== sess) { try { f.contentWindow.location.reload(); } catch(e) { f.src = 'escala5x2.html#principal'; } }
+    if (!f.getAttribute('src')) f.src = 'escala5x2.html?v=' + Date.now() + '#principal'; // ?v= evita o navegador usar uma cópia antiga da escala
+    else if (f.dataset.sess !== sess) { f.src = 'escala5x2.html?v=' + Date.now() + '#principal'; }
     f.dataset.sess = sess;
   }
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
