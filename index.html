@@ -136,6 +136,7 @@
   .tab-btn:hover{ color:var(--text-primary); }
   .tab-btn.active{ color:var(--s1); border-bottom-color:var(--s1); }
   .tab-panel{ display:none; flex-direction:column; gap:28px; }
+  .escala5x2-frame{ width:100%; height:calc(100vh - 150px); height:calc(100dvh - 150px); min-height:600px; border:1px solid var(--border); border-radius:12px; background:#f6f7f5; }
   /* ---------- aba Apresentação ---------- */
   .ap-bloco{ display:flex; flex-direction:column; gap:12px; min-width:0; width:100%; }
   /* modo apresentação (aba Apresentação ativa): topo enxuto pra dar mais altura ao slide */
@@ -927,6 +928,7 @@
     <button type="button" class="tab-btn" data-tab="dsr" role="tab" aria-selected="false">DSR</button>
     <button type="button" class="tab-btn" data-tab="feriado" role="tab" aria-selected="false">Feriados</button>
     <button type="button" class="tab-btn" data-tab="apresentacao" role="tab" aria-selected="false">Apresentação</button>
+    <button type="button" class="tab-btn" data-tab="escala5x2" role="tab" aria-selected="false">Escala 5X2</button>
   </nav>
 
   <div id="tab-infracoes" class="tab-panel active">
@@ -1221,6 +1223,12 @@
   <!-- Apresentação: a MESMA apresentação do botão de PowerPoint, desenhada na tela pra passar os
        slides (pedido do usuário). Não é <section> de propósito — fica fora do "Copiar/Excel/recolher"
        automático dos blocos. -->
+  <!-- Escala 5X2: o painel de escala (EC 141/2026) completo, com todas as regras e dados dele,
+       em escala5x2.html — carregado só quando a aba é aberta. Os dados ficam salvos no navegador. -->
+  <div id="tab-escala5x2" class="tab-panel">
+    <iframe id="escala5x2-frame" class="escala5x2-frame" title="Painel de Escala 5X2" loading="lazy"></iframe>
+  </div>
+
   <div id="tab-apresentacao" class="tab-panel">
     <div class="ap-bloco">
       <div class="section-head">
@@ -7285,6 +7293,8 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'bh') renderBH();
   else if (alvo === 'dsr') renderDSR();
   else if (alvo === 'feriado') renderFeriado();
+  // Escala 5X2: carrega a página da escala na primeira vez que a aba é aberta
+  else if (alvo === 'escala5x2') { const f = document.getElementById('escala5x2-frame'); if (!f.getAttribute('src')) f.src = 'escala5x2.html#principal'; }
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
   // Infrações) e monta a prévia
   else if (alvo === 'apresentacao') { window.scrollTo(0, 0); ajustarEscalaApresentacao(); recomputeAndRender(); agendarPreviaApresentacao(); }

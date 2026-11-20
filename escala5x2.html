@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel de Escala 5x2 – EC 141/2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f5;--card:#fff;--ink:#17201c;--mut:#5d6b64;--line:#dfe4e0;--acc:#0f6b57;--acc2:#e7f3ef;--off:#d9efe6;--offink:#0b5a47;--work:#f1f3f2;--bad:#b3261e;--badbg:#fdeceb;--warn:#8a5a00;--warnbg:#fff4d6;--ok:#0b6b3a}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+html{-webkit-text-size-adjust:100%}body{overflow-x:hidden}
+header{padding:20px clamp(10px,2vw,28px) 8px;max-width:1800px;margin:0 auto}
+h1{margin:0;font-size:22px}
+header p{margin:4px 0 0;color:var(--mut)}
+main{max-width:1800px;margin:0 auto;padding:8px clamp(10px,2vw,28px) 40px;display:grid;gap:14px}
+main>*,#result>*{min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h2{margin:0 0 10px;font-size:16px}
+details.card summary{cursor:pointer;font-weight:600}
+details.card ul{margin:10px 0 0;padding-left:20px}
+details.card li{margin:4px 0}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;background:var(--acc2);color:var(--acc);font-weight:600;font-size:13px;margin-top:8px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+input[type=month],input[type=number],input[type=time],input[type=date],select,textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
+textarea{min-height:130px;resize:vertical}
+.monthbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.monthbar select{width:auto;flex:1;min-width:110px}.monthbar .btn{padding:8px 14px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 12px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--ink);cursor:pointer;font:inherit}
+.chip[aria-pressed=true]{background:var(--acc);border-color:var(--acc);color:#fff}
+
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--ink);margin:8px 0}
+.chk input{margin-top:3px}
+.hint{font-size:12.5px;color:var(--mut);margin:4px 0 0}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+button.btn{padding:10px 16px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button.btn.sec{background:transparent;color:var(--acc)}
+
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.checks li{display:flex;gap:8px;padding:8px 10px;border-radius:8px;background:var(--work)}
+.checks li.fail{background:var(--badbg)}.checks li.warn{background:var(--warnbg)}
+.checks .ic{font-weight:700;width:18px;flex:none}
+.checks .ok .ic{color:var(--ok)}.checks .fail .ic{color:var(--bad)}.checks .warn .ic{color:var(--warn)}
+.checks small{display:block;color:var(--mut)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;font-size:12px;width:100%;min-width:var(--minw,0)}
+th,td{padding:0;text-align:center;border-bottom:1px solid var(--line)}
+th{font-weight:600;padding:4px 0;min-width:0;background:var(--card);color:var(--mut);line-height:1.15}
+th small{display:block;font-weight:400}
+th.sun{color:var(--bad)}
+th.out,td.out{opacity:.5}
+th.mon,td.mon{border-left:2px solid var(--line)}
+th.closed{text-decoration:line-through}
+th.name,td.name{position:sticky;left:0;z-index:1;background:var(--card);text-align:left;padding:4px 10px;width:130px;min-width:110px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-right:1px solid var(--line);font-size:13px}
+td.name{font-weight:500}
+.c{width:100%;min-width:20px;height:28px;border:0;background:var(--work);color:var(--mut);font:inherit;font-size:12px;cursor:pointer;display:block;margin:0}
+.c.F{background:var(--off);color:var(--offink);font-weight:700}
+.c:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}
+tr.cov td,tr.cov th{font-size:11.5px;padding:3px 0;color:var(--mut)}
+td.low{background:var(--badbg);color:var(--bad);font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin:8px 0 0}
+.legend b{display:inline-block;width:18px;text-align:center;border-radius:4px;background:var(--work);margin-right:4px}
+.legend b.F{background:var(--off);color:var(--offink)}
+table.sum{width:100%}table.sum th,table.sum td{padding:6px 8px;text-align:left;font-size:13px;border-bottom:1px solid var(--line)}
+table.sum th{color:var(--mut)}
+.src a{color:var(--acc)}
+.small{font-size:12.5px;color:var(--mut)}
+details summary{cursor:pointer}
+.emps{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px;max-height:340px;overflow-y:auto}
+.emps li{display:grid;grid-template-columns:1fr 1fr 150px auto;gap:6px;align-items:center}
+.sobchk{display:flex;gap:5px;align-items:center;font-size:12.5px;color:var(--mut);margin:0;white-space:nowrap}.sobchk input{width:auto}
+.dh{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;width:100%;padding:2px 0;line-height:1.15}.dh:hover{outline:2px solid var(--acc);outline-offset:-2px}
+th.saoff{background:repeating-linear-gradient(45deg,transparent 0 4px,var(--line) 4px 5px)}th.saoff .dh{opacity:.55}.sa.off{background:repeating-linear-gradient(45deg,transparent 0 4px,var(--line) 4px 5px)}
+.sa{border:0;background:transparent;padding:0;cursor:pointer;font-family:inherit;display:block;width:100%;min-width:20px;height:28px;line-height:28px;font-size:11px;font-weight:700;text-align:center}.sa.on{background:#ffe3b3;color:#6b4200}.sa:hover{outline:2px solid var(--acc);outline-offset:-2px}.sa.lock{cursor:not-allowed;color:var(--mut);opacity:.55;background:var(--work);font-weight:400}.sa.lock:hover{outline:none}.sa.ovr{box-shadow:inset 0 0 0 2px var(--acc)}.sa.on.cvr{background:#cfe0ff;color:#13367a}
+
+.c.S{background:#ffe3b3;color:#6b4200;font-weight:700}.c.cv{background:#cfe0ff;color:#13367a;font-weight:700}
+
+.cvT select{padding:4px 6px;width:auto;min-width:130px}.cvT td,.cvT th{padding:6px 10px;text-align:left;font-size:13px}.cvT th{color:var(--mut)}.forced{color:var(--warn);font-size:12px}
+.ocT .c{min-width:40px}
+.emps input{padding:6px 8px}
+.xbtn{border:1px solid var(--line);background:transparent;color:var(--bad);border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer}
+.addrow{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end}
+.emps li{grid-template-columns:1.1fr .9fr 1fr 1fr 130px auto}
+@media(max-width:900px){.addrow{grid-template-columns:1fr 1fr}.emps li{grid-template-columns:1fr 1fr auto}.emps li .xbtn{grid-column:3;grid-row:1}.emps li .nm{grid-column:1/3}}
+@media(max-width:520px){.addrow{grid-template-columns:1fr}.emps li{grid-template-columns:1fr auto}.emps li .role{grid-column:1;grid-row:2}.emps li .mode{grid-column:1;grid-row:3}.emps li .xbtn{grid-row:1/4;grid-column:2}}
+.msg{font-size:13px;margin:8px 0 0;color:var(--ok)}.msg.err{color:var(--bad)}
+.imp{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.radios{display:flex;gap:14px;flex-wrap:wrap;font-size:14px;margin:8px 0}.radios label{display:flex;gap:6px;align-items:center;color:var(--ink);margin:0}.radios input{width:auto}
+
+
+.tabs{display:flex;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0}
+.tabs button{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--acc);border-color:var(--acc);color:#fff}
+
+.view{display:grid;gap:14px}.view[hidden]{display:none}
+#secBadge{font-weight:700}
+.cfg{padding:10px 12px}.cfg h2{margin:0 0 6px;font-size:15px}
+.cfg label{font-size:11.5px;margin-bottom:1px}
+.cfg input[type=number],.cfg input[type=time],.cfg input[type=date],.cfg select{padding:4px 6px;font-size:13px}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px 8px;margin-top:6px}
+.crow{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:8px}
+.crow .chk{margin:0;font-size:13px;white-space:nowrap}.crow .grow{flex:1}
+.cfg .chip{padding:3px 10px;font-size:13px}
+.cfg .btn{padding:6px 12px;font-size:13px}
+.cfg .monthbar .btn{padding:4px 12px}.cfg .monthbar select{min-width:90px;padding:4px 6px;font-size:13px;flex:0 1 150px}
+.cfg .dts summary{cursor:pointer}
+
+/* ===== tema moderno ===== */
+:root{--bg:#f3f5f9;--card:#ffffff;--ink:#0f172a;--mut:#64748b;--line:#e6eaf1;--acc:#0f766e;--acc2:#e3f4f1;--off:#d5f5e6;--offink:#065f46;--work:#f1f5f9;--bad:#b42318;--badbg:#fdeceb;--warn:#8a5a00;--warnbg:#fff6dc;--ok:#0b7a43;--sa-bg:#fde7a7;--sa-ink:#6b4200;--cv-bg:#d6e4ff;--cv-ink:#1e3a8a;--sh:0 1px 2px rgba(15,23,42,.05),0 12px 28px -16px rgba(15,23,42,.18)}
+
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);-webkit-font-smoothing:antialiased;letter-spacing:-.005em}
+header{padding-top:18px}
+.hero{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:20px 24px;border-radius:20px;color:#fff;background:radial-gradient(120% 140% at 0% 0%,#14b8a6 0%,#0f766e 45%,#134e4a 100%);box-shadow:var(--sh)}
+.hero h1{font-size:clamp(20px,3vw,28px);font-weight:700;letter-spacing:-.02em;color:#fff}
+.hero p{margin:4px 0 0;color:rgba(255,255,255,.82);font-size:14px}
+.eyebrow{display:inline-block;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.8);margin-bottom:6px}
+.hero .badge{margin:0;background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.3);backdrop-filter:blur(6px);padding:6px 14px}
+.card{border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:16px 18px}
+.card h2{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:650;letter-spacing:-.01em}
+.card h2::before{content:"";width:4px;height:16px;border-radius:4px;background:var(--acc);flex:none}
+.cfg h2{font-size:14px}
+details.card>summary{font-weight:600}
+input[type=month],input[type=number],input[type=time],input[type=date],input[type=text],select,textarea{border-radius:10px;border:1px solid var(--line);background:var(--card);transition:border-color .15s,box-shadow .15s}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 25%,transparent)}
+label{font-weight:500}
+button.btn{border-radius:10px;box-shadow:0 1px 2px rgba(15,23,42,.12);transition:transform .12s,box-shadow .12s,background .12s}
+button.btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px -6px color-mix(in srgb,var(--acc) 60%,transparent)}
+button.btn.sec{background:var(--acc2);border-color:transparent;box-shadow:none}
+button.btn.sec:hover{background:color-mix(in srgb,var(--acc2) 70%,var(--acc) 12%)}
+.chip{border-radius:999px;background:var(--work);border-color:transparent;transition:background .12s}
+.chip[aria-pressed=true]{background:var(--acc);box-shadow:0 2px 8px -3px color-mix(in srgb,var(--acc) 70%,transparent)}
+.tabs{background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(10px);padding:8px 0;gap:4px}
+.tabs button{border:0;border-radius:999px;background:var(--card);box-shadow:var(--sh);color:var(--mut);padding:10px 16px}
+.tabs button[aria-selected=true]{background:var(--acc);color:#fff;box-shadow:0 8px 18px -8px color-mix(in srgb,var(--acc) 80%,transparent)}
+.checks li{border-radius:12px;background:var(--work);border-left:3px solid transparent}
+.checks li.ok{border-left-color:var(--ok)}.checks li.fail{border-left-color:var(--bad)}.checks li.warn{border-left-color:var(--warn)}
+.scroll{border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:separate;border-spacing:0}
+th,td{border-bottom:0}
+td{padding:2px 1px}
+th{padding:8px 1px 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid var(--line)}
+th small{font-size:12px;font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;margin-top:1px}
+th.sun,th.sun small{color:var(--bad)}
+th.name,td.name{border-right:1px solid var(--line);font-weight:600;box-shadow:6px 0 8px -8px rgba(15,23,42,.25)}
+tr:nth-child(even) td.name{background:color-mix(in srgb,var(--card) 94%,var(--work))}
+th.mon,td.mon{border-left:1px dashed var(--line)}
+.c,.sa{border-radius:7px;height:26px;line-height:26px;font-weight:600;transition:transform .08s,filter .12s}
+.c{background:var(--work);color:var(--mut)}
+.c:hover,.sa:hover{filter:brightness(.96);outline:none;transform:scale(1.06)}
+.c.F{background:var(--off);color:var(--offink)}
+.c.S,.sa.on{background:var(--sa-bg);color:var(--sa-ink)}
+.c.cv,.sa.on.cvr{background:var(--cv-bg);color:var(--cv-ink)}
+.sa.lock{background:var(--work);color:var(--mut);opacity:.5}.sa.lock:hover{transform:none;filter:none}
+.sa.ovr{box-shadow:inset 0 0 0 2px var(--acc)}
+.dh{border-radius:6px}.dh:hover{outline:none;background:var(--acc2)}
+tr.cov td{font-weight:600}
+td.low{background:var(--badbg);border-radius:6px}
+.legend{gap:8px 16px;margin-top:10px}
+.legend b{width:auto;min-width:22px;padding:1px 6px;border-radius:6px;font-weight:600}
+.legend b.lsa{background:var(--sa-bg);color:var(--sa-ink)}.legend b.lcv{background:var(--cv-bg);color:var(--cv-ink)}
+table.sum th,table.sum td,.cvT th,.cvT td{border-bottom:1px solid var(--line)}
+table.sum th{text-transform:uppercase;font-size:10.5px;letter-spacing:.04em;padding:8px}
+table.sum tr:nth-child(even) td{background:color-mix(in srgb,var(--card) 95%,var(--work))}
+.emps input{border-radius:8px}
+.xbtn{border-radius:10px}.xbtn:hover{background:var(--badbg)}
+.cfg{padding:12px 14px}
+.monthbar select{border-radius:999px}
+.small{color:var(--mut)}
+main,.view{grid-template-columns:minmax(0,1fr)}.view>*{min-width:0}
+.crow .chk{white-space:normal}
+::selection{background:color-mix(in srgb,var(--acc) 30%,transparent)}
+@media(max-width:600px){.hero{padding:16px}.card{padding:12px 12px;border-radius:14px}}
+:root{color-scheme:light;--bg:#ffffff}
+html,body{background:#ffffff;color:var(--ink)}
+
+:root{--t-bg:#1e3a8a;--t-ink:#ffffff;--f-bg:#fee2e2;--f-ink:#b91c1c;--c-bg:#fed7aa;--c-ink:#9a3412}
+.c{background:var(--t-bg);color:var(--t-ink)}
+.c.F{background:var(--f-bg);color:var(--f-ink)}
+.c.cv,.sa.on.cvr{background:var(--c-bg);color:var(--c-ink)}
+.sa.lock{background:var(--f-bg);color:var(--f-ink);opacity:.55}
+.ocT .c:not(.S){background:var(--work);color:var(--mut)}
+.legend b.lt{background:var(--t-bg);color:var(--t-ink)}.legend b.F{background:var(--f-bg);color:var(--f-ink)}.legend b.lcv{background:var(--c-bg);color:var(--c-ink)}
+
+th.name,td.name{width:215px;min-width:150px;max-width:235px}
+.tm{display:inline-block;font-size:10px;font-weight:700;line-height:1;padding:3px 5px;border-radius:6px;margin-right:6px;vertical-align:1px}
+.addrow{grid-template-columns:1fr 1fr 90px 1fr 1fr auto}
+.emps li{grid-template-columns:1.3fr .7fr 80px 70px 150px 1fr 1fr 120px auto}
+@media(max-width:1100px){.addrow{grid-template-columns:1fr 1fr 1fr}.emps li{grid-template-columns:1fr 1fr 1fr auto}.emps li .nm{grid-column:1/4}.emps li .xbtn{grid-column:4;grid-row:1}.emps li .role,.emps li .team,.emps li .uf,.emps li .city,.emps li .mode{grid-column:auto;grid-row:auto}.emps li .ga,.emps li .go{grid-column:span 2;grid-row:auto}}
+@media(max-width:600px){.addrow{grid-template-columns:1fr}.emps li{grid-template-columns:1fr 1fr 44px}.emps li .nm{grid-column:1/3}.emps li .xbtn{grid-column:3;grid-row:1}.emps li .role{grid-column:1}.emps li .team{grid-column:2}.emps li .uf{grid-column:1}.emps li .city{grid-column:2/4}.emps li .ga,.emps li .go,.emps li .mode{grid-column:1/4}}
+.fbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 14px}.fbar select{width:auto;min-width:240px;flex:0 1 340px}
+tr.tsep>td,tr.tsep>th{border-top:2px solid var(--acc)}
+.emps li.tsep{border-top:2px solid var(--acc);padding-top:8px;margin-top:4px}
+.hasact{position:relative}.hasact .act{position:absolute;top:10px;right:14px;padding:6px 12px;font-size:13px}
+.hasact>h2{padding-right:150px}
+#imgModal{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+#imgModal[hidden]{display:none}
+#imgModal .box{background:#fff;border-radius:16px;max-width:96vw;max-height:92vh;overflow:auto;padding:16px;box-shadow:var(--sh)}
+#imgModal img{max-width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:8px}
+.c.V,.sa.vacb{background:#ede9fe;color:#5b21b6;font-weight:700;font-size:10px;cursor:default}.c.V:hover,.sa.vacb:hover{transform:none;filter:none}
+.legend b.lvac{display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:0 6px;margin-right:6px;font-size:11px}
+.vacRow{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:10px;align-items:end}
+@media(max-width:700px){.vacRow{grid-template-columns:1fr 1fr}.vacRow>div:first-child{grid-column:1/-1}}
+.vacList{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}.vacList li{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.small.ct,small.ct{display:block;font-size:10.5px;font-weight:500;color:var(--mut);line-height:1.15;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fbar2{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:0 0 10px}.fbar2 label{margin:0;font-size:12.5px;font-weight:600;color:var(--ink)}.fbar2 select{width:auto;min-width:130px;max-width:230px}
+td.cut-s,th.cut-s{border-left:3px solid #0f172a!important}td.cut-e,th.cut-e{border-right:3px solid #0f172a!important}
+th.pairbad{background:#dc2626!important;color:#fff!important}th.pairbad *{color:#fff!important}td.pairbad{background:#fecaca!important}td.pairbad button{outline:2px solid #dc2626;outline-offset:-2px}
+.legend b.lbad{display:inline-block;background:#dc2626;color:#fff;border-radius:6px;padding:0 6px;margin-right:6px;font-size:11px}
+
+/* ===== modo compacto ===== */
+body{font-size:13.5px;line-height:1.35}
+header{padding:6px clamp(8px,1.4vw,18px) 0}
+.hero{padding:6px 14px;border-radius:12px;gap:8px;flex-wrap:nowrap}
+.hero>div{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.hero h1{font-size:17px}.hero p,.hero .eyebrow{margin:0;font-size:11.5px}.hero p{display:none}
+.hero .badge{padding:3px 10px;font-size:12px}
+main{gap:8px;padding:4px clamp(8px,1.4vw,18px) 20px}.view{gap:8px}
+.card{padding:8px 12px;border-radius:12px}
+.card h2{font-size:13.5px;margin:0 0 6px}.card h2::before{height:12px;width:3px}
+.tabs{padding:4px 0}.tabs button{padding:5px 12px;font-size:13px}
+input[type=month],input[type=number],input[type=time],input[type=date],input[type=text],select,textarea{padding:3px 7px;font-size:13px;border-radius:8px}
+textarea{min-height:70px}
+label{font-size:11.5px;margin-bottom:1px}
+button.btn{padding:4px 11px;font-size:13px;border-radius:8px}
+.btns{margin-top:6px;gap:6px}
+.chk{margin:4px 0;font-size:13px}
+.hint,.small,.msg{font-size:11.5px}.hint{margin:3px 0 0}.msg{margin:4px 0 0}
+.cfg{padding:6px 10px}.cgrid{gap:4px 6px;margin-top:4px}.crow{margin-top:4px;gap:4px 10px}
+.cfg .chip{padding:2px 9px;font-size:12px}.cfg .monthbar .btn{padding:3px 10px}
+.fbar{padding:5px 10px;gap:4px 8px}.fbar select{min-width:0;flex:0 1 190px;max-width:210px}.fbar label{font-size:12px!important}
+.fbar2{margin:0 0 6px;gap:4px 8px}.fbar2 select{min-width:0;max-width:190px}
+.legend{margin:4px 0 0;gap:4px 12px;font-size:11.5px}
+.checks{gap:3px}.checks li{padding:4px 8px;border-radius:8px}
+th{padding:2px 0}th.name,td.name{padding:2px 8px}
+.c{height:22px;font-size:11.5px}.sa{height:22px;line-height:22px}
+small.ct{font-size:10px}
+table.sum th,table.sum td{padding:3px 6px;font-size:12px}
+.cvT td,.cvT th{padding:3px 8px;font-size:12px}.cvT select{padding:2px 5px}
+.emps{gap:3px;margin:6px 0 0}.emps input,.emps select{padding:3px 6px}
+.xbtn{width:28px;height:28px;font-size:14px}
+.vacRow{gap:6px}.vacList{margin:6px 0 0;gap:4px}.vacList li{padding:4px 10px}
+.imp{margin-top:8px;padding-top:6px}.radios{margin:4px 0;gap:10px;font-size:13px}
+.scroll{border-radius:8px}
+.hasact .act{top:5px;right:10px;padding:3px 10px;font-size:12px}.hasact>h2{padding-right:120px}
+.fbar select,.fbar2 select{font-size:12.5px!important;padding:2px 6px!important;height:26px}
+.fbar label,.fbar2 label{font-size:12px!important}
+#notice{position:fixed;right:14px;bottom:14px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(440px,calc(100vw - 28px))}#notice[hidden]{display:none}
+#noticeBtn{border:0;border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 20px -6px rgba(15,23,42,.45);color:#fff;background:#b45309;display:flex;gap:7px;align-items:center}
+#notice.fail #noticeBtn{background:#b42318}#noticeBtn .ni{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);font-size:12px}
+#noticePanel{background:#fff;border:1px solid var(--line);border-left:4px solid #b45309;border-radius:12px;box-shadow:0 18px 40px -12px rgba(15,23,42,.45);padding:8px 10px;width:100%;max-height:50vh;overflow:auto}
+#notice.fail #noticePanel{border-left-color:#b42318}#noticePanel[hidden]{display:none}
+#noticePanel .nh{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px}#noticePanel .nh button{border:0;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:var(--mut)}
+#noticeList{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12.5px}#noticeList li{display:flex;gap:8px;padding:5px 8px;border-radius:8px;background:var(--warnbg)}#noticeList li.fail{background:var(--badbg)}#noticeList .ic{font-weight:700;width:14px;flex:none}#noticeList li.fail .ic{color:var(--bad)}#noticeList li.warn .ic{color:var(--warn)}#noticeList small{display:block;color:var(--mut)}
+#noticeList .nb{display:block;flex:1}#noticeList b{font-weight:600}#noticeList .sug{margin-top:4px;font-size:12px;color:var(--ink)}#noticeList .sug span{font-weight:600;color:var(--acc)}
+#noticeList .ask{margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;font-weight:600}#noticeList .ask[hidden]{display:none}
+#noticeList .ask button{border:1px solid var(--acc);border-radius:8px;padding:3px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}#noticeList .ask .yes{background:var(--acc);color:#fff}#noticeList .ask .no{background:#fff;color:var(--acc)}
+#noticeList li.done{background:var(--acc2)}#noticeList li.done .ic{color:var(--acc)}#notice.okmsg #noticeBtn{background:var(--acc)}
+#noticePanel{max-width:440px}
+#noticeList .undo{margin-left:8px;border:1px solid var(--acc);background:#fff;color:var(--acc);border-radius:8px;padding:2px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}#noticeList .undo:hover{background:var(--acc2)}
+#noticeUndo{margin-top:6px;padding-top:6px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}#noticeUndo[hidden]{display:none}#noticeUndo .undo{white-space:nowrap}
+#cfgBody[hidden]{display:none}.cfg .monthbar{flex-wrap:wrap;align-items:center}.cfg .monthbar .grow{flex:1}.cfg #cfgBody{margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+.cfg .monthbar>.small,.cfg .monthbar>span:not(.grow){flex:1 1 120px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cfg .monthbar{flex-wrap:nowrap}.cfg .monthbar .btn{white-space:nowrap}
+#noticeList .all{margin-top:6px}
+</style>
+</head>
+<body>
+<header><div class="hero"><div><span class="eyebrow">EC 141/2026 · fim da escala 6x1</span><h1>Painel de Escala 5x2</h1><p>Escala, sobreaviso e cobertura de folgas em um só lugar</p></div><span class="badge" id="stageBadge"></span></div></header>
+<main>
+
+
+<nav class="tabs" role="tablist"><button type="button" id="tabMain" role="tab" aria-selected="true">Painel principal</button><button type="button" id="tabSec" role="tab" aria-selected="false">Painel secundário <span id="secBadge"></span></button></nav>
+<div id="viewMain" class="view">
+<section class="card cfg">
+<h2 style="display:none">Configuração</h2>
+<div class="monthbar"><button type="button" class="btn sec" id="mPrev" aria-label="Mês anterior">‹</button><select id="mSel" aria-label="Mês"></select><select id="ySel" aria-label="Ano"></select><button type="button" class="btn sec" id="mNext" aria-label="Próximo mês">›</button><button type="button" class="btn sec" id="mNow">Hoje</button><span class="small" id="cycInfo"></span><button class="btn" id="btnGen">Gerar escala</button><button class="btn sec" id="btnVar">Outra variação</button><button type="button" class="btn sec" id="cfgTog" aria-expanded="false" title="Mostrar/ocultar parâmetros">⚙ Parâmetros ▾</button></div>
+<input type="hidden" id="month">
+<div id="cfgBody" hidden>
+<div class="cgrid">
+<div><label for="cycDay">Ciclo inicia no dia</label><input type="number" id="cycDay" value="15" min="1" max="28" title="1 = mês civil. 15 = ciclo de 15 a 14."></div>
+<div><label for="cycBy">Nome do ciclo pelo</label><select id="cycBy" title="Fim: 15/mês anterior a 14/mês escolhido. Início: 15/mês escolhido a 14/seguinte."><option value="end">Mês do fim</option><option value="start">Mês do início</option></select></div>
+<div><label for="entrada">Entrada</label><input type="time" id="entrada" value="08:00"></div>
+<div><label for="intervalo">Intervalo (min)</label><input type="number" id="intervalo" value="60" min="60" max="180" step="15"></div>
+<div><label for="sunN">Folga dom. a cada</label><select id="sunN"><option value="2">2 domingos</option><option value="3" selected>3 domingos</option><option value="4">4 domingos</option><option value="5">5 domingos</option></select></div>
+<div><label for="minWeek">Mín. Seg–Sex</label><input type="number" id="minWeek" value="5" min="0" title="Mínimo de pessoas trabalhando"></div>
+<div><label for="minSat">Mín. Sáb</label><input type="number" id="minSat" value="5" min="0"></div>
+<div><label for="minSun">Mín. Dom</label><input type="number" id="minSun" value="4" min="0"></div>
+</div>
+<div class="crow"><span class="small">Funciona:</span><div class="chips" id="openDays" title="Dias fechados viram folga para todos"></div></div>
+<div class="crow">
+<label class="chk" title="Aplica 40h (8h/dia × 5) mesmo antes das datas de vigência"><input type="checkbox" id="force40" checked><span>Já usar 40h</span></label>
+<label class="chk" title="Distribui o limite semanal em 5 dias, ex.: 8h24 em 42h, por acordo ou convenção coletiva"><input type="checkbox" id="acordo"><span>Dia &gt; 8h por acordo</span></label>
+<label class="chk" title="Até 6 dias seguidos, média de 2 folgas por semana"><input type="checkbox" id="comp"><span>Compensar folgas</span></label>
+<details class="dts"><summary class="small">Datas de vigência</summary><div class="cgrid" style="margin-top:6px"><div><label for="st1">Etapa 1 (42h)</label><input type="date" id="st1" value="2026-12-16"></div><div><label for="st2">Etapa 2 (40h)</label><input type="date" id="st2" value="2027-12-16"></div></div></details>
+</div>
+</div>
+</section>
+<div class="card fbar"><label for="fGA" style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">Filtrar por GA</label><select id="fGA"></select><label for="fRole" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cargo / setor</label><select id="fRole"></select><label for="fUF" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">UF</label><select id="fUF"></select><label for="fCity" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cidade</label><select id="fCity"></select><span class="small" id="fInfo"></span></div>
+<div class="card hasact"><button type="button" class="btn sec act" id="btnImgEsc">Copiar imagem</button><h2>Escala de <span class="mt"></span></h2>
+<div class="scroll"><table id="tbl"></table></div>
+<div class="legend"><span><b class="lt">T</b>Trabalho</span><span><b class="F">F</b>Folga</span><span><b class="lcv">C</b>Cobrindo sobreaviso de colega em folga</span><span><b class="lvac">FÉ</b>Férias</span><span><b class="lbad">dia</b>Vermelho: técnicos de infra que se cobrem com folga ou sobreaviso no mesmo dia (ajustar manualmente)</span><span>Toque em uma célula para alternar; a conformidade é recalculada.</span><span>Dias esmaecidos pertencem à semana vizinha e entram no cálculo.</span></div>
+</div>
+<div class="card hasact" id="saCard"><button type="button" class="btn sec act" id="btnImgSa">Copiar imagem</button><h2>Sobreaviso de <span class="mt"></span></h2>
+<p class="hint" style="margin:0 0 8px"><b>Editor:</b> toque na <b>data</b> (cabeçalho) para habilitar ou desabilitar o SA daquele dia para todos; toque na célula de um colaborador em um dia para ligar ou desligar o SA só naquele dia (borda verde = ajuste manual). Para mudar a semana inteira, use a tabela de semanas acima. A escala e a cobertura de folgas se ajustam na hora.</p>
+<div class="scroll"><table id="saTbl"></table></div>
+<div class="legend"><span><b class="lsa">SA</b>Dia de sobreaviso (inclui quem cobre a folga de colega)</span><span>Vazio = sem sobreaviso.</span><span>Coluna riscada = SA desabilitado no dia.</span><span><b style="background:var(--work);color:var(--mut)">F</b>Folga na escala: o SA não pode ser habilitado.</span><span><b class="lcv">SA</b>Azul = SA em dia de cobertura de folga de colega.</span><span><button type="button" class="btn sec" id="btnDayClear" style="padding:4px 10px;font-size:12px">Limpar ajustes por dia</button></span></div></div>
+<div class="card"><h2>Resumo por colaborador</h2><div class="scroll"><table class="sum" id="sum"></table></div>
+<div class="btns"><button class="btn sec" id="btnCsv">Copiar CSV</button></div>
+<details id="csvBox" style="display:none;margin-top:10px"><summary class="small">Copie manualmente se o botão não funcionar</summary><textarea id="csvText" readonly></textarea></details>
+</div>
+</div>
+<div id="viewSec" class="view" hidden>
+<section class="card" id="empCard">
+<h2>Colaboradores <span class="small" id="empCount"></span></h2>
+<form id="addForm" class="addrow">
+<div><label for="newName">Nome</label><input type="text" id="newName" autocomplete="off" placeholder="Ex.: Maria Silva" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></div>
+<div><label for="newRole">Cargo / setor (opcional)</label><input type="text" id="newRole" autocomplete="off" placeholder="Ex.: Caixa" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></div>
+<div><label for="newTeam">Equipe</label><input type="text" id="newTeam" autocomplete="off" maxlength="12" placeholder="Ex.: E9" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></div>
+<div><label for="newUF">UF</label><select id="newUF"></select></div>
+<div><label for="newCity">Cidade</label><select id="newCity"></select></div>
+<div><label for="newGA">Gestão: GA</label><select id="newGA"></select></div>
+<div><label for="newGO">Gestão: GO</label><select id="newGO"></select></div>
+<button type="submit" class="btn">Cadastrar</button>
+</form>
+<p class="msg" id="addMsg" role="status"></p>
+<ul class="emps" id="empList"></ul>
+<div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (CSV)</button><span class="small" id="dlMsg" role="status">Modelo com as colunas Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade e UF. Abre no Excel; preencha e importe em "Importar lista".</span></div>
+<details class="imp"><summary><b>Importar lista</b> (CSV, TXT ou colar)</summary>
+<p class="hint">Uma pessoa por linha: <code>Nome</code>, <code>Nome;Cargo</code> ou <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe</code> (sobreaviso: não, A, B, manual; vazio = rodízio. GA e GO: nome da lista, ou parte dele. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso. Cargos de infraestrutura não formam equipe). Separador ; , ou tabulação. Cabeçalho "Nome" e linhas iniciadas por # são ignorados. Use "Copiar modelo" para ver um exemplo. Para Excel, salve como CSV.</p>
+<div class="radios"><label><input type="radio" name="impMode" value="add" checked>Adicionar à lista atual</label><label><input type="radio" name="impMode" value="replace">Substituir a lista</label></div>
+<input type="file" id="impFile" accept=".csv,.txt,.tsv,text/csv,text/plain">
+<label for="impText" style="margin-top:10px">Ou cole a lista aqui</label>
+<textarea id="impText" style="min-height:90px" placeholder="Ana Souza;Caixa&#10;Bruno Lima;Estoque"></textarea>
+<div class="btns"><button type="button" class="btn sec" id="btnImp">Importar texto colado</button><button type="button" class="btn sec" id="btnModel">Copiar modelo</button><button type="button" class="btn sec" id="btnExpEmp">Copiar lista atual</button><button type="button" class="btn sec" id="btnClear">Limpar lista</button><button type="button" class="btn sec" id="btnSample">Carregar base de equipes</button><button type="button" class="btn sec" id="btnPre">Aplicar escala fixa (Renato, Mamede, Lucas)</button></div>
+<p class="msg" id="impMsg" role="status"></p>
+</details>
+</section>
+<section class="card" id="vacCard"><h2>Férias</h2>
+<p class="small" style="margin:0 0 10px">Escolha o colaborador e o período. Nos dias de férias ele não trabalha, não fica de sobreaviso, não cobre colegas e não conta no "Em serviço". A conformidade das semanas com férias não é cobrada.</p>
+<div class="vacRow"><div><label for="vacEmp">Colaborador</label><select id="vacEmp"></select></div><div><label for="vacS">Data inicial</label><input type="date" id="vacS"></div><div><label for="vacE">Data final</label><input type="date" id="vacE"></div><div><button type="button" class="btn" id="vacAdd">Adicionar férias</button></div></div>
+<div class="small" id="vacMsg" role="status" style="min-height:18px;margin-top:6px"></div>
+<ul class="vacList" id="vacList"></ul></section>
+<section class="card" id="sfCard"><h2>Substituto fixo (cobertura de folga)</h2>
+<p class="small" style="margin:0 0 10px">Define quem sempre cobre a folga de um colaborador de sobreaviso. Se o substituto fixo também estiver de folga ou férias no dia, o painel escolhe outro automaticamente.</p>
+<div class="vacRow" style="grid-template-columns:1fr 1fr auto"><div><label for="sfTit">Colaborador de sobreaviso</label><select id="sfTit"></select></div><div><label for="sfSub">Sempre substituído por</label><select id="sfSub"></select></div><div><button type="button" class="btn" id="sfAdd">Definir</button></div></div>
+<label class="chk" style="margin-top:8px"><input type="checkbox" id="sfBoth" checked><span>Valer também no sentido contrário (os dois se cobrem)</span></label>
+<div class="small" id="sfMsg" role="status" style="min-height:18px;margin-top:6px"></div>
+<ul class="vacList" id="sfList"></ul></section>
+<section class="card" id="ocCard"><h2>Sobreaviso (semanas de cada colaborador)</h2>
+<label class="chk"><input type="checkbox" id="ocOn" checked><span>Controlar sobreaviso</span></label>
+<div id="ocBody">
+<label class="chk"><input type="checkbox" id="ocAlt" checked><span>Semana sim / semana não: ninguém fica de sobreaviso em duas semanas seguidas</span></label>
+<label class="chk"><input type="checkbox" id="ocFit" checked><span>Ajustar a escala ao sobreaviso: dar as folgas fora do plantão sempre que possível (a escala é refeita ao editar o sobreaviso; ajustes manuais de T/F na escala são perdidos)</span></label>
+<label class="chk"><input type="checkbox" id="ocCov" checked><span>Cobrir automaticamente as folgas de quem está de sobreaviso (mesmo colega nos dias de folga seguidos, rodízio entre as folgas)</span></label>
+<div class="grid2">
+<div><label for="ocAnc">Semana "sim" de referência (qualquer dia dela)</label><input type="date" id="ocAnc" value="2026-11-30"></div>
+<div><label for="ocMin">Equipes/pessoas de sobreaviso por semana</label><input type="number" id="ocMin" value="1" min="1"></div>
+<div><label for="ocSd">Início do sobreaviso</label><div style="display:flex;gap:6px"><select id="ocSd"></select><input type="time" id="ocSt" value="18:00"></div></div>
+<div><label for="ocEd">Fim do sobreaviso</label><div style="display:flex;gap:6px"><select id="ocEd"></select><input type="time" id="ocEt" value="08:00"></div></div>
+</div>
+<label class="chk"><input type="checkbox" id="ocInfOn"><span>Técnicos de infraestrutura têm outra jornada de sobreaviso (horas diferentes)</span></label>
+<div class="grid2" id="ocInfBody" hidden>
+<div><label for="ocISd">Início (infraestrutura)</label><div style="display:flex;gap:6px"><select id="ocISd"></select><input type="time" id="ocISt" value="18:00"></div></div>
+<div><label for="ocIEd">Fim (infraestrutura)</label><div style="display:flex;gap:6px"><select id="ocIEd"></select><input type="time" id="ocIEt" value="08:00"></div></div>
+</div>
+<p class="hint" id="ocWin"></p>
+<div class="btns"><button type="button" class="btn sec" id="btnOcAuto">Reaplicar regra das semanas</button><button type="button" class="btn sec" id="btnOcClear">Limpar e marcar manualmente</button></div>
+<p class="hint"><b>Como configurar a semana de cada colaborador:</b> no cadastro, escolha para cada pessoa "Semana sim" (A), "Semana não" (B), "Rodízio" (o painel distribui), "Manual" ou "Não participa". A semana "sim" é a que contém a data de referência acima e alterna a cada semana. Na tabela, toque em uma célula para marcar ou desmarcar qualquer semana; a pessoa passa a "Manual".</p>
+</div></section>
+<details class="card">
+<summary>O que a nova regra exige (e como o painel aplica)</summary>
+<ul>
+<li><b>2 dias de descanso remunerado por semana</b>, um deles preferencialmente aos domingos. O painel gera 5 dias de trabalho + 2 folgas em toda semana.</li>
+<li><b>Jornada máxima:</b> 42h semanais a partir de 16/12/2026 e 40h a partir de 16/12/2027, sem redução salarial. Os limites e datas são editáveis abaixo.</li>
+<li><b>Limite diário de 8h.</b> Em 42h, a média de 5 dias é 8h24: segundo a Agência Senado, acordo ou convenção coletiva pode estender a jornada diária na transição. Ative a opção correspondente na configuração.</li>
+<li><b>Compensação de folgas:</b> permitida em média de 2 por semana no mês, com ao menos 1 folga a cada 7 dias (máx. 6 dias seguidos). Ative a opção na configuração.</li>
+<li><b>Fora do alcance:</b> servidores públicos; empregados com diploma superior e salário a partir de cerca de R$ 21.188 (2,5× o teto do RGPS) têm regras de controle de jornada próprias, mas mantêm o repouso semanal remunerado. Lei complementar poderá criar adaptações para MEI, microempresas e pequenas empresas.</li>
+<li>Regimes diferenciados (turnos ininterruptos, saúde, segurança etc.) podem vir por lei ou convenção. Esta ferramenta é apoio operacional e não substitui análise jurídica ou da sua convenção coletiva.</li>
+</ul>
+<p class="small src">Fontes: <a href="https://www12.senado.leg.br/noticias/materias/2026/11/13/senado-aprova-fim-da-6x1-e-garante-dois-dias-de-descanso-semanal">Agência Senado</a> · <a href="https://agenciabrasil.ebc.com.br/politica/noticia/2026-10/senado-aprova-fim-da-escala-6x1-e-reducao-da-jornada-de-trabalho">Agência Brasil</a>. Datas de vigência calculadas a partir da promulgação em 16/10/2026: confirme a publicação no DOU.</p>
+</details>
+<div class="card" id="confCard" hidden><h2>Conformidade</h2><ul class="checks" id="checks"></ul><p class="small" id="hoursInfo" style="margin:10px 0 0"></p></div>
+<div class="card" id="ocWeekCard"><h2>Sobreaviso por semana</h2>
+<div class="fbar2" aria-label="Filtros da tabela de sobreaviso por semana"><label for="fGA2">GA</label><select id="fGA2"></select><label for="fRole2">Cargo / setor</label><select id="fRole2"></select><label for="fUF2">UF</label><select id="fUF2"></select><label for="fCity2">Cidade</label><select id="fCity2"></select></div>
+<div class="btns" style="margin:0 0 8px"><button type="button" class="btn sec" id="patPrev" aria-label="Período anterior (voltar um ciclo)" title="Voltar um ciclo">‹</button><label for="patFrom" style="margin:0;font-size:12.5px;font-weight:600">Período: de</label><input type="date" id="patFrom" style="width:auto"><label for="patTo" style="margin:0;font-size:12.5px;font-weight:600">até</label><input type="date" id="patTo" style="width:auto"><button type="button" class="btn sec" id="patNext" aria-label="Próximo período (avançar um ciclo)" title="Avançar um ciclo">›</button><button type="button" class="btn" id="btnPat" disabled>Aplicar padrão</button><span class="small" id="ocPatMsg" role="status">Selecione um GA nos filtros para aplicar o padrão: continua o rodízio do ciclo anterior só para os colaboradores desse GA.</span></div>
+<p class="hint" style="margin:0 0 8px">Toque em uma célula para ligar ou desligar a semana inteira de sobreaviso de um colaborador (ele passa a "Manual" no cadastro).</p>
+<div class="scroll" style="margin-top:8px"><table id="ocTbl" class="ocT"></table></div>
+<p class="hint">Cada coluna é a semana que começa na segunda indicada, com o plantão iniciando no dia e hora configurados. Horas em sobreaviso não são jornada; a remuneração segue a regra da empresa (por analogia, Súmula 428 do TST).</p>
+</div>
+<div class="card" id="cvCard"><h2>Cobertura das folgas no sobreaviso</h2>
+<p class="hint" style="margin:0 0 8px">Quando o colaborador de sobreaviso está de folga, outro que esteja trabalhando naquele dia assume. Folgas seguidas da mesma pessoa (ex.: sábado e domingo) são cobertas pelo mesmo colega. Entre uma folga e outra, o painel alterna os colegas, não repete a mesma pessoa em sequência e equilibra o total. Você pode trocar o substituto na lista.</p>
+<div class="scroll"><table class="cvT" id="cvTbl"></table></div>
+<p class="small" id="cvSum" style="margin:8px 0 0"></p></div>
+</div>
+</main>
+<div id="notice" hidden role="status" aria-live="polite"><div id="noticePanel" hidden><div class="nh"><b>Conformidade</b><button type="button" id="noticeX" aria-label="Fechar">×</button></div><ul id="noticeList"></ul><div id="noticeUndo" hidden></div></div><button type="button" id="noticeBtn"></button></div>
+<div id="imgModal" hidden role="dialog" aria-modal="true" aria-label="Imagem da tabela"><div class="box"><p class="small" style="margin:0 0 10px">O navegador não permitiu copiar direto. Pressione e segure a imagem (ou clique com o botão direito) e escolha <b>Copiar imagem</b>.</p><img id="imgPrev" alt="Imagem da tabela"><div class="btns"><button type="button" class="btn" id="imgClose">Fechar</button></div></div></div>
+<script>
+const DOW=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function utc(y,m,d){return new Date(Date.UTC(y,m,d))}
+function dowMon(dt){return (dt.getUTCDay()+6)%7}
+function fmtD(dt){return String(dt.getUTCDate()).padStart(2,'0')+'/'+String(dt.getUTCMonth()+1).padStart(2,'0')}
+function fmtH(h){const m=Math.round(h*60);const hh=Math.floor(m/60),mm=m%60;return mm?hh+'h'+String(mm).padStart(2,'0'):hh+'h'}
+function buildCalendar(y,m,sd,by){
+  sd=sd||1;let cs,ce;
+  if(sd<=1){cs=utc(y,m,1);ce=utc(y,m+1,0)}
+  else if(by==='start'){cs=utc(y,m,sd);ce=utc(y,m+1,sd-1)}
+  else{cs=utc(y,m-1,sd);ce=utc(y,m,sd-1)}
+  const start=utc(cs.getUTCFullYear(),cs.getUTCMonth(),cs.getUTCDate()-dowMon(cs));
+  const end=utc(ce.getUTCFullYear(),ce.getUTCMonth(),ce.getUTCDate()+(6-dowMon(ce)));
+  const days=[];
+  for(let t=start.getTime();t<=end.getTime();t+=864e5){const dt=new Date(t);days.push({date:dt,dow:dowMon(dt),inMonth:t>=cs.getTime()&&t<=ce.getTime()})}
+  return {days,weeks:days.length/7,cStart:cs,cEnd:ce};
+}
+function stageFor(dt,cfg){
+  if(cfg.force40)return{id:2,limit:40,label:'Jornada de 40h (aplicada desde já)'};
+  if(dt<cfg.stage1)return{id:0,limit:44,label:'Regime anterior (44h)'};
+  if(dt<cfg.stage2)return{id:1,limit:42,label:'Etapa 1 (42h, 2 folgas)'};
+  return{id:2,limit:40,label:'Etapa 2 (40h, 2 folgas)'};
+}
+function dailyHours(limit,acordo){return acordo?limit/5:Math.min(8,limit/5)}
+function combos(arr,k){if(k===0)return[[]];const out=[];for(let i=0;i<arr.length;i++)for(const c of combos(arr.slice(i+1),k-1))out.push([arr[i],...c]);return out}
+function generate(cfg){
+  const{names,open,minStaff,maxStreak,seed}=cfg;
+  const N=Math.max(2,cfg.sundayEvery);
+  const cal=buildCalendar(cfg.year,cfg.month,cfg.cycleStart,cfg.cycleBy);
+  const n=names.length,rnd=mulberry32(seed);
+  const uKey=i=>cfg.teams&&cfg.teams[i]?'T:'+cfg.teams[i]:'S:'+i;
+  const unitIdx={},units=[];
+  names.forEach((_,i)=>{const k=uKey(i);if(!(k in unitIdx)){unitIdx[k]=units.length;units.push([])}units[unitIdx[k]].push(i)});
+  const U=units.length;
+  const ug=units.map(()=>Array(cal.days.length).fill('T'));
+  const ubusy=units.map(m=>{if(!cfg.ocBusy)return null;const s=new Set();m.forEach(i=>{if(cfg.ocBusy[i])cfg.ocBusy[i].forEach(x=>s.add(x))});return s});
+  const closed=[],openDays=[];
+  for(let d=0;d<7;d++)(open[d]?openDays:closed).push(d);
+  const k=Math.max(0,2-closed.length);
+  const cand=combos(openDays,k);
+  const prev=Array(U).fill(0);
+  const sunW=units.map((_,i)=>i%(N-1));
+  for(let w=0;w<cal.weeks;w++){
+    const offCount=Array(7).fill(0);
+    for(const d of closed)offCount[d]=n;
+    const order=[...Array(U).keys()].map(i=>({i,r:rnd()}));
+    order.sort((a,b)=>(sunW[b.i]-sunW[a.i])||(a.r-b.r));
+    for(const{i:e}of order){
+      const wt=units[e].length;
+      let best=null,bc=Infinity;
+      for(const c of cand){
+        const offs=[...closed,...c].sort((a,b)=>a-b);
+        let cost=rnd()*3;
+        for(const d of c){
+          const after=offCount[d]+wt,maxOff=n-minStaff[d];
+          if(after>maxOff)cost+=10000;
+          cost+=offCount[d]*6;
+        }
+        if(k===2&&c[1]-c[0]!==1)cost+=25;
+        if(ubusy[e])for(const d of c)if(ubusy[e].has(w*7+d))cost+=40;
+        if(offs.length){
+          if(prev[e]+offs[0]>maxStreak)cost+=1e6;
+          for(let j=0;j<offs.length-1;j++)if(offs[j+1]-offs[j]-1>maxStreak)cost+=1e6;
+        }
+        if(open[6]){
+          if(c.includes(6))cost-=25*sunW[e];
+          else if(sunW[e]+1>=N)cost+=3000;
+        }
+        if(cost<bc){bc=cost;best=c}
+      }
+      const offs=[...closed,...best].sort((a,b)=>a-b);
+      for(const d of best)offCount[d]+=wt;
+      for(const d of offs)ug[e][w*7+d]='F';
+      prev[e]=6-offs[offs.length-1];
+      if(open[6])sunW[e]=best.includes(6)?0:sunW[e]+1;
+    }
+  }
+  const grid=names.map((_,i)=>ug[unitIdx[uKey(i)]].slice());
+  return{cal,grid};
+}
+function validate(grid,cal,cfg){
+  const n=grid.length,W=cal.weeks,N=Math.max(2,cfg.sundayEvery);
+  const lim=cfg.maxStreak;
+  const issues={rest:[],streak:[],sunday:[],cover:[],hours:[]};
+  const emp=[];
+  const wk=w=>cal.days[w*7].date;
+  const wLimit=w=>stageFor(wk(w),cfg).limit;
+  const wDaily=w=>dailyHours(wLimit(w),cfg.acordo);
+  for(let e=0;e<n;e++){
+    const g=grid[e];let maxS=0,cur=0,monthF=0,monthSunF=0,hoursM=0,sunRun=0,maxSunRun=0,totalOff=0;
+    for(let i=0;i<g.length;i++){
+      if(g[i]==='T'){cur++;maxS=Math.max(maxS,cur)}else{cur=0;if(g[i]!=='V')totalOff++}
+      const day=cal.days[i];
+      if(day.inMonth){
+        if(g[i]==='F')monthF++;else if(g[i]!=='V')hoursM+=wDaily(Math.floor(i/7));
+        if(day.dow===6&&g[i]==='F')monthSunF++;
+      }
+      if(day.dow===6&&cfg.open[6]){if(g[i]==='T'){sunRun++;maxSunRun=Math.max(maxSunRun,sunRun)}else sunRun=0}
+    }
+    for(let w=0;w<W;w++){
+      let off=0,vc=0;for(let d=0;d<7;d++){if(g[w*7+d]==='F')off++;else if(g[w*7+d]==='V')vc++}
+      if(vc)continue;
+      const work=7-off,hrs=work*wDaily(w);
+      if(!cfg.comp&&off<2)issues.rest.push(`${cfg.names[e]}: semana de ${fmtD(wk(w))} com ${off} folga(s)`);
+      if(hrs>wLimit(w)+0.01)issues.hours.push(`${cfg.names[e]}: semana de ${fmtD(wk(w))} com ${fmtH(hrs)} (limite ${wLimit(w)}h)`);
+    }
+    if(cfg.comp&&totalOff<2*W)issues.rest.push(`${cfg.names[e]}: média de folgas abaixo de 2 por semana`);
+    if(maxS>lim)issues.streak.push(`${cfg.names[e]}: ${maxS} dias seguidos de trabalho (máx. ${lim})`);
+    if(cfg.open[6]&&maxSunRun>N-1)issues.sunday.push(`${cfg.names[e]}: ${maxSunRun} domingos seguidos trabalhados (máx. ${N-1})`);
+    emp.push({maxS,monthF,monthSunF,hoursM,maxSunRun});
+  }
+  const coverage=[];
+  for(let i=0;i<cal.days.length;i++){
+    let c=0;for(let e=0;e<n;e++)if(grid[e][i]==='T')c++;
+    coverage.push(c);
+    const d=cal.days[i];
+    if(cfg.open[d.dow]&&c<cfg.minStaff[d.dow])issues.cover.push(`${fmtD(d.date)} (${DOW[d.dow]}): ${c} de ${cfg.minStaff[d.dow]} pessoas`);
+  }
+  return{issues,emp,coverage};
+}
+function toCSV(names,grid,cal){
+  const rows=[['Colaborador',...cal.days.map(d=>fmtD(d.date)+' '+DOW[d.dow])]];
+  names.forEach((nm,e)=>rows.push([nm,...grid[e].map(x=>x==='T'?'Trabalho':x==='V'?'Férias':'Folga')]));
+  return rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n');
+}
+
+const REF=Date.UTC(2026,0,5);
+function isoD(dt){return dt.toISOString().slice(0,10)}
+function weekNum(dt){return Math.round((dt.getTime()-REF)/(7*864e5))}
+function ocEndsNextWeek(cfg){return cfg.ocEndDow<cfg.ocStartDow||(cfg.ocEndDow===cfg.ocStartDow&&cfg.ocEndMin<=cfg.ocStartMin)}
+function winOf(cfg,nm){return cfg.infraWin&&cfg.infraNames&&cfg.infraNames.has(nm)?cfg.infraWin:cfg}
+function onCallWindow(monday,cfg,nm){
+  const p=winOf(cfg,nm);
+  const start=new Date(monday.getTime()+p.ocStartDow*864e5+p.ocStartMin*6e4);
+  const days=p.ocEndDow-p.ocStartDow+(ocEndsNextWeek(p)?7:0);
+  const end=new Date(monday.getTime()+(p.ocStartDow+days)*864e5+p.ocEndMin*6e4);
+  return{start,end,hours:(end-start)/36e5};
+}
+function fmtDT(dt){return fmtD(dt)+' '+String(dt.getUTCHours()).padStart(2,'0')+':'+String(dt.getUTCMinutes()).padStart(2,'0')}
+function autoOnCall(oc,mondays,parts,k,onlyMissing){
+  const names=Object.keys(oc);
+  const has=(nm,iso)=>(oc[nm]||[]).includes(iso);
+  mondays.forEach(m=>{
+    const iso=isoD(m);
+    if(onlyMissing){if(names.some(nm=>has(nm,iso)))return}
+    else names.forEach(nm=>{oc[nm]=(oc[nm]||[]).filter(x=>x!==iso)});
+    if(!parts.length)return;
+    const g=weekNum(m),kk=Math.min(Math.max(1,k),parts.length);
+    for(let j=0;j<kk;j++){const nm=parts[(((g*kk+j)%parts.length)+parts.length)%parts.length];if(!has(nm,iso))(oc[nm]=oc[nm]||[]).push(iso)}
+  });
+}
+function validateOnCall(oc,mondays,names,cfg,cal){
+  const iss={cover:[],consec:[]};const emp=names.map(()=>({weeks:0,hours:0}));
+  const has=(nm,d)=>(oc[nm]||[]).includes(isoD(d));
+  mondays.forEach(m=>{
+    const cs=new Set();
+    names.forEach((nm,i)=>{if(has(nm,m)){cs.add((cfg.teamOf&&cfg.teamOf[nm])||nm);const w=onCallWindow(m,cfg,nm);if(!cal||(w.start.getTime()>=cal.cStart.getTime()&&w.start.getTime()<cal.cEnd.getTime()+864e5)){emp[i].weeks++;emp[i].hours+=w.hours}}});
+    const c=cs.size;
+    if(c<cfg.ocMin)iss.cover.push(`Semana de ${fmtD(m)}: ${c} de ${cfg.ocMin} em sobreaviso`);
+    if(cfg.ocAlt)names.forEach(nm=>{const p=new Date(m.getTime()-7*864e5);if(has(nm,m)&&has(nm,p))iss.consec.push(`${nm}: semanas de ${fmtD(p)} e ${fmtD(m)} seguidas`)});
+  });
+  return{iss,emp};
+}
+
+function computeCovers(grid,cal,names,parts,oc,cfg,ov){
+  ov=ov||{};
+  const idx=n=>names.indexOf(n),dayIdx={};
+  cal.days.forEach((d,i)=>{dayIdx[isoD(d.date)]=i});
+  const events=[],seen={};
+  cal.days.filter((_,i)=>i%7===0).forEach(({date:m})=>{
+    const tits=parts.filter(p=>(oc[p]||[]).includes(isoD(m)));
+    for(const tit of tits){
+      const w=onCallWindow(m,cfg,tit);
+      for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5){
+        const iso=isoD(new Date(t));if(!(iso in dayIdx)||(cfg.saOff&&cfg.saOff.has(iso)))continue;
+        const k=tit+'|'+iso;
+        if(cfg.ocDayOv&&cfg.ocDayOv[tit]&&cfg.ocDayOv[tit][iso]===0)continue;
+        if(seen[k]||idx(tit)<0||grid[idx(tit)][dayIdx[iso]]!=='F')continue;
+        seen[k]=1;events.push({iso,i:dayIdx[iso],tit,key:k,tits});
+      }
+    }
+  });
+  // dias em que cada pessoa já está de sobreaviso (próprio); quem cobre não pode estar de sobreaviso no mesmo dia
+  const ownOn={};parts.forEach(p=>{const S=new Set();ownOn[p]=S;
+    cal.days.filter((_,i)=>i%7===0).forEach(({date:m})=>{
+      if(!(oc[p]||[]).includes(isoD(m)))return;
+      const w=onCallWindow(m,cfg,p);
+      for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5){
+        const iso=isoD(new Date(t));if(!(iso in dayIdx)||(cfg.saOff&&cfg.saOff.has(iso)))continue;
+        if(cfg.ocDayOv&&cfg.ocDayOv[p]&&cfg.ocDayOv[p][iso]===0)continue;
+        S.add(dayIdx[iso]);
+      }
+    });
+    if(cfg.ocDayOv&&cfg.ocDayOv[p])for(const iso in cfg.ocDayOv[p])if(cfg.ocDayOv[p][iso]===1&&iso in dayIdx&&!(cfg.saOff&&cfg.saOff.has(iso)))S.add(dayIdx[iso]);
+  });
+  const canCover=(p,tit,i)=>p!==tit&&idx(p)>=0&&grid[idx(p)][i]==='T'&&!(ownOn[p]&&ownOn[p].has(i))&&(!cfg.coverPool||!cfg.coverPool[tit]||cfg.coverPool[tit].includes(p));
+  const taken={};parts.forEach(p=>{taken[p]=new Set()});
+  // agrupa folgas consecutivas do mesmo titular em blocos (mesmo substituto nos dias seguidos)
+  const blocks=[];
+  parts.forEach(tit=>{
+    const ev=events.filter(x=>x.tit===tit).sort((a,b)=>a.i-b.i);
+    let cur=[];
+    const flush=()=>{
+      if(!cur.length)return;
+      const inter=parts.filter(p=>cur.every(x=>canCover(p,tit,x.i)));
+      if(inter.length||cur.length===1)blocks.push({evs:cur,cands:inter,tit});
+      else cur.forEach(x=>blocks.push({evs:[x],cands:parts.filter(p=>canCover(p,tit,x.i)),tit}));
+      cur=[];
+    };
+    ev.forEach(x=>{if(cur.length&&x.i!==cur[cur.length-1].i+1)flush();cur.push(x)});
+    flush();
+  });
+  blocks.sort((a,b)=>a.evs[0].i-b.evs[0].i||parts.indexOf(a.tit)-parts.indexOf(b.tit));
+  const tally={},last={};parts.forEach(p=>{tally[p]=0});
+  const opp={};parts.forEach(p=>{opp[p]=blocks.filter(b=>b.cands.includes(p)).length});
+  let prev=null;const list=[];
+  blocks.forEach((b,bi)=>{
+    const first=b.evs[0];let sub=null,forced=false;
+    let fixedF=false;
+    if(ov[first.key]&&b.cands.includes(ov[first.key])){sub=ov[first.key];forced=true}
+    else if(cfg.fixedSub&&cfg.fixedSub[b.tit]&&b.cands.includes(cfg.fixedSub[b.tit])&&b.evs.every(x=>!taken[cfg.fixedSub[b.tit]].has(x.i))){sub=cfg.fixedSub[b.tit];fixedF=true}
+    else if(b.cands.length){
+      let pool=b.cands.filter(p=>!first.tits.includes(p)&&b.evs.every(x=>!taken[p].has(x.i)));if(!pool.length)pool=b.cands.filter(p=>b.evs.every(x=>!taken[p].has(x.i)));
+      let bs=Infinity;
+      for(const p of pool){
+        const gap=first.i-(last[p]===undefined?-99:last[p]);
+        const sc=tally[p]*100+(p===prev?1000:0)-Math.min(20,gap)+opp[p]*3;
+        if(sc<bs){bs=sc;sub=p}
+      }
+    }
+    for(const p of b.cands)opp[p]--;
+    if(sub){b.evs.forEach(x=>taken[sub].add(x.i));tally[sub]+=b.evs.length;last[sub]=b.evs[b.evs.length-1].i;prev=sub}
+    b.evs.forEach((x,k)=>list.push({iso:x.iso,i:x.i,tit:x.tit,key:x.key,sub,forced,fixed:fixedF,cands:b.cands,block:bi,first:k===0}));
+  });
+  list.sort((a,b)=>a.i-b.i||parts.indexOf(a.tit)-parts.indexOf(b.tit));
+  return{list,tally};
+}
+function validateCovers(cv,parts){
+  const iss={none:[],repeat:[],balance:[]};
+  let prev=null,pb=null;
+  [...cv.list].sort((a,b)=>a.block-b.block||a.i-b.i).forEach(e=>{
+    if(!e.sub){iss.none.push(`${e.iso.slice(8)}/${e.iso.slice(5,7)}: folga de ${e.tit} sem substituto`);prev=null;pb=e.block;return}
+    if(e.block!==pb&&e.sub===prev)iss.repeat.push(`${e.sub} cobre ${e.iso.slice(8)}/${e.iso.slice(5,7)} logo após cobrir outra folga`);
+    prev=e.sub;pb=e.block;
+  });
+  const v=parts.map(p=>cv.tally[p]||0);
+  if(parts.length>=3&&v.length&&Math.max(...v)-Math.min(...v)>2)iss.balance.push('Diferença de mais de 2 dias de cobertura entre colaboradores');
+  return iss;
+}
+
+function mondayOf(dt){return new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth(),dt.getUTCDate()-dowMon(dt)))}
+function setOC(oc,nm,iso,on){const a=oc[nm]=oc[nm]||[];const i=a.indexOf(iso);if(on&&i<0)a.push(iso);if(!on&&i>=0)a.splice(i,1)}
+function applyModes(oc,mondays,emps,k,anchor){
+  const am=weekNum(mondayOf(anchor));
+  const autos=emps.filter(e=>e.mode==='auto');
+  mondays.forEach(m=>{
+    const iso=isoD(m),par=(((weekNum(m)-am)%2)+2)%2;
+    emps.forEach(e=>{
+      if(e.mode==='A'||e.mode==='B')setOC(oc,e.name,iso,(e.mode==='A')===(par===0));
+      else if(e.mode==='auto')setOC(oc,e.name,iso,false);
+    });
+    const cnt=emps.filter(e=>e.mode!=='off'&&(oc[e.name]||[]).includes(iso)).length;
+    const need=Math.max(0,k-cnt);
+    if(!autos.length||!need)return;
+    const g=weekNum(m);
+    for(let j=0;j<Math.min(need,autos.length);j++)setOC(oc,autos[(((g*k+j)%autos.length)+autos.length)%autos.length].name,iso,true);
+  });
+}
+
+function computeBusy(oc,cal,names,cfg,allowed){
+  const dayIdx={};cal.days.forEach((d,i)=>{dayIdx[isoD(d.date)]=i});
+  const busy=names.map(()=>new Set());
+  cal.days.filter((_,i)=>i%7===0).forEach(({date:m})=>{
+    names.forEach((nm,e)=>{
+      if(!allowed.includes(nm)||!(oc[nm]||[]).includes(isoD(m)))return;
+      const w=onCallWindow(m,cfg,nm);
+      for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5){const iso=isoD(new Date(t)),i=dayIdx[iso];if(i!==undefined&&!(cfg.saOff&&cfg.saOff.has(iso))){const o=cfg.ocDayOv&&cfg.ocDayOv[nm]&&cfg.ocDayOv[nm][iso];if(o!==0)busy[e].add(i)}}
+    });
+  });
+  if(cfg.ocDayOv)names.forEach((nm,e)=>{if(!allowed.includes(nm))return;const o=cfg.ocDayOv[nm]||{};for(const iso in o)if(o[iso]===1&&iso in dayIdx&&!(cfg.saOff&&cfg.saOff.has(iso)))busy[e].add(dayIdx[iso])});
+  return busy;
+}
+
+const $=id=>document.getElementById(id);
+let state={grid:null,cal:null,cfg:null,seed:1,open:[true,true,true,true,true,true,true]};
+const GA_LIST=['Miguel Barros de Carvalho Junior','Rafael Nunes do Nascimento','Marcos Rodrigues Carvalho','Anderson Barbosa Ferreira','Cláudio de Sousa Visgueira'];
+const GO_LIST=['Ivandro Pessoa da Nóbrega Alencar','Márcio Abreu Morais Martins','Wanderson Marcellus Penha Costa'];
+const GA_GO={'Miguel Barros de Carvalho Junior':'Ivandro Pessoa da Nóbrega Alencar','Rafael Nunes do Nascimento':'Ivandro Pessoa da Nóbrega Alencar','Marcos Rodrigues Carvalho':'Ivandro Pessoa da Nóbrega Alencar','Cláudio de Sousa Visgueira':'Ivandro Pessoa da Nóbrega Alencar'};
+const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+const matchList=(list,v)=>{const n=norm(v);if(!n)return '';return list.find(x=>norm(x)===n)||list.find(x=>norm(x).includes(n))||''};
+const gOpts=(list,sel,ph)=>`<option value="">${ph}</option>`+list.map(x=>`<option value="${esc(x)}"${x===sel?' selected':''}>${esc(x)}</option>`).join('');
+const SAMPLE=[{"name": "Jose da Rocha Dias Rodrigues", "role": "Técnico", "team": "E1", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Klerison Lucas Nascimento Sampaio", "role": "Oficial", "team": "E1", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Lucas Juniel Andrade de Sousa", "role": "Técnico", "team": "", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Salomao Freitas Silva", "role": "Oficial", "team": "E2", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Wilson Rodrigues Oliveira", "role": "Técnico", "team": "E2", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Dinaldo Rodrigues da Silva", "role": "Técnico", "team": "E3", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Wellington Pereira da Silva", "role": "Oficial", "team": "E3", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Jonas Felipe Feitosa Cunha", "role": "Técnico", "team": "E4", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Bruno de Assis da Silva Sobral", "role": "Oficial", "team": "E4", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Jose Nilton da Silva Sousa", "role": "Técnico", "team": "E5", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Leonardo Alcantara Lemos", "role": "Oficial", "team": "E5", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Josimar Bezerra Cruz", "role": "Técnico", "team": "", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Francisco Carlos Sousa Santos", "role": "Técnico", "team": "E6", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Jercilio Claudino Alves", "role": "Oficial", "team": "E6", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Aurelio Dutra de Oliveira", "role": "Técnico", "team": "E7", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Gleison Rodrigues de Sousa", "role": "Oficial", "team": "E7", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Vagner Neris Gomes da Silva", "role": "Infra", "team": "", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}, {"name": "Waldecy Rodrigues da Silva Alves Filho", "role": "Infra", "team": "", "sob": true, "mode": "auto", "ga": "Miguel Barros de Carvalho Junior", "go": "Ivandro Pessoa da Nóbrega Alencar"}];
+let emps=SAMPLE.map(x=>({...x}));
+const UFS=['PI','MA','PA'];const CITIES={"PI":["Acauã","Agricolândia","Alagoinha do Piauí","Alegrete do Piauí","Alto Longá","Altos","Alvorada do Gurguéia","Amarante","Angical do Piauí","Antônio Almeida","Anísio de Abreu","Aroazes","Aroeiras do Itaim","Arraial","Assunção do Piauí","Avelino Lopes","Baixa Grande do Ribeiro","Barra D'Alcântara","Barras","Barreiras do Piauí","Barro Duro","Batalha","Bela Vista do Piauí","Belém do Piauí","Beneditinos","Bertolínia","Betânia do Piauí","Boa Hora","Bocaina","Bom Jesus","Bom Princípio do Piauí","Bonfim do Piauí","Boqueirão do Piauí","Brasileira","Brejo do Piauí","Buriti dos Lopes","Buriti dos Montes","Cabeceiras do Piauí","Cajazeiras do Piauí","Cajueiro da Praia","Caldeirão Grande do Piauí","Campinas do Piauí","Campo Alegre do Fidalgo","Campo Grande do Piauí","Campo Largo do Piauí","Campo Maior","Canavieira","Canto do Buriti","Capitão de Campos","Capitão Gervásio Oliveira","Caracol","Caraúbas do Piauí","Caridade do Piauí","Castelo do Piauí","Caxingó","Cocal","Cocal de Telha","Cocal dos Alves","Coivaras","Colônia do Gurguéia","Colônia do Piauí","Conceição do Canindé","Coronel José Dias","Corrente","Cristalândia do Piauí","Cristino Castro","Curimatá","Currais","Curral Novo do Piauí","Curralinhos","Demerval Lobão","Dirceu Arcoverde","Dom Expedito Lopes","Dom Inocêncio","Domingos Mourão","Elesbão Veloso","Eliseu Martins","Esperantina","Fartura do Piauí","Flores do Piauí","Floresta do Piauí","Floriano","Francinópolis","Francisco Ayres","Francisco Macedo","Francisco Santos","Fronteiras","Geminiano","Gilbués","Guadalupe","Guaribas","Hugo Napoleão","Ilha Grande","Inhuma","Ipiranga do Piauí","Isaías Coelho","Itainópolis","Itaueira","Jacobina do Piauí","Jaicós","Jardim do Mulato","Jatobá do Piauí","Jerumenha","Joaquim Pires","Joca Marques","José de Freitas","João Costa","Juazeiro do Piauí","Jurema","Júlio Borges","Lagoa Alegre","Lagoa de São Francisco","Lagoa do Barro do Piauí","Lagoa do Piauí","Lagoa do Sítio","Lagoinha do Piauí","Landri Sales","Luzilândia","Luís Correia","Madeiro","Manoel Emídio","Marcolândia","Marcos Parente","Massapê do Piauí","Matias Olímpio","Miguel Alves","Miguel Leão","Milton Brandão","Monsenhor Gil","Monsenhor Hipólito","Monte Alegre do Piauí","Morro Cabeça no Tempo","Morro do Chapéu do Piauí","Murici dos Portelas","Nazaré do Piauí","Nazária","Nossa Senhora de Nazaré","Nossa Senhora dos Remédios","Nova Santa Rita","Novo Oriente do Piauí","Novo Santo Antônio","Oeiras","Olho D'Água do Piauí","Padre Marcos","Paes Landim","Pajeú do Piauí","Palmeira do Piauí","Palmeirais","Paquetá","Parnaguá","Parnaíba","Passagem Franca do Piauí","Patos do Piauí","Pau D'Arco do Piauí","Paulistana","Pavussu","Pedro II","Pedro Laurentino","Picos","Pimenteiras","Pio IX","Piracuruca","Piripiri","Porto","Porto Alegre do Piauí","Prata do Piauí","Queimada Nova","Redenção do Gurguéia","Regeneração","Riacho Frio","Ribeira do Piauí","Ribeiro Gonçalves","Rio Grande do Piauí","Santa Cruz do Piauí","Santa Cruz dos Milagres","Santa Filomena","Santa Luz","Santa Rosa do Piauí","Santana do Piauí","Santo Antônio de Lisboa","Santo Antônio dos Milagres","Santo Inácio do Piauí","Sebastião Barros","Sebastião Leal","Sigefredo Pacheco","Simplício Mendes","Simões","Socorro do Piauí","Sussuapara","São Braz do Piauí","São Francisco de Assis do Piauí","São Francisco do Piauí","São Félix do Piauí","São Gonçalo do Gurguéia","São Gonçalo do Piauí","São José do Divino","São José do Peixe","São José do Piauí","São João da Canabrava","São João da Fronteira","São João da Serra","São João da Varjota","São João do Arraial","São João do Piauí","São Julião","São Lourenço do Piauí","São Luis do Piauí","São Miguel da Baixa Grande","São Miguel do Fidalgo","São Miguel do Tapuio","São Pedro do Piauí","São Raimundo Nonato","Tamboril do Piauí","Tanque do Piauí","Teresina","União","Uruçuí","Valença do Piauí","Vera Mendes","Vila Nova do Piauí","Várzea Branca","Várzea Grande","Wall Ferraz","Água Branca"],"MA":["Afonso Cunha","Alcântara","Aldeias Altas","Altamira do Maranhão","Alto Alegre do Maranhão","Alto Alegre do Pindaré","Alto Parnaíba","Amapá do Maranhão","Amarante do Maranhão","Anajatuba","Anapurus","Apicum-Açu","Araguanã","Araioses","Arame","Arari","Axixá","Açailândia","Bacabal","Bacabeira","Bacuri","Bacurituba","Balsas","Barra do Corda","Barreirinhas","Barão de Grajaú","Bela Vista do Maranhão","Belágua","Benedito Leite","Bequimão","Bernardo do Mearim","Boa Vista do Gurupi","Bom Jardim","Bom Jesus das Selvas","Bom Lugar","Brejo","Brejo de Areia","Buriti","Buriti Bravo","Buriticupu","Buritirana","Cachoeira Grande","Cajapió","Cajari","Campestre do Maranhão","Cantanhede","Capinzal do Norte","Carolina","Carutapera","Caxias","Cedral","Central do Maranhão","Centro do Guilherme","Centro Novo do Maranhão","Chapadinha","Cidelândia","Codó","Coelho Neto","Colinas","Conceição do Lago-Açu","Coroatá","Cururupu","Cândido Mendes","Davinópolis","Dom Pedro","Duque Bacelar","Esperantinópolis","Estreito","Feira Nova do Maranhão","Fernando Falcão","Formosa da Serra Negra","Fortaleza dos Nogueiras","Fortuna","Godofredo Viana","Gonçalves Dias","Governador Archer","Governador Edison Lobão","Governador Eugênio Barros","Governador Luiz Rocha","Governador Newton Bello","Governador Nunes Freire","Grajaú","Graça Aranha","Guimarães","Humberto de Campos","Icatu","Igarapé do Meio","Igarapé Grande","Imperatriz","Itaipava do Grajaú","Itapecuru Mirim","Itinga do Maranhão","Jatobá","Jenipapo dos Vieiras","Joselândia","João Lisboa","Junco do Maranhão","Lago da Pedra","Lago do Junco","Lago dos Rodrigues","Lago Verde","Lagoa do Mato","Lagoa Grande do Maranhão","Lajeado Novo","Lima Campos","Loreto","Luís Domingues","Magalhães de Almeida","Maracaçumé","Marajá do Sena","Maranhãozinho","Mata Roma","Matinha","Matões","Matões do Norte","Milagres do Maranhão","Mirador","Miranda do Norte","Mirinzal","Montes Altos","Monção","Morros","Nina Rodrigues","Nova Colinas","Nova Iorque","Nova Olinda do Maranhão","Olho d'Água das Cunhãs","Olinda Nova do Maranhão","Palmeirândia","Paraibano","Parnarama","Passagem Franca","Pastos Bons","Paulino Neves","Paulo Ramos","Paço do Lumiar","Pedreiras","Pedro do Rosário","Penalva","Peri Mirim","Peritoró","Pindaré-Mirim","Pinheiro","Pio XII","Pirapemas","Porto Franco","Porto Rico do Maranhão","Poção de Pedras","Presidente Dutra","Presidente Juscelino","Presidente Médici","Presidente Sarney","Presidente Vargas","Primeira Cruz","Raposa","Riachão","Ribamar Fiquene","Rosário","Sambaíba","Santa Filomena do Maranhão","Santa Helena","Santa Inês","Santa Luzia","Santa Luzia do Paruá","Santa Quitéria do Maranhão","Santa Rita","Santana do Maranhão","Santo Amaro do Maranhão","Santo Antônio dos Lopes","Satubinha","Senador Alexandre Costa","Senador La Rocque","Serrano do Maranhão","Sucupira do Norte","Sucupira do Riachão","São Benedito do Rio Preto","São Bento","São Bernardo","São Domingos do Azeitão","São Domingos do Maranhão","São Francisco do Brejão","São Francisco do Maranhão","São Félix de Balsas","São José de Ribamar","São José dos Basílios","São João Batista","São João do Carú","São João do Paraíso","São João do Soter","São João dos Patos","São Luís","São Luís Gonzaga do Maranhão","São Mateus do Maranhão","São Pedro da Água Branca","São Pedro dos Crentes","São Raimundo das Mangabeiras","São Raimundo do Doca Bezerra","São Roberto","São Vicente Ferrer","Sítio Novo","Tasso Fragoso","Timbiras","Timon","Trizidela do Vale","Tufilândia","Tuntum","Turiaçu","Turilândia","Tutóia","Urbano Santos","Vargem Grande","Viana","Vila Nova dos Martírios","Vitorino Freire","Vitória do Mearim","Zé Doca","Água Doce do Maranhão"],"PA":["Abaetetuba","Abel Figueiredo","Acará","Afuá","Alenquer","Almeirim","Altamira","Anajás","Ananindeua","Anapu","Augusto Corrêa","Aurora do Pará","Aveiro","Bagre","Baião","Bannach","Barcarena","Belterra","Belém","Benevides","Bom Jesus do Tocantins","Bonito","Bragança","Brasil Novo","Brejo Grande do Araguaia","Breu Branco","Breves","Bujaru","Cachoeira do Arari","Cachoeira do Piriá","Cametá","Canaã dos Carajás","Capanema","Capitão Poço","Castanhal","Chaves","Colares","Conceição do Araguaia","Concórdia do Pará","Cumaru do Norte","Curionópolis","Curralinho","Curuá","Curuçá","Dom Eliseu","Eldorado dos Carajás","Faro","Floresta do Araguaia","Garrafão do Norte","Goianésia do Pará","Gurupá","Igarapé-Açu","Igarapé-Miri","Inhangapi","Ipixuna do Pará","Irituia","Itaituba","Itupiranga","Jacareacanga","Jacundá","Juruti","Limoeiro do Ajuru","Magalhães Barata","Marabá","Maracanã","Marapanim","Marituba","Medicilândia","Melgaço","Mocajuba","Moju","Mojuí dos Campos","Monte Alegre","Muaná","Mãe do Rio","Nova Esperança do Piriá","Nova Ipixuna","Nova Timboteua","Novo Progresso","Novo Repartimento","Oeiras do Pará","Oriximiná","Ourilândia do Norte","Ourém","Pacajá","Palestina do Pará","Paragominas","Parauapebas","Pau D'Arco","Peixe-Boi","Piçarra","Placas","Ponta de Pedras","Portel","Porto de Moz","Prainha","Primavera","Quatipuru","Redenção","Rio Maria","Rondon do Pará","Rurópolis","Salinópolis","Salvaterra","Santa Bárbara do Pará","Santa Cruz do Arari","Santa Isabel do Pará","Santa Luzia do Pará","Santa Maria das Barreiras","Santa Maria do Pará","Santana do Araguaia","Santarém","Santarém Novo","Santo Antônio do Tauá","Sapucaia","Senador José Porfírio","Soure","São Caetano de Odivelas","São Domingos do Araguaia","São Domingos do Capim","São Francisco do Pará","São Félix do Xingu","São Geraldo do Araguaia","São João da Ponta","São João de Pirabas","São João do Araguaia","São Miguel do Guamá","São Sebastião da Boa Vista","Tailândia","Terra Alta","Terra Santa","Tomé-Açu","Tracuateua","Trairão","Tucumã","Tucuruí","Ulianópolis","Uruará","Vigia","Viseu","Vitória do Xingu","Xinguara","Água Azul do Norte","Óbidos"]};
+const normC=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function canonCity(c,uf){c=String(c||'').trim();if(!c)return{city:'',uf:uf||''};const n=normC(c);const ufs=uf&&CITIES[uf]?[uf]:UFS;for(const u of ufs){const m=CITIES[u].find(x=>normC(x)===n);if(m)return{city:m,uf:uf||u}}return{city:c,uf:uf||''}}
+function cityOpts(uf,cur){const L=uf&&CITIES[uf]?CITIES[uf]:[];const has=!cur||L.includes(cur);return `<option value="">${uf?'Cidade':'Cidade (escolha a UF)'}</option>`+(has?'':`<option value="${esc(cur)}" selected>${esc(cur)}</option>`)+L.map(x=>`<option value="${esc(x)}"${x===cur?' selected':''}>${esc(x)}</option>`).join('')}
+function ufOpts(cur){return '<option value="">UF</option>'+UFS.map(u=>`<option value="${u}"${u===cur?' selected':''}>${u}</option>`).join('')}
+let fix={};let vac=[];let subFix={};let legMerge=false;let oc={};let saOff=[];let ocD={};let ov={};
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+const tmin=(id,d)=>{const v=($(id).value||d).split(':');return (+v[0])*60+(+v[1]||0)};
+function coverPoolOf(){const P=infraPairs(),pool={},inf=emps.filter(isInfra);inf.forEach(e=>{const pr=P.find(p=>p.includes(e.name));pool[e.name]=pr?pr.filter(n=>n!==e.name):inf.filter(x=>x.name!==e.name).map(x=>x.name)});return pool}
+function ocCfg(){return{coverPool:coverPoolOf(),ocOn:$('ocOn').checked,ocAlt:$('ocAlt').checked,ocMin:Math.max(1,parseInt($('ocMin').value,10)||1),ocStartDow:+$('ocSd').value,ocStartMin:tmin('ocSt','18:00'),ocEndDow:+$('ocEd').value,ocEndMin:tmin('ocEt','08:00'),ocCover:$('ocCov').checked,infraWin:$('ocInfOn').checked?{ocStartDow:+$('ocISd').value,ocStartMin:tmin('ocISt','18:00'),ocEndDow:+$('ocIEd').value,ocEndMin:tmin('ocIEt','08:00')}:null,infraNames:new Set(emps.filter(isInfra).map(e=>e.name)),fixedSub:{...subFix},ocFit:$('ocFit').checked,ocAnchor:(()=>{const v=$('ocAnc').value||'2026-11-30';const[a,b,c]=v.split('-').map(Number);return new Date(Date.UTC(a,b-1,c))})()}}
+const vis=e=>{const f=$('fGA').value,r=$('fRole').value,ct=$('fCity').value,fu=$('fUF').value,p=emps[e];if(fu){const uu=p?(p.uf||''):'';if(fu==='__none'?!!uu:uu!==fu)return false}if(ct){const cc=p?(p.city||'').trim():'';if(ct==='__none'?!!cc:cc!==ct)return false}if(f){const g=p?p.ga:'';if(f==='__none'?!!g:g!==f)return false}if(r){const rr=p?(p.role||'').trim():'';if(r==='__none'?!!rr:rr!==r)return false}return true};
+const FIDS=['fGA','fRole','fUF','fCity'];
+function patDefaults(){if(!state.cal)return;const f=$('patFrom'),t=$('patTo');if(!f.dataset.t)f.value=isoD(state.cal.cStart);if(!t.dataset.t)t.value=isoD(state.cal.cEnd)}
+function patState(){patDefaults();const b=$('btnPat');if(!b)return;const g=$('fGA').value,ok=!!g&&g!=='__none';b.disabled=!ok;b.title=ok?'':'Selecione um GA nos filtros'}
+function applyPattern(){
+  const msg=(s,err)=>say('ocPatMsg',s,err);
+  const gaSel=$('fGA').value;if(!gaSel||gaSel==='__none'||!state.cal||!state.cfg){msg('Selecione um GA nos filtros primeiro.',true);return}
+  const grp=emps.filter((e,i)=>vis(i)&&e.ga===gaSel&&e.mode!=='off');
+  if(!grp.length){msg('Nenhum colaborador desse GA participa do sobreaviso.',true);return}
+  const keyOf=e=>teamKey(e)?'T:'+teamKey(e):'N:'+e.name;
+  const units=[],seen=new Set(),ukOf={};
+  grp.forEach(e=>{const k=keyOf(e);ukOf[e.name]=k;if(!seen.has(k)){seen.add(k);units.push(k)}});
+  const cal=state.cal;
+  const pf=$('patFrom').value,pt=$('patTo').value;
+  if(!pf||!pt){msg('Informe o período (data inicial e final).',true);return}
+  if(pt<pf){msg('A data final não pode ser anterior à inicial.',true);return}
+  const d0=Date.parse(pf+'T00:00:00Z'),d1=Date.parse(pt+'T00:00:00Z');
+  if((d1-d0)/864e5>200){msg('Período muito longo (máximo de cerca de 6 meses).',true);return}
+  const cur=[];for(let m=mondayOf(new Date(d0))||new Date(d0);m.getTime()<=d1+7*864e5;m=new Date(m.getTime()+7*864e5)){const w=onCallWindow(m,state.cfg),sd=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());if(sd>=d0&&sd<=d1)cur.push(m)}
+  if(!cur.length){msg('Nenhuma semana de sobreaviso começa nesse período.',true);return}
+  const first=cur[0],H=8,seq=[];
+  for(let w=H;w>=1;w--){const iso=isoD(new Date(first.getTime()-w*7*864e5));seq.push(units.filter(k=>grp.some(e=>ukOf[e.name]===k&&(oc[e.name]||[]).includes(iso))))}
+  const lo=seq.findIndex(a=>a.length),hi=seq.length-1-[...seq].reverse().findIndex(a=>a.length);
+  const same=(a,b)=>a.length===b.length&&a.every(x=>b.includes(x));
+  let entryFor,from;
+  if(lo<0){
+    const k=Math.max(1,Math.min(state.cfg.ocMin||1,units.length));
+    entryFor=(m)=>{const g=weekNum(m),o=[];for(let j=0;j<k;j++)o.push(units[(((g*k+j)%units.length)+units.length)%units.length]);return o};
+    from='sem semanas lançadas no ciclo anterior, usei o rodízio padrão';
+  }else{
+    const data=seq.slice(lo,hi+1);let p=data.length;
+    for(let q=1;q<=data.length;q++){if(data.every((x,i)=>i<q||same(x,data[i-q]))){p=q;break}}
+    const pat=data.slice(data.length-p),gap=seq.length-1-hi;
+    entryFor=(m,n)=>pat[(gap+n)%p];
+    from='seguindo as semanas do ciclo anterior (padrão de '+p+' semana'+(p>1?'s':'')+')';
+  }
+  cur.forEach((m,n)=>{const iso=isoD(m),on=entryFor(m,n);grp.forEach(e=>setOC(oc,e.name,iso,on.includes(ukOf[e.name])))});
+  grp.forEach(e=>{e.mode='manual';e.sob=true});
+  syncTeams();renderEmps();afterOC();
+  msg(`Padrão aplicado a ${grp.length} colaborador(es) do GA ${gaSel.split(' ')[0]} em ${cur.length} semana(s) (${fmtD(cur[0])} a ${fmtD(cur[cur.length-1])}), ${from}.`);
+}
+let noticeSig='',noticeN=0,noticeTimer=null,noticeMsg='',noticeMsgSig=null,noticeUndone=false;
+const sigOf=items=>items.filter(i=>i.k!=='ok').map(i=>i.k+i.t+(i.d||'')).join('|');
+const FIXES={
+  regen:{sug:'Gerar a escala novamente com as regras do ciclo, testando várias combinações e ficando com a que tiver menos problemas. Ajustes manuais de T/F nas células são refeitos; escalas fixas (Renato, Mamede, Lucas) são mantidas.',run(){const seed0=state.seed;let best=null;for(let s=1;s<=8;s++){state.seed=s;genNew();if(best===null||noticeN<best.n){best={n:noticeN,s}}if(noticeN===0)break}if(state.seed!==best.s){state.seed=best.s;genNew()}return 'Escala gerada novamente (variação '+best.s+').'}},
+  ocauto:{sug:'Redistribuir o rodízio de sobreaviso automaticamente, respeitando alternância de semanas e a quantidade por semana. Colaboradores em modo Manual não são alterados.',run(){$('btnOcAuto').click();return 'Rodízio de sobreaviso redistribuído.'}},
+  ocaltoff:{sug:'Desligar a exigência de semanas alternadas (sim/não), já que há poucas pessoas no sobreaviso. Alternativa: marcar mais colaboradores para o sobreaviso.',run(){const c=$('ocAlt');c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}));return 'Exigência de semanas alternadas desligada.'}},
+  infraF:{sug:'Mover, dentro da mesma semana, uma das folgas dos técnicos de infra para outro dia em que o par esteja trabalhando.',run(){separateInfra();ensureCovers();render();return 'Folgas de infra separadas.'}},
+  infraSA:{sug:'Tirar o sobreaviso de um dos dois técnicos de infra nas semanas em que ambos estão escalados.',run(){enforcePairOC();syncTeams();afterOC();return 'Sobreaviso de infra separado.'}},
+  covfix:{sug:'Procurar um colega que possa trocar a folga para outro dia da semana e assim cobrir o sobreaviso (respeitando cobertura mínima e dias seguidos).',run(){ensureCovers();render();return 'Troca de folgas aplicada onde foi possível.'}},
+  ovclear:{sug:'Redistribuir os substitutos automaticamente (remove trocas manuais de substituto), alternando entre os colegas.',run(){ov={};saveState();render();return 'Substitutos redistribuídos.'}}
+};
+function updateNotice(items){
+  const bad=items.filter(i=>i.k!=='ok'),box=$('notice');if(!box)return;
+  const sig=bad.map(i=>i.k+i.t+(i.d||'')).join('|');
+  noticeN=bad.length;
+  if(noticeMsg&&noticeMsgSig!==null&&sig!==noticeMsgSig&&!noticeUndone){noticeMsg='';noticeMsgSig=null}
+  const hasUndo=undoStack.length>0;
+  const uBox=$('noticeUndo');
+  if(hasUndo){const last=undoStack[undoStack.length-1];uBox.hidden=false;uBox.innerHTML=`<span>Última correção: <b>${esc(last.label)}</b>${undoStack.length>1?` (+${undoStack.length-1} anterior${undoStack.length>2?'es':''})`:''}</span><button type="button" class="undo">↶ Desfazer</button>`}else{uBox.hidden=true;uBox.innerHTML=''}
+  const doneLi=noticeMsg?`<li class="done"><span class="ic">✓</span><span class="nb">${esc(noticeMsg)}</span></li>`:'';
+  clearTimeout(noticeTimer);
+  if(!bad.length){
+    if(!hasUndo&&!noticeMsg){box.hidden=true;$('noticePanel').hidden=true;noticeSig='';return}
+    box.hidden=false;box.className='okmsg';$('noticeBtn').hidden=false;
+    $('noticeBtn').innerHTML=hasUndo?'<span class="ni">✓</span> Tudo conforme · ↶ Desfazer correção':'<span class="ni">✓</span> '+esc(noticeMsg);
+    $('noticeList').innerHTML=doneLi;$('noticePanel').hidden=!(hasUndo||noticeMsg);noticeSig='';
+    if(!hasUndo)noticeTimer=setTimeout(()=>{noticeMsg='';box.hidden=true;$('noticePanel').hidden=true},6000);
+    return;
+  }
+  const fail=bad.some(i=>i.k==='fail');
+  box.hidden=false;box.className=fail?'fail':'warn';$('noticeBtn').hidden=false;
+  $('noticeBtn').innerHTML=`<span class="ni">${fail?'✕':'!'}</span> ${bad.length} ${bad.length>1?'itens não conformes':'item não conforme'}${hasUndo?' · ↶':''}`;
+  $('noticeList').innerHTML=doneLi+bad.map(i=>{const f=i.fx&&FIXES[i.fx];return `<li class="${i.k}"><span class="ic">${i.k==='warn'?'!':'✕'}</span><span class="nb"><b>${esc(i.t)}</b>${i.d?`<small>${esc(i.d)}</small>`:''}${f?`<div class="sug"><span>Sugestão:</span> ${esc(f.sug)}</div><div class="ask">Aplicar essa correção? <button type="button" class="yes" data-fx="${i.fx}">Sim, aplicar</button><button type="button" class="no">Agora não</button></div>`:''}</span></li>`}).join('');
+  if(sig!==noticeSig){if(noticeSig!==''&&!noticeUndone)$('noticePanel').hidden=false;noticeSig=sig}
+  const hi=$('hoursInfo');if(hi&&$('stageBadge'))$('stageBadge').title=hi.textContent;
+}
+const undoStack=[];
+function takeSnap(){const J=x=>JSON.parse(JSON.stringify(x));return{emps:J(emps),oc:J(oc),ov:J(ov),saOff:J(saOff),ocD:J(ocD),fix:J(fix),vac:J(vac),subFix:J(subFix),grid:J(state.grid),seed:state.seed,ocAlt:$('ocAlt').checked}}
+function undoFix(){
+  const en=undoStack.pop();if(!en)return;const s=en.snap;const J=x=>JSON.parse(JSON.stringify(x));
+  emps.splice(0,emps.length,...J(s.emps));oc=J(s.oc);ov=J(s.ov);saOff=J(s.saOff);ocD=J(s.ocD);fix=J(s.fix);vac=J(s.vac);subFix=J(s.subFix);state.seed=s.seed;$('ocAlt').checked=s.ocAlt;
+  Object.assign(state.cfg,ocCfg());state.cfg.fixedSub={...subFix};state.grid=J(s.grid);
+  saveState();renderEmps();noticeMsg='Correção desfeita: '+en.label;noticeUndone=true;render();noticeUndone=false;noticeMsgSig=sigOf(lastItems||[]);
+}
+function stillBad(fx){return (lastItems||[]).some(i=>i.fx===fx&&i.k!=='ok')}
+function runFix(fx){const f=FIXES[fx];if(!f)return;let msg='';const snap=takeSnap();try{msg=f.run()||'';for(let n=0;n<4&&stillBad(fx);n++){const g=JSON.stringify(state.grid)+JSON.stringify(oc)+JSON.stringify(ov);f.run();if(JSON.stringify(state.grid)+JSON.stringify(oc)+JSON.stringify(ov)===g)break}}catch(e){msg='Não foi possível aplicar a correção.'}
+  undoStack.push({snap,label:msg});if(undoStack.length>8)undoStack.shift();
+  const left=noticeN;noticeMsg=msg+(left?` Ainda há ${left} ${left>1?'itens':'item'} para revisar.`:' Tudo conforme.');
+  noticeMsgSig=sigOf(lastItems||[]);updateNotice(lastItems||[]);if(left)$('noticePanel').hidden=false}
+let lastItems=null;
+(function(){const b=$('cfgTog'),bd=$('cfgBody');if(!b)return;const set=o=>{bd.hidden=!o;b.setAttribute('aria-expanded',o);b.textContent='⚙ Parâmetros '+(o?'▴':'▾');try{localStorage.setItem('escala5x2cfg',o?'1':'0')}catch(e){}};let o=false;try{o=localStorage.getItem('escala5x2cfg')==='1'}catch(e){}set(o);b.onclick=()=>set(bd.hidden)})();
+function mirrorFilters(){patState();FIDS.forEach(id=>{const a=$(id),b=$(id+'2');if(!a||!b)return;if(b.innerHTML!==a.innerHTML)b.innerHTML=a.innerHTML;b.value=a.value})}
+function fillRoles(){const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
+  const sc=$('fCity');if(sc){const cc=sc.value,cs=[...new Set(emps.map(e=>(e.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));sc.innerHTML='<option value="">Todas as cidades</option>'+cs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(cs.length&&emps.some(e=>!(e.city||'').trim())?'<option value="__none">Sem cidade</option>':'');if([...sc.options].some(o=>o.value===cc))sc.value=cc;const dl=$('cityList');if(dl)dl.innerHTML=cs.map(x=>`<option value="${esc(x)}">`).join('')}
+  const s=$('fRole');if(!s)return;const cur=s.value;const rs=[...new Set(emps.map(e=>(e.role||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));s.innerHTML='<option value="">Todos os cargos</option>'+rs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(emps.some(e=>!(e.role||'').trim())?'<option value="__none">Sem cargo</option>':'');if([...s.options].some(o=>o.value===cur))s.value=cur;mirrorFilters()}
+function makeSep(){let last=null;return e=>{const tk=teamKey(emps[e]);const k=tk?'T:'+tk:'S:'+e;const r=(last!==null&&k!==last)?' class="tsep"':'';last=k;return r}}
+const isInfra=e=>/infra/i.test((e&&e.role)||'');
+const teamKey=e=>(e&&e.team&&!isInfra(e)?String(e.team).trim():'');
+const mates=nm=>{const e=emps.find(x=>x.name===nm);const k=teamKey(e);return k?emps.filter(x=>teamKey(x)===k).map(x=>x.name):[nm]};
+function repsOf(){const seen=new Set();return emps.filter(e=>{const k=teamKey(e);if(!k)return true;if(seen.has(k))return false;seen.add(k);return true})}
+function syncTeams(){enforcePairOC();emps.forEach(e=>{const k=teamKey(e);if(!k)return;const rep=emps.find(x=>teamKey(x)===k);if(rep!==e){e.mode=rep.mode;e.sob=rep.sob;oc[e.name]=(oc[rep.name]||[]).slice()}})}
+const teamHue=k=>{let h=0;for(const ch of k)h=(h*31+ch.charCodeAt(0))%360;return h};
+const nameCell=nm=>{const e=emps.find(x=>x.name===nm);const k=teamKey(e);const tag=k?`<span class="tm" style="background:hsl(${teamHue(k)} 75% 90%);color:hsl(${teamHue(k)} 60% 28%)">${esc(k.slice(0,6))}</span>`:'';const cty=e&&e.city?`<small class="ct">${esc(e.city)}${e.uf?'/'+esc(e.uf):''}</small>`:'';return `<td class="name" title="${esc(nm)}${k?' ('+esc(k)+')':''}${e&&e.city?' · '+esc(e.city)+(e.uf?'/'+esc(e.uf):''):''}">${tag}${esc(nm)}${cty}</td>`};
+const ocParts=()=>emps.filter(e=>e.mode!=='off').map(e=>e.name);
+const MODES=[['auto','Rodízio'],['A','Semana sim'],['B','Semana não'],['manual','Manual'],['off','Não participa']];
+const mondaysOf=cal=>cal.days.filter((_,i)=>i%7===0).map(d=>d.date);
+function saveState(){try{localStorage.setItem('escala5x2v2',JSON.stringify({gaMig:true,legMerge,ocMerge:true,fix,vac,subFix,subMig:state.subMig||false,subMig2:state.subMig2||false,imgPre:state.imgPre||false,emps,oc,ov,saOff,ocD,cyc:{d:$('cycDay').value,b:$('cycBy').value},ocIn:{inf:{on:$('ocInfOn').checked,sd:$('ocISd').value,st:$('ocISt').value,ed:$('ocIEd').value,et:$('ocIEt').value},fit:$('ocFit').checked,anc:$('ocAnc').value,cov:$('ocCov').checked,on:$('ocOn').checked,alt:$('ocAlt').checked,min:$('ocMin').value,sd:$('ocSd').value,st:$('ocSt').value,ed:$('ocEd').value,et:$('ocEt').value},open:state.open,mw:$('minWeek').value,ms:$('minSat').value,mu:$('minSun').value}))}catch(e){}}
+function readCfg(){
+  const [y,m]=($('month').value||'2027-01').split('-').map(Number);
+  const names=emps.map(e=>e.name);
+  const num=(id,d)=>{const v=parseInt($(id).value,10);return isNaN(v)?d:Math.max(0,v)};
+  const mw=num('minWeek',0),ms=num('minSat',0),mu=num('minSun',0);
+  const pd=(id,def)=>{const v=$(id).value||def;const[a,b,c]=v.split('-').map(Number);return new Date(Date.UTC(a,b-1,c))};
+  const comp=$('comp').checked;
+  return{year:y,month:m-1,names,open:state.open.slice(),minStaff:[mw,mw,mw,mw,mw,ms,mu],
+    maxStreak:comp?6:5,sundayEvery:parseInt($('sunN').value,10),seed:state.seed,acordo:$('acordo').checked,force40:$('force40').checked,comp,
+    stage1:pd('st1','2026-12-16'),stage2:pd('st2','2027-12-16'),
+    entrada:$('entrada').value||'08:00',intervalo:num('intervalo',60),saOff:new Set(saOff),ocDayOv:ocD,teams:emps.map(e=>teamKey(e)),teamOf:Object.fromEntries(emps.map(e=>[e.name,teamKey(e)])),cycleStart:Math.min(28,Math.max(1,parseInt($('cycDay').value,10)||1)),cycleBy:$('cycBy').value,...ocCfg()};
+}
+// regra: cidades com exatamente dois técnicos de infraestrutura -> nunca folgam nem ficam de sobreaviso no mesmo dia
+function enforceInfraNow(){if(!state.grid||!state.cfg)return;Object.assign(state.cfg,ocCfg());separateInfra();enforcePairOC();ensureCovers();saveState();render()}
+function infraPairs(){const g={};emps.forEach(e=>{if(isInfra(e)&&(e.city||'').trim()){const k=(e.uf||'')+'|'+e.city.trim().toLowerCase();(g[k]=g[k]||[]).push(e.name)}});const out=Object.values(g).filter(a=>a.length===2);
+  Object.keys(subFix).forEach(a=>{const b=subFix[a];if(subFix[b]===a&&a<b){const ea=emps.find(e=>e.name===a),eb=emps.find(e=>e.name===b);if(ea&&eb&&isInfra(ea)&&isInfra(eb)&&!out.some(p=>p.includes(a)||p.includes(b)))out.push([a,b])}});
+  return out}
+function enforcePairOC(){infraPairs().forEach(([a,b])=>{(oc[a]||[]).slice().forEach(iso=>{if((oc[b]||[]).includes(iso))setOC(oc,b,iso,false)})})}
+function separateInfra(){
+  const cfg=state.cfg,cal=state.cal,g=state.grid;if(!cfg||!g)return;
+  const names=cfg.names,n=cal.days.length;
+  infraPairs().forEach(([an,bn])=>{
+    const a=names.indexOf(an),b=names.indexOf(bn);if(a<0||b<0)return;
+    for(let i=0;i<n;i++){
+      if(g[a][i]!=='F'||g[b][i]!=='F')continue;
+      const w0=Math.floor(i/7)*7;let done=false;
+      for(const [x,y,xn] of [[b,a,bn],[a,b,an]]){
+        if(done||fix[xn])continue;const xo=cfg.ocOn?ocDaySet(xn):new Set();
+        for(let k=0;k<7&&!done;k++){
+          const j=w0+k;if(j===i||g[x][j]!=='T'||g[y][j]!=='T'||xo.has(j))continue;
+          const dow=cal.days[j].dow;let wk=0;for(let e=0;e<names.length;e++)if(g[e][j]==='T')wk++;
+          if(cfg.open[dow]&&wk-1<cfg.minStaff[dow])continue;
+          g[x][i]='T';g[x][j]='F';
+          let run=0,mx=0;for(let q=0;q<n;q++){if(g[x][q]==='T'){run++;mx=Math.max(mx,run)}else run=0}
+          if(mx>cfg.maxStreak){g[x][i]='F';g[x][j]='T';continue}
+          done=true;
+        }
+      }
+    }
+    searchPair(an,bn);
+  });
+}
+// busca local: reduz coincidências de folga do par de infra sem piorar as demais regras
+function pairOverlap(){const g=state.grid,names=state.cfg.names;let c=0;infraPairs().forEach(([an,bn])=>{const a=names.indexOf(an),b=names.indexOf(bn);if(a<0||b<0)return;for(let i=0;i<g[a].length;i++)if(g[a][i]==='F'&&g[b][i]==='F')c++});return c}
+function searchPair(an,bn){
+  const cfg=state.cfg,cal=state.cal,g=state.grid,names=cfg.names,n=cal.days.length;
+  const a=names.indexOf(an),b=names.indexOf(bn);if(a<0||b<0)return;
+  const rows=[a,b].filter(r=>!fix[names[r]]);if(!rows.length)return;
+  const conf=()=>{let c=0;for(let i=0;i<n;i++)if(g[a][i]==='F'&&g[b][i]==='F')c++;return c};
+  const viol=()=>{const I=validate(g,cal,cfg).issues;return I.rest.length+I.streak.length+I.sunday.length+I.cover.length+I.hours.length};
+  const score=()=>conf()*1000+viol();
+  let sc=score(),best=sc,bestG=[g[a].slice(),g[b].slice()];if(conf()===0)return;
+  let seed=(state.seed||1)*7919+a*31+b;const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
+  for(let it=0;it<500&&conf()>0;it++){
+    const cd=[];for(let i=0;i<n;i++)if(g[a][i]==='F'&&g[b][i]==='F')cd.push(i);
+    const ci=cd[Math.floor(rnd()*cd.length)],wk=Math.floor(ci/7)+(rnd()<.35?(rnd()<.5?-1:1):0);
+    const x=rows[Math.floor(rnd()*rows.length)],y=x===a?b:a;
+    if(wk<0||wk*7>=n)continue;
+    const w0=wk*7,fs=[],ts=[];for(let k=0;k<7&&w0+k<n;k++){const j=w0+k;if(g[x][j]==='F'&&(g[y][j]==='F'||j===ci||wk!==Math.floor(ci/7)||true))fs.push(j);if(g[x][j]==='T')ts.push(j)}
+    if(!fs.length||!ts.length)continue;
+    const f=fs[Math.floor(rnd()*fs.length)],tt=ts[Math.floor(rnd()*ts.length)];
+    if(g[y][tt]==='F')continue;
+    g[x][f]='T';g[x][tt]='F';
+    const s2=score();
+    if(s2<=sc||rnd()<.06){sc=s2;if(s2<best){best=s2;bestG=[g[a].slice(),g[b].slice()]}}else{g[x][f]='F';g[x][tt]='T'}
+  }
+  if(sc>best){for(let i=0;i<n;i++){g[a][i]=bestG[0][i];g[b][i]=bestG[1][i]}}
+}
+function ocDaySet(nm){
+  const cfg=state.cfg,cal=state.cal,S=new Set(),di={};cal.days.forEach((d,i)=>{di[isoD(d.date)]=i});
+  (oc[nm]||[]).forEach(iso=>{const w=onCallWindow(new Date(iso+'T00:00:00Z'),cfg,nm);for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5){const i=di[isoD(new Date(t))];if(i!==undefined)S.add(i)}});
+  return S;
+}
+// substituto fixo: ajusta as folgas dele para não coincidirem com as folgas do titular em dias de sobreaviso do titular
+function alignSub(){
+  const cfg=state.cfg,cal=state.cal,g=state.grid;if(!cfg||!cfg.ocOn||!g)return;
+  const names=cfg.names,n=cal.days.length;
+  Object.keys(subFix).forEach(tn=>{
+    const ti=names.indexOf(tn),si=names.indexOf(subFix[tn]);if(ti<0||si<0||fix[names[si]])return;
+    const tOn=ocDaySet(tn),sOn=ocDaySet(names[si]);const po=pairOverlap();
+    for(let i=0;i<n;i++){
+      if(!tOn.has(i)||g[ti][i]!=='F'||g[si][i]!=='F')continue;
+      const iso=isoD(cal.days[i].date);if(cfg.saOff&&cfg.saOff.has(iso))continue;
+      const w0=Math.floor(i/7)*7;let done=false;
+      for(let k=0;k<7&&!done;k++){
+        const j=w0+k;if(j===i||g[si][j]!=='T')continue;
+        if(sOn.has(j))continue;                       // não folgar no próprio sobreaviso
+        if(tOn.has(j)&&g[ti][j]==='F')continue;       // dia que o substituto também precisa cobrir
+        const dow=cal.days[j].dow;let wk=0;for(let e=0;e<names.length;e++)if(g[e][j]==='T')wk++;
+        if(cfg.open[dow]&&wk-1<cfg.minStaff[dow])continue;
+        g[si][i]='T';g[si][j]='F';
+        let run=0,mx=0;for(let x=0;x<n;x++){if(g[si][x]==='T'){run++;mx=Math.max(mx,run)}else run=0}
+        if(mx>cfg.maxStreak||pairOverlap()>po){g[si][i]='F';g[si][j]='T';continue}
+        done=true;
+      }
+    }
+  });
+}
+// garante, quando possível, um substituto trabalhando em cada folga de quem está de sobreaviso:
+// troca a folga de um colega (dentro da mesma semana) para outro dia
+function ensureCovers(){
+  const cfg=state.cfg,cal=state.cal,g=state.grid;if(!cfg||!cfg.ocOn||!cfg.ocCover||!g)return;
+  const names=cfg.names,n=cal.days.length,parts=ocParts(),on={};
+  const noneCount=()=>computeCovers(g,cal,names,parts,oc,cfg,ov).list.filter(x=>!x.sub).length;
+  let cur=noneCount(),guard=0;const tried=new Set();const po0=pairOverlap();
+  while(cur>0&&guard++<60){
+    const lst=computeCovers(g,cal,names,parts,oc,cfg,ov).list.filter(x=>!x.sub&&!tried.has(x.key));
+    if(!lst.length)break;
+    const ev=lst[0];tried.add(ev.key);let fixed=false;
+    for(const pn of parts){
+      if(fixed)break;if(pn===ev.tit)continue;if(cfg.coverPool&&cfg.coverPool[ev.tit]&&!cfg.coverPool[ev.tit].includes(pn))continue;
+      const p=names.indexOf(pn);if(p<0||g[p][ev.i]!=='F'||fix[pn]||teamKey(emps[p]))continue;
+      const po=on[pn]||(on[pn]=ocDaySet(pn));if(po.has(ev.i))continue;
+      const w0=Math.floor(ev.i/7)*7;
+      for(let k=0;k<7&&!fixed;k++){
+        const j=w0+k;if(j===ev.i||g[p][j]!=='T'||po.has(j))continue;
+        const dow=cal.days[j].dow;let wk=0;for(let e=0;e<names.length;e++)if(g[e][j]==='T')wk++;
+        if(cfg.open[dow]&&wk-1<cfg.minStaff[dow])continue;
+        g[p][ev.i]='T';g[p][j]='F';
+        let run=0,mx=0;for(let x=0;x<n;x++){if(g[p][x]==='T'){run++;mx=Math.max(mx,run)}else run=0}
+        const nc=noneCount();
+        if(mx>cfg.maxStreak||nc>=cur||pairOverlap()>po0){g[p][ev.i]='F';g[p][j]='T';continue}
+        cur=nc;fixed=true;
+      }
+    }
+  }
+}
+function applyFix(){
+  if(!state.grid||!state.cal)return;
+  state.cfg.names.forEach((nm,e)=>{const f=fix[nm];if(!f)return;state.cal.days.forEach((d,i)=>{const v=f[isoD(d.date)];if(v)state.grid[e][i]=v})});
+}
+function applyVac(){
+  if(!state.grid||!state.cal)return;
+  const O=state.vacOrig||(state.vacOrig={});
+  Object.keys(O).forEach(k=>{const[e,i]=k.split('|');if(state.grid[e])state.grid[e][i]=O[k]});
+  state.vacOrig={};
+  const names=state.cfg.names;
+  vac.forEach(v=>{const e=names.indexOf(v.name);if(e<0)return;state.cal.days.forEach((d,i)=>{const iso=isoD(d.date);if(iso>=v.s&&iso<=v.e){const cur=state.grid[e][i];if(cur!=='V'){state.vacOrig[e+'|'+i]=cur;state.grid[e][i]='V'}}})});
+}
+function vacDays(v){const a=Date.parse(v.s+'T00:00:00Z'),b=Date.parse(v.e+'T00:00:00Z');return Math.round((b-a)/864e5)+1}
+function renderVac(){
+  const sel=$('vacEmp');if(!sel)return;const cur=sel.value;
+  sel.innerHTML=emps.map(e=>`<option value="${esc(e.name)}">${esc(e.name)}</option>`).join('');
+  if(emps.some(e=>e.name===cur))sel.value=cur;
+  const L=vac.map((v,i)=>({v,i})).sort((a,b)=>a.v.s<b.v.s?-1:1);
+  $('vacList').innerHTML=L.length?L.map(({v,i})=>`<li><span><b>${esc(v.name)}</b> · ${fmtD(new Date(v.s+'T00:00:00Z'))} a ${fmtD(new Date(v.e+'T00:00:00Z'))} <span class="small">(${vacDays(v)} dia${vacDays(v)>1?'s':''})</span></span><button type="button" class="btn sec" data-vdel="${i}" aria-label="Remover férias de ${esc(v.name)}">Remover</button></li>`).join(''):'<li class="small">Nenhuma férias cadastrada.</li>';
+}
+function renderSubFix(){
+  const a=$('sfTit'),b=$('sfSub');if(!a)return;const ca=a.value,cb=b.value;
+  const o=emps.map(e=>`<option value="${esc(e.name)}">${esc(e.name)}</option>`).join('');a.innerHTML=o;b.innerHTML=o;
+  if(emps.some(e=>e.name===ca))a.value=ca;if(emps.some(e=>e.name===cb))b.value=cb;
+  const L=Object.keys(subFix).filter(k=>emps.some(e=>e.name===k));
+  $('sfList').innerHTML=L.length?L.map(k=>`<li><span>Quando <b>${esc(k)}</b> estiver de folga no sobreaviso, cobre: <b>${esc(subFix[k])}</b></span><button type="button" class="btn sec" data-sfdel="${esc(k)}">Remover</button></li>`).join(''):'<li class="small">Nenhum substituto fixo.</li>';
+}
+function sfChanged(){saveState();renderSubFix();if(state.cfg){state.cfg.fixedSub={...subFix};render()}}
+function vacChanged(){saveState();renderVac();if(state.grid){applyVac();render()}}
+const PRE_START='2026-11-09';
+const PRE={Renato:'FFTTTTT'+'FFTTTTT'+'FTTTTTF'+'FFTTTTT'+'FFTTTTT'+'FTTTTTF',Mamede:'TTTTTFF'+'TTTTFFT'+'TTFFTTT'+'TTFTTTF'+'TTTTFFT'+'TTTFFTT',Lucas:'TTTFFTT'+'TTFFTTT'+'TFTTTTF'+'TTTFFTT'+'TTTFTTF'+'TFFTTTT'};
+const PRE_OC={Mamede:['2026-11-09','2026-11-23'],Renato:['2026-11-16','2026-12-07'],Lucas:['2026-11-30','2026-12-14']};
+const PRE_OV={'Mamede|2026-11-14':'Renato','Renato|2026-11-16':'Lucas','Mamede|2026-11-25':'Renato','Lucas|2026-12-03':'Mamede','Renato|2026-12-07':'Lucas','Lucas|2026-12-15':'Mamede'};
+function applyPreset(){
+  const find=k=>emps.find(e=>k==='Lucas'?/^lucas\s+teixeira/i.test(e.name):norm(e.name).startsWith(norm(k)));
+  const who={};
+  ['Renato','Mamede','Lucas'].forEach(k=>{let e=find(k);if(!e){e={name:k==='Lucas'?'Lucas Teixeira':k,role:'Técnico',sob:true,mode:'manual',ga:'',go:'',team:''};emps.push(e)}who[k]=e});
+  const nm=k=>who[k].name;
+  const base=new Date(PRE_START+'T00:00:00Z');
+  fix={};
+  Object.keys(PRE).forEach(k=>{const f={};for(let i=0;i<42;i++)f[isoD(new Date(base.getTime()+i*864e5))]=PRE[k][i];fix[nm(k)]=f});
+  Object.keys(PRE_OC).forEach(k=>{const e=who[k];e.team='';e.mode='manual';e.sob=true;oc[e.name]=PRE_OC[k].slice();delete ocD[e.name]});
+  ov={};Object.keys(PRE_OV).forEach(key=>{const[a,iso]=key.split('|');ov[nm(a)+'|'+iso]=nm(PRE_OV[key])});
+  saOff=[];
+  $('month').value='2026-12';$('mSel').value=11;$('ySel').value=2026;$('cycDay').value=15;$('cycBy').value='end';
+  $('ocOn').checked=true;$('ocCov').checked=true;$('ocSd').value=0;$('ocSt').value='00:00';$('ocEd').value=0;$('ocEt').value='00:00';
+  const gs=['Renato','Mamede','Lucas'].map(k=>who[k].ga),others=emps.filter(e=>!Object.values(who).includes(e));
+  $('fGA').value=(gs.every(g=>!g)&&others.some(e=>e.ga))?'__none':(gs.every(g=>g&&g===gs[0])?gs[0]:'');
+  state.imgPre=true;renderEmps();genNew();
+}
+
+function genNew(){
+  const cfg=readCfg();
+  if(!cfg.names.length){$('checks').innerHTML='<li class="fail"><span class="ic">✕</span><span>Cadastre ou importe ao menos um colaborador.</span></li>';return}
+  const cal0=buildCalendar(cfg.year,cfg.month,cfg.cycleStart,cfg.cycleBy);
+  if(cfg.ocOn)applyModes(oc,mondaysOf(cal0),repsOf(),cfg.ocMin,cfg.ocAnchor);syncTeams();
+  if(cfg.ocOn&&cfg.ocFit)cfg.ocBusy=computeBusy(oc,cal0,cfg.names,cfg,ocParts());
+  const r=generate(cfg);state.grid=r.grid;state.cal=r.cal;state.cfg=cfg;applyFix();alignSub();separateInfra();state.vacOrig={};applyVac();ensureCovers();
+  saveState();
+  render();
+}
+function timeAdd(t,h){const[a,b]=t.split(':').map(Number);let m=Math.round(a*60+b+h*60);m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function pairConflicts(kind){
+  const R={days:new Set(),cells:new Set()};const cal=state.cal,g=state.grid,names=state.cfg.names;
+  infraPairs().forEach(([an,bn])=>{const a=names.indexOf(an),b=names.indexOf(bn);if(a<0||b<0)return;
+    cal.days.forEach((d,i)=>{
+      const bad=kind==='sa'?(((state.saView[a+'|'+i]||0)>0)&&((state.saView[b+'|'+i]||0)>0)):(g[a][i]==='F'&&g[b][i]==='F');
+      if(bad){R.days.add(i);R.cells.add(a+'|'+i);R.cells.add(b+'|'+i)}})});
+  return R;
+}
+function markPairs(){
+  if(!state.cal||!state.cfg)return;
+  [['tbl','esc'],['saTbl','sa']].forEach(([id,kind])=>{const T=$(id);if(!T)return;
+    Array.from(T.querySelectorAll('.pairbad')).forEach(c=>c.classList.remove('pairbad'));
+    const R=pairConflicts(kind);if(!R.days.size)return;
+    const hr=T.rows[0];R.days.forEach(i=>{if(hr&&hr.cells[i+1])hr.cells[i+1].classList.add('pairbad')});
+    Array.from(T.rows).forEach(r=>{const title=r.cells[0]&&r.cells[0].getAttribute('title');if(!title)return;
+      const e=state.cfg.names.findIndex(n=>title.startsWith(n+' ')||title===n||title.startsWith(n+' ('));if(e<0)return;
+      R.days.forEach(i=>{if(R.cells.has(e+'|'+i)&&r.cells[i+1])r.cells[i+1].classList.add('pairbad')})});
+  });
+}
+function markCuts(){
+  const cal=state.cal;if(!cal)return;
+  const first=cal.days.findIndex(d=>d.inMonth),last=cal.days.length-1-[...cal.days].reverse().findIndex(d=>d.inMonth);
+  ['tbl','saTbl'].forEach(id=>{const T=$(id);if(!T)return;Array.from(T.rows).forEach(r=>{if(r.cells.length<cal.days.length+1)return;
+    Array.from(r.cells).forEach(c=>c.classList.remove('cut-s','cut-e'));
+    if(first>0)r.cells[first+1].classList.add('cut-s');
+    if(last<cal.days.length-1)r.cells[last+1].classList.add('cut-e')})});
+}
+function render(){
+  mirrorFilters();
+  const{grid,cal,cfg}=state;if(!grid)return;
+  const v=validate(grid,cal,cfg);
+  const fy=d=>fmtD(d)+'/'+d.getUTCFullYear();
+  const lab=MESES[cfg.month]+'/'+cfg.year+(cfg.cycleStart>1?` (${fmtD(cal.cStart)} a ${fmtD(cal.cEnd)})`:'');
+  {const n=cfg.names.filter((_,e)=>vis(e)).length;$('fInfo').textContent='Mostrando '+n+' de '+cfg.names.length+' colaboradores (as contagens de "Em serviço" consideram toda a equipe).'}
+  document.querySelectorAll('.mt').forEach(e=>e.textContent=lab);
+  $('cycInfo').textContent='Ciclo simulado: '+fy(cal.cStart)+' a '+fy(cal.cEnd)+'. Dias fora do ciclo aparecem esmaecidos e só entram no cálculo das semanas.';
+  // stage badge for first and last week of month
+  const monthStart=cal.days.find(d=>d.inMonth).date;
+  $('stageBadge').textContent=stageFor(monthStart,cfg).label+(stageFor(cal.days[cal.days.length-1].date,cfg).id!==stageFor(monthStart,cfg).id?' → '+stageFor(cal.days[cal.days.length-1].date,cfg).label:'');
+  // checks
+  const I=v.issues,items=[];
+  const add=(arr,okT,failT,kind,fx)=>{items.push(arr.length?{k:kind||'fail',t:failT,fx,d:arr.slice(0,3).join(' · ')+(arr.length>3?` · +${arr.length-3}`:'')}:{k:'ok',t:okT})};
+  add(I.rest,cfg.comp?'Média de 2 folgas por semana mantida':'2 dias de descanso em todas as semanas','Descanso semanal insuficiente',undefined,'regen');
+  add(I.streak,`Máximo de ${cfg.maxStreak} dias seguidos de trabalho respeitado`,'Dias seguidos de trabalho acima do limite',undefined,'regen');
+  if(cfg.open[6])add(I.sunday,`Folga em domingo ao menos 1 vez a cada ${cfg.sundayEvery}`,'Rodízio de domingos fora da meta','warn','regen');
+  add(I.cover,'Cobertura mínima atendida em todos os dias','Cobertura mínima não atendida (pouca gente para as folgas exigidas)',undefined,'regen');
+  add(I.hours,'Carga semanal dentro do limite legal','Carga semanal acima do limite',undefined,'regen');
+  let ocv=null;const parts=ocParts();
+  if(cfg.ocOn){
+    ocv=validateOnCall(oc,mondaysOf(cal),parts,cfg,cal);
+    add(ocv.iss.cover,`Sobreaviso: ${cfg.ocMin} pessoa(s) em todas as semanas`,'Semana sem sobreaviso suficiente',undefined,'ocauto');
+    if(cfg.ocAlt)add(ocv.iss.consec,'Sobreaviso em semanas alternadas (sim/não)','Sobreaviso em semanas seguidas',undefined,'ocauto');
+    if(cfg.ocAlt&&parts.length<2*cfg.ocMin)items.push({k:'warn',fx:'ocaltoff',t:'Equipe de sobreaviso pequena para alternar semanas',d:`Com ${cfg.ocMin} por semana, são necessárias ao menos ${2*cfg.ocMin} pessoas marcadas.`});
+  }
+  {const P=infraPairs();if(P.length){
+    const fi=[],si=[];
+    P.forEach(([an,bn])=>{const a=cfg.names.indexOf(an),b=cfg.names.indexOf(bn);if(a<0||b<0)return;
+      const oa=cfg.ocOn?ocDaySet(an):new Set(),ob=cfg.ocOn?ocDaySet(bn):new Set();
+      cal.days.forEach((d,i)=>{if(grid[a][i]==='F'&&grid[b][i]==='F')fi.push(`${an.split(' ')[0]} e ${bn.split(' ')[0]}: folga em ${fmtD(d.date)}`);
+        const iso=isoD(d.date),offA=grid[a][i]!=='T',offB=grid[b][i]!=='T';
+        if(oa.has(i)&&ob.has(i)&&!offA&&!offB&&!(cfg.saOff&&cfg.saOff.has(iso)))si.push(`${an.split(' ')[0]} e ${bn.split(' ')[0]}: sobreaviso em ${fmtD(d.date)}`)});
+    });
+    add(fi,'Infra (2 por cidade): nunca de folga no mesmo dia','Infra da mesma cidade com folga no mesmo dia',undefined,'infraF');
+    if(cfg.ocOn)add(si,'Infra (2 por cidade): nunca de sobreaviso no mesmo dia','Infra da mesma cidade de sobreaviso no mesmo dia',undefined,'infraSA');
+  }}
+  let cv=null,cvMap={};
+  if(cfg.ocOn&&cfg.ocCover){
+    cv=computeCovers(grid,cal,cfg.names,parts,oc,cfg,ov);
+    const ci=validateCovers(cv,parts);
+    add(ci.none,'Todas as folgas do sobreaviso têm substituto','Folga no sobreaviso sem substituto disponível',undefined,'covfix');
+    add(ci.repeat,'Substitutos alternados, sem repetir em sequência','Mesmo substituto em sequência',undefined,'ovclear');
+    if(ci.balance.length)items.push({k:'warn',fx:'ovclear',t:'Cobertura desigual entre colaboradores',d:ci.balance[0]});
+    cv.list.forEach(e=>{if(e.sub){const k=cfg.names.indexOf(e.sub);cvMap[k+'|'+e.i]=e.tit}});
+  }
+  $('cvCard').style.display=cv?'':'none';
+  renderOnCall(cfg,cal,parts,ocv);
+  if(cv)renderCovers(cv,parts,cal);
+  {const n=items.filter(i=>i.k!=='ok').length;$('secBadge').textContent=n?'⚠ '+n:'✓';lastItems=items;updateNotice(items)}
+  $('checks').innerHTML=items.map(i=>`<li class="${i.k}"><span class="ic">${i.k==='ok'?'✓':i.k==='warn'?'!':'✕'}</span><span>${esc(i.t)}${i.d?`<small>${esc(i.d)}</small>`:''}</span></li>`).join('');
+  // hours info per stage
+  const seen={};cal.days.forEach((d,i)=>{if(i%7===0){const s=stageFor(d.date,cfg);seen[s.id]=s}});
+  $('hoursInfo').innerHTML=Object.values(seen).map(s=>{const dh=dailyHours(s.limit,cfg.acordo);return `<b>${s.label}:</b> ${fmtH(dh)}/dia × 5 = ${fmtH(dh*5)}/semana · ${cfg.entrada}–${timeAdd(cfg.entrada,dh+cfg.intervalo/60)} (com ${cfg.intervalo} min de intervalo)`+(dh>8.001?' · <b>exige acordo/convenção</b>':'')}).join('<br>');
+  // table
+  let h='<tr><th class="name">Colaborador</th>'+cal.days.map(d=>`<th class="${d.dow===6?'sun ':''}${d.inMonth?'':'out '}${d.dow===0?'mon ':''}${cfg.open[d.dow]?'':'closed'}">${DOW[d.dow]}<small>${fmtD(d.date).slice(0,2)}</small></th>`).join('')+'</tr>';
+  const spM=makeSep();cfg.names.forEach((nm,e)=>{if(!vis(e))return;h+=`<tr${spM(e)}>${nameCell(nm)}`+grid[e].map((x,i)=>{const d=cal.days[i];if(x==='V')return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}"><button type="button" class="c V" disabled title="Férias" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: férias">FÉ</button></td>`;return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${cvMap[e+'|'+i]?`<button class="c cv" data-e="${e}" data-i="${i}" title="Cobrindo sobreaviso de ${esc(cvMap[e+'|'+i])}" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: Trabalho, cobrindo o sobreaviso de ${esc(cvMap[e+'|'+i])}">C</button>`:`<button class="c ${x}" data-e="${e}" data-i="${i}" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: ${x==='T'?'Trabalho':'Folga'}">${x}</button>`}</td>`}).join('')+'</tr>'});
+  h+='<tr class="cov"><td class="name">Em serviço</td>'+cal.days.map((d,i)=>{const low=cfg.open[d.dow]&&v.coverage[i]<cfg.minStaff[d.dow];return `<td class="${low?'low ':''}${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${v.coverage[i]}</td>`}).join('')+'</tr>';
+  $('tbl').innerHTML=h;$('tbl').style.setProperty('--minw',(215+cal.days.length*25)+'px');
+  state.v=v;state.cvMap=cvMap;
+  renderSA(cfg,cal,cv);markCuts();markPairs();
+  // summary
+  const spU=makeSep();
+  $('sum').innerHTML='<tr><th>Colaborador</th><th>Cargo</th><th>Equipe</th><th>GA</th><th>GO</th><th>Cidade/UF</th><th>Folgas no ciclo</th><th>Domingos de folga</th><th>Máx. dias seguidos</th><th>Horas no ciclo</th>'+(ocv?'<th>Sobreaviso (semanas)</th><th>Sobreaviso (horas)</th>':'')+(cv?'<th>Coberturas</th>':'')+'</tr>'+cfg.names.map((nm,e)=>{if(!vis(e))return '';const s=v.emp[e];return `<tr${spU(e)}><td>${esc(nm)}</td><td>${esc(emps[e]?emps[e].role:'')}</td><td>${esc(emps[e]?(teamKey(emps[e])||'—'):'')}</td><td>${esc(emps[e]?emps[e].ga:'')}</td><td>${esc(emps[e]?emps[e].go:'')}</td><td>${esc(emps[e]?(emps[e].city?emps[e].city+(emps[e].uf?'/'+emps[e].uf:''):'—'):'')}</td><td>${s.monthF}</td><td>${s.monthSunF}</td><td>${s.maxS}</td><td>${fmtH(s.hoursM)}</td>${ocv?(()=>{const k=parts.indexOf(nm);return k<0?'<td>–</td><td>–</td>':`<td>${ocv.emp[k].weeks}</td><td>${fmtH(ocv.emp[k].hours)}</td>`})():''}${cv?`<td>${cv.tally[nm]===undefined?'–':cv.tally[nm]}</td>`:''}</tr>`}).join('');
+}
+
+
+function renderSA(cfg,cal,cv){
+  $('saCard').style.display=cfg.ocOn?'':'none';if(!cfg.ocOn)return;
+  const dayIdx={};cal.days.forEach((d,i)=>{dayIdx[isoD(d.date)]=i});
+  const on={};const covered={};
+  if(cv)cv.list.forEach(e=>{if(e.sub){covered[e.tit+'|'+e.i]=1;on[e.sub+'|'+e.i]=2}});
+  mondaysOf(cal).forEach(m=>{
+    ocParts().forEach(nm=>{
+      if(!(oc[nm]||[]).includes(isoD(m)))return;
+      const w=onCallWindow(m,cfg,nm);
+      for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5){
+        const i=dayIdx[isoD(new Date(t))];if(i===undefined||covered[nm+'|'+i])continue;on[nm+'|'+i]=1;
+      }
+    });
+  });
+  const base={};Object.assign(base,on);
+  Object.keys(ocD).forEach(nm=>{for(const iso in ocD[nm]){const i=dayIdx[iso];if(i===undefined)continue;if(ocD[nm][iso]===1)on[nm+'|'+i]=1;else delete on[nm+'|'+i]}});
+  cfg.names.forEach((nm,e)=>cal.days.forEach((d,i)=>{if(state.grid[e]&&(state.grid[e][i]==='F'||state.grid[e][i]==='V'))delete on[nm+'|'+i]}));
+  const offD=iso=>saOff.includes(iso);
+  state.saView={};
+  cfg.names.forEach((nm,e)=>cal.days.forEach((d,i)=>{const iso=isoD(d.date);if(state.grid[e]&&state.grid[e][i]==='V'){state.saView[e+'|'+i]=-3;return}if(state.grid[e]&&state.grid[e][i]==='F'){state.saView[e+'|'+i]=-1;return}const v=on[nm+'|'+i];if(v&&!offD(iso))state.saView[e+'|'+i]=(v===2&&base[nm+'|'+i]===2&&!(ocD[nm]&&ocD[nm][iso]===1))?2:1}));
+  let h='<tr><th class="name">Colaborador</th>'+cal.days.map(d=>{const iso=isoD(d.date),o=offD(iso);return `<th class="${d.dow===6?'sun ':''}${d.inMonth?'':'out '}${d.dow===0?'mon ':''}${o?'saoff':''}"><button type="button" class="dh" data-day="${iso}" aria-pressed="${!o}" title="${o?'SA desabilitado neste dia: toque para habilitar':'Toque para desabilitar o SA neste dia'}">${DOW[d.dow]}<small>${fmtD(d.date).slice(0,2)}</small></button></th>`}).join('')+'</tr>';
+  const spS=makeSep();cfg.names.forEach((nm,e)=>{if(!vis(e))return;h+=`<tr${spS(e)}>${nameCell(nm)}`+cal.days.map((d,i)=>{if(state.grid[e]&&state.grid[e][i]==='V')return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}"><button type="button" class="sa vacb" disabled title="Férias" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: férias">FÉ</button></td>`;if(state.grid[e]&&state.grid[e][i]==='F')return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}"><button type="button" class="sa lock" disabled title="Folga na escala: sobreaviso indisponível" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: folga, sobreaviso indisponível">F</button></td>`;const v=on[nm+'|'+i];const lab=`${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: ${v?'sobreaviso':'sem sobreaviso'}`;return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${v&&!offD(isoD(d.date))?`<button type="button" class="sa on${v===2&&base[nm+'|'+i]===2&&!(ocD[nm]&&ocD[nm][isoD(d.date)]===1)?' cvr':''}${ocD[nm]&&ocD[nm][isoD(d.date)]!==undefined?' ovr':''}" data-sa="1" data-base="${base[nm+'|'+i]?1:0}" data-e="${e}" data-i="${i}" title="Toque para desligar o SA neste dia" aria-label="${lab}">SA</button>`:`<button type="button" class="sa${ocD[nm]&&ocD[nm][isoD(d.date)]!==undefined?' ovr':''}" data-sa="1" data-base="${base[nm+'|'+i]?1:0}" data-e="${e}" data-i="${i}" title="Toque para ligar o SA neste dia" aria-label="${lab}"></button>`.replace('class="sa"',offD(isoD(d.date))?'class="sa off"':'class="sa"')}</td>`}).join('')+'</tr>'});
+  h+='<tr class="cov"><td class="name">De sobreaviso</td>'+cal.days.map((d,i)=>{let n=0;if(!offD(isoD(d.date)))cfg.names.forEach(nm=>{if(on[nm+'|'+i])n++});return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${n||''}</td>`}).join('')+'</tr>';
+  $('saTbl').innerHTML=h;$('saTbl').style.setProperty('--minw',(215+cal.days.length*25)+'px');
+}
+function renderOnCall(cfg,cal,parts,ocv){
+  $('ocBody').style.display=cfg.ocOn?'':'none';$('ocWeekCard').style.display=cfg.ocOn?'':'none';if(!cfg.ocOn)return;
+  const mons=mondaysOf(cal);
+  const w=onCallWindow(mons[0],cfg);
+  const wt=(p,w)=>`${DOW[p.ocStartDow]} ${String(Math.floor(p.ocStartMin/60)).padStart(2,'0')}:${String(p.ocStartMin%60).padStart(2,'0')} → ${DOW[p.ocEndDow]} ${String(Math.floor(p.ocEndMin/60)).padStart(2,'0')}:${String(p.ocEndMin%60).padStart(2,'0')}${ocEndsNextWeek(p)?' (da semana seguinte)':''} = ${fmtH(w.hours)} por plantão`;
+  const infN=cfg.infraWin?emps.filter(isInfra).length:0;
+  $('ocWin').textContent=(infN?'Demais cargos — ':'')+wt(cfg,w)+(infN?` · Infraestrutura (${infN}) — `+wt(cfg.infraWin,onCallWindow(mons[0],cfg,[...cfg.infraNames][0])):'')+'.';
+  void `Plantão: ${DOW[cfg.ocStartDow]} ${String(Math.floor(cfg.ocStartMin/60)).padStart(2,'0')}:${String(cfg.ocStartMin%60).padStart(2,'0')} → ${DOW[cfg.ocEndDow]} ${String(Math.floor(cfg.ocEndMin/60)).padStart(2,'0')}:${String(cfg.ocEndMin%60).padStart(2,'0')}${ocEndsNextWeek(cfg)?' (da semana seguinte)':''} = ${fmtH(w.hours)} por plantão. Ex.: ${fmtDT(w.start)} até ${fmtDT(w.end)}.`;
+  if(!parts.length){$('ocTbl').innerHTML='<tr><td style="padding:10px">Escolha o sobreaviso de cada colaborador no cadastro (diferente de "Não participa").</td></tr>';return}
+  let h='<tr><th class="name">Colaborador</th>'+mons.map(m=>`<th>${fmtD(m)}<small>início ${DOW[cfg.ocStartDow]}</small></th>`).join('')+'</tr>';
+  const spO=makeSep();parts.forEach((nm,k)=>{if(!vis(emps.findIndex(x=>x.name===nm)))return;h+=`<tr${spO(emps.findIndex(x=>x.name===nm))}>${nameCell(nm)}`+mons.map(m=>{const on=(oc[nm]||[]).includes(isoD(m));return `<td><button class="c ${on?'S':''}" data-oc="1" data-k="${k}" data-m="${isoD(m)}" aria-label="${esc(nm)}, semana de ${fmtD(m)}: ${on?'em sobreaviso':'sem sobreaviso'}">${on?'S':'·'}</button></td>`}).join('')+'</tr>'});
+  h+='<tr class="cov"><td class="name">De sobreaviso</td>'+mons.map(m=>{const n=parts.filter(nm=>(oc[nm]||[]).includes(isoD(m))).length;return `<td class="${n<cfg.ocMin?'low':''}">${n}</td>`}).join('')+'</tr>';
+  $('ocTbl').innerHTML=h;$('ocTbl').style.setProperty('--minw',(215+mons.length*52)+'px');
+}
+function afterOC(){saveState();if(state.cfg&&state.cfg.ocFit)genNew();else render()}
+function toggleOCWeek(nm,iso){
+  const on=!((oc[nm]||[]).includes(iso));
+  mates(nm).forEach(n=>{setOC(oc,n,iso,on);const em=emps.find(x=>x.name===n);if(em&&em.mode!=='manual'){em.mode='manual';em.sob=true}});
+  if(on)infraPairs().forEach(([a,b])=>{const o=a===nm?b:b===nm?a:null;if(o&&(oc[o]||[]).includes(iso)){setOC(oc,o,iso,false);const em=emps.find(x=>x.name===o);if(em&&em.mode!=='manual'){em.mode='manual';em.sob=true}}});
+  renderEmps();
+}
+$('btnDayClear').onclick=()=>{ocD={};if(state.cfg)state.cfg.ocDayOv=ocD;afterOC()};
+$('saTbl').addEventListener('click',ev=>{
+  const h=ev.target.closest('button[data-day]');
+  if(h&&state.cfg){const iso=h.dataset.day,i=saOff.indexOf(iso);if(i<0)saOff.push(iso);else saOff.splice(i,1);state.cfg.saOff=new Set(saOff);afterOC();return}
+  const b=ev.target.closest('button[data-sa]');if(!b||!state.cfg)return;
+  const nm=state.cfg.names[+b.dataset.e],iso=isoD(state.cal.days[+b.dataset.i].date);
+  const effective=b.classList.contains('on');const desired=!effective;const baseOn=b.dataset.base==='1';
+  mates(nm).forEach(n=>{const o=ocD[n]=ocD[n]||{};if(desired===baseOn)delete o[iso];else o[iso]=desired?1:0;if(!Object.keys(o).length)delete ocD[n]});
+  state.cfg.ocDayOv=ocD;afterOC();
+});
+$('ocTbl').addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-oc]');if(!b)return;
+  const nm=ocParts()[+b.dataset.k],iso=b.dataset.m;if(!nm)return;
+  toggleOCWeek(nm,iso);afterOC();
+});
+
+function drawTable(kind){
+  const{cal,cfg,grid}=state;const sa=kind==='sa';
+  const rows=cfg.names.map((_,e)=>e).filter(vis);
+  const CW=28,NW=250,PAD=18,TT=44,HH=40,FT=40,S=2;
+  const hasC=rows.some(e=>emps[e]&&emps[e].city),RH=hasC?36:26;
+  const W=PAD*2+NW+cal.days.length*CW,H=PAD+TT+HH+rows.length*RH+RH+FT+PAD;
+  const cv=document.createElement('canvas');cv.width=W*S;cv.height=H*S;
+  const x=cv.getContext('2d');x.scale(S,S);
+  const FF='Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  const rr=(a,b,w,h,r,fill)=>{x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h);x.fillStyle=fill;x.fill()};
+  const tx=(s,a,b,font,col,al)=>{x.font=font;x.fillStyle=col;x.textAlign=al||'left';x.textBaseline='middle';x.fillText(s,a,b)};
+  const fit=(s,w,font)=>{x.font=font;if(x.measureText(s).width<=w)return s;while(s.length>1&&x.measureText(s+'…').width>w)s=s.slice(0,-1);return s+'…'};
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  const title=(sa?'Sobreaviso de ':'Escala de ')+document.querySelector('.mt').textContent;
+  tx(title,PAD,PAD+12,'700 16px '+FF,'#0f172a');
+  const fv=$('fGA').value,fr=$('fRole').value,fc=$('fCity').value,fuf=$('fUF').value;
+  tx([fv?('GA: '+(fv==='__none'?'sem GA':fv)):'',fr?('Cargo: '+(fr==='__none'?'sem cargo':fr)):'',fc?('Cidade: '+(fc==='__none'?'sem cidade':fc)):'',fuf?('UF: '+(fuf==='__none'?'sem UF':fuf)):''].filter(Boolean).join(' · ')||'Todos os colaboradores',PAD,PAD+32,'400 12px '+FF,'#64748b');
+  const y0=PAD+TT;
+  tx('COLABORADOR',PAD+8,y0+HH/2,'600 10px '+FF,'#64748b');
+  cal.days.forEach((d,i)=>{
+    const cx=PAD+NW+i*CW+CW/2;x.globalAlpha=d.inMonth?1:.5;
+    const off=sa&&saOff.includes(isoD(d.date));
+    tx(DOW[d.dow].toUpperCase(),cx,y0+12,'600 9px '+FF,d.dow===6?'#b91c1c':'#64748b','center');
+    tx(fmtD(d.date).slice(0,2),cx,y0+27,'700 12px '+FF,d.dow===6?'#b91c1c':'#0f172a','center');
+    if(off){x.fillStyle='#64748b';x.fillRect(cx-8,y0+27,16,1)}
+    x.globalAlpha=1;
+  });
+  x.fillStyle='#e6eaf1';x.fillRect(PAD,y0+HH-1,W-PAD*2,1);
+  let last=null;
+  rows.forEach((e,r)=>{
+    const y=y0+HH+r*RH;const tk=teamKey(emps[e]);const key=tk?'T:'+tk:'S:'+e;
+    if(last!==null&&key!==last){x.fillStyle='#0f766e';x.fillRect(PAD,y-1,W-PAD*2,2)}
+    last=key;
+    let nx=PAD+8;
+    if(tk){const h=teamHue(tk),lab=tk.slice(0,6);x.font='700 10px '+FF;const w=x.measureText(lab).width+10;rr(nx,y+(hasC?6:6),w,15,5,`hsl(${h} 75% 90%)`);tx(lab,nx+w/2,y+(hasC?13.5:13.5),'700 10px '+FF,`hsl(${h} 60% 28%)`,'center');nx+=w+6}
+    tx(fit(cfg.names[e],NW-(nx-PAD)-6,'600 12.5px '+FF),nx,y+(hasC?14:13),'600 12.5px '+FF,'#0f172a');
+    if(hasC&&emps[e]&&emps[e].city)tx(fit(emps[e].city+(emps[e].uf?'/'+emps[e].uf:''),NW-(nx-PAD)-6,'400 10.5px '+FF),nx,y+27,'400 10.5px '+FF,'#64748b');
+    cal.days.forEach((d,i)=>{
+      const cx=PAD+NW+i*CW+1,w=CW-2;let bg=null,fg=null,txt='',al=d.inMonth?1:.5;
+      if(!sa){const v=grid[e][i];if(state.cvMap[e+'|'+i]){bg='#fed7aa';fg='#9a3412';txt='C'}else if(v==='V'){bg='#ede9fe';fg='#5b21b6';txt='FÉ'}else if(v==='F'){bg='#fee2e2';fg='#b91c1c';txt='F'}else{bg='#1e3a8a';fg='#fff';txt='T'}}
+      else{const v=state.saView[e+'|'+i];if(v===-3){bg='#ede9fe';fg='#5b21b6';txt='FÉ'}else if(v===-1){bg='#fee2e2';fg='#b91c1c';txt='F';al*=.55}else if(v===2){bg='#fed7aa';fg='#9a3412';txt='SA'}else if(v===1){bg='#fde7a7';fg='#6b4200';txt='SA'}}
+      if(bg){x.globalAlpha=al;rr(cx,y+2,w,RH-4,6,bg);tx(txt,cx+w/2,y+RH/2+.5,'700 '+(txt.length>1?'10':'11')+'px '+FF,fg,'center');x.globalAlpha=1}
+    });
+  });
+  const yc=y0+HH+rows.length*RH;
+  x.fillStyle='#e6eaf1';x.fillRect(PAD,yc,W-PAD*2,1);
+  tx(sa?'De sobreaviso':'Em serviço',PAD+8,yc+RH/2,'600 11px '+FF,'#64748b');
+  cal.days.forEach((d,i)=>{
+    let n=0;
+    if(sa){if(!saOff.includes(isoD(d.date)))cfg.names.forEach((_,e)=>{const v=state.saView[e+'|'+i];if(v===1||v===2)n++})}
+    else n=state.v.coverage[i];
+    const low=!sa&&cfg.open[d.dow]&&n<cfg.minStaff[d.dow];
+    const cx=PAD+NW+i*CW+CW/2;x.globalAlpha=d.inMonth?1:.5;
+    if(low)rr(cx-11,yc+4,22,RH-8,5,'#fdeceb');
+    tx(n?String(n):'',cx,yc+RH/2,(low?'700 ':'500 ')+'11px '+FF,low?'#b42318':'#64748b','center');x.globalAlpha=1;
+  });
+  {const R=pairConflicts(sa?'sa':'esc');R.days.forEach(i=>{const cx=PAD+NW+i*CW;x.fillStyle='#dc2626';x.fillRect(cx+1,y0+2,CW-2,HH-6);tx(DOW[cal.days[i].dow].toUpperCase(),cx+CW/2,y0+12,'600 9px '+FF,'#fff','center');tx(fmtD(cal.days[i].date).slice(0,2),cx+CW/2,y0+27,'700 12px '+FF,'#fff','center')});
+   R.cells.forEach(k=>{const[e,i]=k.split('|').map(Number);const r=rows.indexOf(e);if(r<0)return;const cx=PAD+NW+i*CW+1,y=y0+HH+r*RH;x.strokeStyle='#dc2626';x.lineWidth=2;x.strokeRect(cx+1,y+3,CW-4,RH-6)})}
+  {const f=cal.days.findIndex(d=>d.inMonth),l=cal.days.length-1-[...cal.days].reverse().findIndex(d=>d.inMonth);x.fillStyle='#0f172a';
+   if(f>0)x.fillRect(PAD+NW+f*CW-1.5,y0+2,3,HH+rows.length*RH+RH-4);
+   if(l<cal.days.length-1)x.fillRect(PAD+NW+(l+1)*CW-1.5,y0+2,3,HH+rows.length*RH+RH-4)}
+  // legenda
+  const ly=yc+RH+FT/2;let lx=PAD+8;
+  const chip=(l,bg,fg,desc)=>{rr(lx,ly-9,l.length>1?26:20,18,5,bg);tx(l,lx+(l.length>1?13:10),ly+.5,'700 10px '+FF,fg,'center');lx+=(l.length>1?26:20)+6;tx(desc,lx,ly+.5,'400 11px '+FF,'#64748b');x.font='400 11px '+FF;lx+=x.measureText(desc).width+16};
+  if(!sa){chip('T','#1e3a8a','#fff','Trabalho');chip('F','#fee2e2','#b91c1c','Folga');chip('C','#fed7aa','#9a3412','Cobrindo sobreaviso de colega');if(rows.some(e=>state.grid[e].includes('V')))chip('FÉ','#ede9fe','#5b21b6','Férias')}
+  else{chip('SA','#fde7a7','#6b4200','Sobreaviso');chip('SA','#fed7aa','#9a3412','Cobertura de folga');chip('F','#fee2e2','#b91c1c','Folga (indisponível)');if(rows.some(e=>state.grid[e].includes('V')))chip('FÉ','#ede9fe','#5b21b6','Férias')}
+  return cv;
+}
+async function copyImage(kind,btn){
+  if(!state.grid)return;
+  const orig=btn.textContent;
+  try{
+    const cv=drawTable(kind);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    try{
+      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+      btn.textContent='Imagem copiada ✓';setTimeout(()=>btn.textContent=orig,2000);
+    }catch(err){
+      $('imgPrev').src=cv.toDataURL('image/png');$('imgModal').hidden=false;
+    }
+  }catch(e){btn.textContent='Não foi possível gerar';setTimeout(()=>btn.textContent=orig,2500)}
+}
+$('btnImgEsc').onclick=function(){copyImage('esc',this)};
+$('btnImgSa').onclick=function(){copyImage('sa',this)};
+$('imgClose').onclick=()=>{$('imgModal').hidden=true};
+$('imgModal').addEventListener('click',ev=>{if(ev.target.id==='imgModal')$('imgModal').hidden=true});
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape')$('imgModal').hidden=true});
+function renderCovers(cv,parts,cal){
+  if(!cv.list.length){$('cvTbl').innerHTML='<tr><td>Nenhuma folga cai dentro de uma semana de sobreaviso.</td></tr>';$('cvSum').textContent='';return}
+  $('cvTbl').innerHTML='<tr><th>Data</th><th>Folga de (sobreaviso)</th><th>Substituto</th></tr>'+cv.list.map(e=>{
+    const d=cal.days[e.i];
+    const opts=['<option value="">Automático</option>',...e.cands.map(p=>`<option value="${esc(p)}"${e.forced&&e.sub===p?' selected':''}>${esc(p)}</option>`)].join('');
+    const lab=e.sub?esc(e.sub):'<b style="color:var(--bad)">sem substituto</b>';
+    const ctl=e.first?`${lab}${e.forced?' <span class="forced">(ajustado)</span>':e.fixed?' <span class="forced">(substituto fixo)</span>':''}<br><select data-key="${esc(e.key)}" aria-label="Trocar substituto de ${esc(e.tit)} a partir de ${fmtD(d.date)}">${opts}</select>`:`${lab} <span class="small">(mesmo do dia anterior)</span>`;
+    return `<tr><td>${fmtD(d.date)} ${DOW[d.dow]}</td><td>${esc(e.tit)}</td><td>${ctl}</td></tr>`}).join('');
+  $('cvSum').textContent='Coberturas por pessoa: '+parts.filter(p=>cv.tally[p]).map(p=>p+' '+cv.tally[p]).join(' · ');
+}
+$('cvTbl').addEventListener('change',ev=>{const s=ev.target.closest('select[data-key]');if(!s)return;if(s.value)ov[s.dataset.key]=s.value;else delete ov[s.dataset.key];saveState();render()});
+function ocRefresh(){if(!state.cfg){return}Object.assign(state.cfg,ocCfg());if(state.cfg.ocFit){genNew();return}applyModes(oc,mondaysOf(state.cal),repsOf(),state.cfg.ocMin,state.cfg.ocAnchor);syncTeams();saveState();render()}
+['ocOn','ocAlt','ocCov','ocFit','ocAnc','ocMin','ocSd','ocSt','ocEd','ocEt','ocInfOn','ocISd','ocISt','ocIEd','ocIEt'].forEach(id=>$(id).addEventListener('change',ocRefresh));
+$('btnOcAuto').onclick=()=>{if(!state.cal)return;Object.assign(state.cfg,ocCfg());applyModes(oc,mondaysOf(state.cal),repsOf(),state.cfg.ocMin,state.cfg.ocAnchor);syncTeams();afterOC()};
+$('btnOcClear').onclick=()=>{if(!state.cal)return;const ms=mondaysOf(state.cal).map(isoD);Object.keys(oc).forEach(k=>{oc[k]=oc[k].filter(x=>!ms.includes(x))});emps.forEach(x=>{if(x.mode!=='off')x.mode='manual'});renderEmps();afterOC()};
+DOW.forEach((d,i)=>{['ocSd','ocEd','ocISd','ocIEd'].forEach(id=>$(id).add(new Option(d,i)))});$('ocISd').value=4;$('ocIEd').value=4;
+$('ocInfOn').addEventListener('change',()=>{const on=$('ocInfOn').checked;$('ocInfBody').hidden=!on;if(on&&!$('ocInfOn').dataset.set){$('ocISd').value=$('ocSd').value;$('ocISt').value=$('ocSt').value;$('ocIEd').value=$('ocEd').value;$('ocIEt').value=$('ocEt').value}$('ocInfOn').dataset.set='1'});$('ocSd').value=4;$('ocEd').value=4;
+$('tbl').addEventListener('click',ev=>{
+  const b=ev.target.closest('button.c');if(!b)return;
+  const e=+b.dataset.e,i=+b.dataset.i;if(state.grid[e][i]==='V')return;const nv=state.grid[e][i]==='T'?'F':'T';mates(state.cfg.names[e]).forEach(n=>{const k=state.cfg.names.indexOf(n);if(k>=0){state.grid[k][i]=nv;if(fix[n])fix[n][isoD(state.cal.days[i].date)]=nv}});saveState();render();
+  const nb=document.querySelector(`button.c[data-e="${e}"][data-i="${i}"]`);if(nb)nb.focus({preventScroll:true});
+});
+$('btnGen').onclick=()=>{state.seed=1;genNew()};
+$('btnVar').onclick=()=>{state.seed=Math.floor(Math.random()*1e6)+2;genNew()};
+$('btnCsv').onclick=async()=>{
+  if(!state.grid)return;let csv=toCSV(state.cfg.names,state.grid,state.cal);if(state.cfg.ocOn){const ms=mondaysOf(state.cal),ps=ocParts();if(state.cfg.ocCover){const cv=computeCovers(state.grid,state.cal,state.cfg.names,ps,oc,state.cfg,ov);csv+='\n\nCobertura de folgas no sobreaviso;;\n'+cv.list.map(e=>`"${e.iso}";"${e.tit}";"${e.sub||'sem substituto'}"`).join('\n')}
+  csv+='\n\n'+['Sobreaviso (início da semana)',...ms.map(m=>{const w=onCallWindow(m,state.cfg);return fmtDT(w.start)+' → '+fmtDT(w.end)})].map(x=>'"'+x+'"').join(';')+'\n'+ps.map(nm=>['"'+nm+'"',...ms.map(m=>'"'+((oc[nm]||[]).includes(isoD(m))?'Sobreaviso':'')+'"')].join(';')).join('\n')}
+  $('csvText').value=csv;$('csvBox').style.display='block';
+  try{await navigator.clipboard.writeText(csv);$('btnCsv').textContent='Copiado ✓';setTimeout(()=>$('btnCsv').textContent='Copiar CSV',1800)}catch(e){$('csvBox').open=true;$('csvText').select()}
+};
+['month','cycDay','cycBy','entrada','intervalo','sunN','minWeek','minSat','minSun','acordo','force40','comp','st1','st2'].forEach(id=>$(id).addEventListener('change',genNew));
+
+function buildChips(){
+  $('openDays').innerHTML=DOW.map((d,i)=>`<button type="button" class="chip" data-d="${i}" aria-pressed="${state.open[i]}">${d}</button>`).join('');
+}
+$('openDays').addEventListener('click',ev=>{const b=ev.target.closest('.chip');if(!b)return;const d=+b.dataset.d;state.open[d]=!state.open[d];b.setAttribute('aria-pressed',state.open[d]);genNew()});
+
+function normName(s){return s.trim().replace(/\s+/g,' ')}
+function renderEmps(){
+  fillRoles();setTimeout(()=>{try{renderVac();renderSubFix()}catch(e){}},0);
+  $('empCount').textContent='('+emps.length+')';
+  const spE=makeSep();
+  $('empList').innerHTML=emps.map((p,i)=>`<li${spE(i)}><input type="text" class="nm" data-i="${i}" value="${esc(p.name)}" aria-label="Nome do colaborador ${i+1}"><input type="text" class="role" data-i="${i}" value="${esc(p.role)}" placeholder="Cargo" aria-label="Cargo de ${esc(p.name)}"><input type="text" class="team" data-i="${i}" value="${isInfra(p)?'':esc(p.team||'')}" placeholder="${isInfra(p)?'Sem equipe':'Equipe'}" maxlength="12"${isInfra(p)?' disabled title="Técnicos de infraestrutura não formam equipe"':''} aria-label="Equipe de ${esc(p.name)}"><select class="uf" data-i="${i}" aria-label="UF de ${esc(p.name)}">${ufOpts(p.uf||'')}</select><select class="city" data-i="${i}" aria-label="Cidade de ${esc(p.name)}">${cityOpts(p.uf||'',p.city||'')}</select><select class="ga" data-i="${i}" aria-label="GA de ${esc(p.name)}">${gOpts(GA_LIST,p.ga,'GA: —')}</select><select class="go" data-i="${i}" aria-label="GO de ${esc(p.name)}">${gOpts(GO_LIST,p.go,'GO: —')}</select><select class="mode" data-i="${i}" aria-label="Sobreaviso de ${esc(p.name)}">${MODES.map(([v,l])=>`<option value="${v}"${(p.mode||'auto')===v?' selected':''}>${l}</option>`).join('')}</select><button type="button" class="xbtn" data-i="${i}" aria-label="Remover ${esc(p.name)}">✕</button></li>`).join('');
+}
+function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
+function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
+  name=normName(name);if(!name)return 'vazio';
+  if(emps.some(e=>e.name.toLowerCase()===name.toLowerCase()))return 'dup';
+  emps.push({name,role:normName(role||''),sob:sob!=='off',mode:sob||'auto',ga:ga||'',go:go||(ga&&GA_GO[ga])||'',team:/infra/i.test(role||'')?'':normName(team||''),...(()=>{const r=canonCity(normName(city||''),String(uf||'').toUpperCase().trim());return{city:r.city,uf:UFS.includes(r.uf)?r.uf:''}})()});return 'ok';
+}
+function splitLine(line){
+  const sep=line.includes('\t')?'\t':line.includes(';')?';':',';
+  const out=[];let cur='',q=false;
+  for(const ch of line){if(ch==='"'){q=!q}else if(ch===sep&&!q){out.push(cur);cur=''}else cur+=ch}
+  out.push(cur);return out.map(s=>s.trim());
+}
+function importText(txt,mode){
+  const lines=txt.replace(/^\uFEFF/,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
+  if(lines.length&&/^(nome|colaborador|funcion[aá]rio|name)\b/i.test(lines[0]))lines.shift();
+  const before=emps.slice();
+  if(mode==='replace')emps=[];
+  let added=0,dup=0;
+  for(const l of lines){const c=splitLine(l);const m3=(c[2]||'').trim().toLowerCase();const r=addEmp(c[0]||'',c[1]||'',/^(n|nao|não|0|false|x)$/.test(m3)?'off':m3==='a'?'A':m3==='b'?'B':m3==='manual'?'manual':'auto',matchList(GA_LIST,c[3]),matchList(GO_LIST,c[4]),c[5]||'',c[6]||'',c[7]||'');if(r==='ok')added++;else if(r==='dup')dup++}
+  if(!added&&mode==='replace')emps=before;
+  return{added,dup,total:lines.length};
+}
+function afterRoster(){renderEmps();genNew()}
+$('newUF').innerHTML=ufOpts('');$('newCity').innerHTML=cityOpts('','');
+$('newUF').addEventListener('change',()=>{$('newCity').innerHTML=cityOpts($('newUF').value,'')});
+$('addForm').addEventListener('submit',ev=>{
+  ev.preventDefault();const r=addEmp($('newName').value,$('newRole').value,'auto',$('newGA').value,$('newGO').value,$('newTeam').value,$('newCity').value,$('newUF').value);
+  if(r==='ok'){say('addMsg','Colaborador cadastrado.');$('newName').value='';$('newRole').value='';$('newGA').value='';$('newGO').value='';$('newTeam').value='';$('newUF').value='';$('newCity').innerHTML=cityOpts('','');afterRoster();$('newName').focus()}
+  else say('addMsg',r==='dup'?'Já existe um colaborador com esse nome.':'Informe o nome.',true);
+});
+$('empList').addEventListener('change',ev=>{
+  const i=+ev.target.dataset.i;if(isNaN(i))return;
+  const syncF=(...f)=>mates(emps[i].name).forEach(n=>{const x=emps.find(y=>y.name===n);if(x&&x!==emps[i])f.forEach(k=>{x[k]=emps[i][k]})});
+  if(ev.target.classList.contains('team')){emps[i].team=normName(ev.target.value);const k=teamKey(emps[i]);if(k){const m=emps.find(y=>y!==emps[i]&&teamKey(y)===k);if(m){['ga','go','uf','city'].forEach(f=>{emps[i][f]=m[f]||''})}}renderEmps()}
+  else if(ev.target.classList.contains('uf')){emps[i].uf=ev.target.value;if(emps[i].city&&!(CITIES[emps[i].uf]||[]).includes(emps[i].city))emps[i].city='';syncF('uf','city');fillRoles();renderEmps()}
+  else if(ev.target.classList.contains('city')){emps[i].city=ev.target.value;syncF('city');fillRoles();renderEmps()}
+  else if(ev.target.classList.contains('ga')){emps[i].ga=ev.target.value;const g=GA_GO[ev.target.value];if(g){emps[i].go=g}syncF('ga','go');renderEmps()}
+  else if(ev.target.classList.contains('go')){emps[i].go=ev.target.value;syncF('go');renderEmps()}
+  else if(ev.target.classList.contains('mode')){mates(emps[i].name).forEach(n=>{const x=emps.find(y=>y.name===n);x.mode=ev.target.value;x.sob=ev.target.value!=='off'});renderEmps()}
+  else if(ev.target.classList.contains('nm')){const v=normName(ev.target.value);if(!v||emps.some((e,j)=>j!==i&&e.name.toLowerCase()===v.toLowerCase())){say('addMsg','Nome vazio ou repetido.',true);ev.target.value=emps[i].name;return}if(oc[emps[i].name]){oc[v]=oc[emps[i].name];delete oc[emps[i].name]}emps[i].name=v}
+  else{emps[i].role=normName(ev.target.value);if(isInfra(emps[i]))emps[i].team='';renderEmps()}
+  genNew();
+  if(/city|uf/.test(ev.target.className)||!ev.target.className.match(/team|ga|go/))enforceInfraNow();
+});
+$('empList').addEventListener('click',ev=>{const b=ev.target.closest('.xbtn');if(!b)return;emps.splice(+b.dataset.i,1);afterRoster()});
+function impMode(){return document.querySelector('input[name=impMode]:checked').value}
+function reportImp(r){say('impMsg',r.added?`${r.added} importado(s)`+(r.dup?`, ${r.dup} ignorado(s) por nome repetido`:'')+'.':'Nada importado'+(r.dup?` (${r.dup} repetido(s))`:'')+'. Confira o formato.',!r.added)}
+$('btnImp').onclick=()=>{const r=importText($('impText').value,impMode());reportImp(r);if(r.added){$('impText').value='';afterRoster()}};
+$('impFile').addEventListener('change',async ev=>{
+  const f=ev.target.files[0];if(!f)return;
+  try{const txt=await f.text();const r=importText(txt,impMode());reportImp(r);if(r.added)afterRoster()}catch(e){say('impMsg','Não foi possível ler o arquivo.',true)}
+  ev.target.value='';
+});
+function modelTxt(){return 'Nome;Cargo;Sobreaviso;GA;GO;Equipe;Cidade;UF\nNome Sobrenome 1;Técnico de Rede;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;E1;Teresina;PI\nNome Sobrenome 2;Oficial de Rede;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;E1;São Luís;MA\nNome Sobrenome 3;Técnico de Infraestrutura;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;;Belém;PA'}
+$('btnModel').onclick=async()=>{
+  const txt=modelTxt();$('impText').value=txt;
+  try{await navigator.clipboard.writeText(txt);say('impMsg','Modelo copiado e colado na caixa. Troque os dados de exemplo e importe.')}catch(e){$('impText').select();say('impMsg','Modelo na caixa. Troque os dados de exemplo e clique em Importar.')}
+};
+$('btnDlModel').onclick=async()=>{
+  const csv='\ufeff'+modelTxt().replace(/\n/g,'\r\n')+'\r\n';
+  let dl=null;try{dl=window.claude&&await window.claude.use('downloads')}catch(e){}
+  if(dl){
+    try{await dl.save({filename:'modelo_importacao_colaboradores.csv',data:csv});say('dlMsg','Planilha padrão salva. Preencha no Excel e use "Importar lista" (arquivo CSV).');return}
+    catch(e){if(e&&e.code==='declined'){say('dlMsg','Download cancelado.');return}}
+  }
+  $('impText').value=modelTxt();
+  try{await navigator.clipboard.writeText(modelTxt());say('dlMsg','Não foi possível baixar aqui. O modelo foi copiado e colado na caixa de importação: cole numa planilha e salve como CSV.')}
+  catch(e){say('dlMsg','Não foi possível baixar aqui. O modelo está na caixa de importação: copie e cole numa planilha.')}
+};
+$('btnExpEmp').onclick=async()=>{
+  const txt=emps.map(e=>e.name+';'+e.role+';'+({off:'não',A:'A',B:'B',manual:'manual',auto:''}[e.mode||'auto'])+';'+(e.ga||'')+';'+(e.go||'')+';'+(e.team||'')+';'+(e.city||'')+';'+(e.uf||'')).join('\n');$('impText').value=txt;
+  try{await navigator.clipboard.writeText(txt);say('impMsg','Lista copiada.')}catch(e){$('impText').select();say('impMsg','Copie o texto da caixa acima.')}
+};
+$('btnPre').onclick=applyPreset;
+$('btnPat').onclick=applyPattern;
+$('noticeList').addEventListener('click',ev=>{const y=ev.target.closest('.yes');if(y){runFix(y.dataset.fx);return}const n=ev.target.closest('.no');if(n){const a=n.closest('.ask');if(a)a.hidden=true}});
+$('noticeUndo').addEventListener('click',ev=>{if(ev.target.closest('.undo'))undoFix()});
+$('noticeBtn').onclick=()=>{clearTimeout(noticeTimer);$('noticePanel').hidden=!$('noticePanel').hidden};$('noticeX').onclick=()=>{clearTimeout(noticeTimer);$('noticePanel').hidden=true};
+function shiftPeriod(dm){
+  const f=$('patFrom'),to=$('patTo');if(!f.value||!to.value){patDefaults()}
+  const mv=s=>{const[y,m,d]=s.split('-').map(Number);const tm=m-1+dm,yy=y+Math.floor(tm/12),mm=((tm%12)+12)%12;const dd=Math.min(d,new Date(Date.UTC(yy,mm+1,0)).getUTCDate());return yy+'-'+String(mm+1).padStart(2,'0')+'-'+String(dd).padStart(2,'0')};
+  const nf=mv(f.value),nt=mv(to.value);
+  f.dataset.t='1';to.dataset.t='1';
+  const[y,m]=curYM();setMonth(y,m+dm);
+  f.value=nf;to.value=nt;
+  say('ocPatMsg','Período deslocado em '+(dm>0?'+':'')+dm+' ciclo. Clique em Aplicar padrão para lançar.');
+}
+$('patPrev').onclick=()=>shiftPeriod(-1);$('patNext').onclick=()=>shiftPeriod(1);['patFrom','patTo'].forEach(id=>$(id).addEventListener('change',()=>{$(id).dataset.t=$(id).value?'1':''}));
+$('vacAdd').onclick=()=>{const n=$('vacEmp').value,s=$('vacS').value,e=$('vacE').value,m=$('vacMsg');
+  if(!n){m.textContent='Cadastre um colaborador primeiro.';return}
+  if(!s||!e){m.textContent='Informe a data inicial e a final.';return}
+  if(e<s){m.textContent='A data final não pode ser anterior à inicial.';return}
+  vac.push({name:n,s,e});m.textContent='Férias adicionadas.';$('vacS').value='';$('vacE').value='';vacChanged()};
+$('sfAdd').onclick=()=>{const a=$('sfTit').value,b=$('sfSub').value,m=$('sfMsg');if(!a||!b){m.textContent='Cadastre colaboradores primeiro.';return}if(a===b){m.textContent='O substituto precisa ser outra pessoa.';return}subFix[a]=b;if($('sfBoth').checked)subFix[b]=a;m.textContent='Substituto fixo definido.';sfChanged()};
+$('sfList').addEventListener('click',ev=>{const b=ev.target.closest('[data-sfdel]');if(!b)return;delete subFix[b.dataset.sfdel];sfChanged()});
+$('vacList').addEventListener('click',ev=>{const b=ev.target.closest('[data-vdel]');if(!b)return;vac.splice(+b.dataset.vdel,1);vacChanged()});
+$('btnClear').onclick=()=>{emps=[];renderEmps();state.grid=null;$('checks').innerHTML='<li class="warn"><span class="ic">!</span><span>Cadastre ou importe colaboradores para gerar a escala.</span></li>';$('tbl').innerHTML='';$('sum').innerHTML='';say('impMsg','Lista limpa.')};
+$('btnSample').onclick=()=>{emps=SAMPLE.map(x=>({...x}));afterRoster();say('impMsg','Exemplo carregado.')};
+const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function curYM(){const[a,b]=($('month').value||'2027-01').split('-').map(Number);return[a,b-1]}
+function setMonth(y,m){
+  while(m<0){m+=12;y--}while(m>11){m-=12;y++}
+  y=Math.min(2040,Math.max(2024,y));
+  $('month').value=y+'-'+String(m+1).padStart(2,'0');$('mSel').value=m;$('ySel').value=y;
+  $('month').dispatchEvent(new Event('change'));
+}
+MESES.forEach((n,i)=>$('mSel').add(new Option(n,i)));
+for(let y=2024;y<=2040;y++)$('ySel').add(new Option(y,y));
+$('mSel').onchange=()=>setMonth(+$('ySel').value,+$('mSel').value);
+$('ySel').onchange=()=>setMonth(+$('ySel').value,+$('mSel').value);
+$('mPrev').onclick=()=>{const[y,m]=curYM();setMonth(y,m-1)};
+$('mNext').onclick=()=>{const[y,m]=curYM();setMonth(y,m+1)};
+$('mNow').onclick=()=>{const n=new Date();setMonth(n.getFullYear(),n.getMonth())};
+function showView(v){
+  const sec=v==='secundario';
+  $('viewMain').hidden=sec;$('viewSec').hidden=!sec;
+  $('tabMain').setAttribute('aria-selected',!sec);$('tabSec').setAttribute('aria-selected',sec);
+  try{if(location.hash!==(sec?'#secundario':'#principal'))location.hash=sec?'secundario':'principal'}catch(e){}
+}
+$('tabMain').onclick=()=>showView('principal');$('tabSec').onclick=()=>showView('secundario');
+window.addEventListener('hashchange',()=>showView(location.hash==='#secundario'?'secundario':'principal'));
+$('newGA').innerHTML=gOpts(GA_LIST,'','Selecione o GA');$('newGO').innerHTML=gOpts(GO_LIST,'','Selecione o GO');
+$('newGA').addEventListener('change',()=>{const g=GA_GO[$('newGA').value];if(g)$('newGO').value=g});
+$('fGA').innerHTML='<option value="">Todos os GAs</option>'+GA_LIST.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+'<option value="__none">Sem GA</option>';
+$('fGA').addEventListener('change',()=>{mirrorFilters();if(state.grid)render()});FIDS.forEach(id=>$(id+'2').addEventListener('change',()=>{$(id).value=$(id+'2').value;$(id).dispatchEvent(new Event('change'))}));$('fRole').addEventListener('change',()=>{mirrorFilters();if(state.grid)render()});$('fCity').addEventListener('change',()=>{mirrorFilters();if(state.grid)render()});$('fUF').addEventListener('change',()=>{mirrorFilters();if(state.grid)render()});
+(function init(){
+  const now=new Date();let y=now.getFullYear(),m=now.getMonth()+2;if(m>12){m-=12;y++}
+  $('month').value=y+'-'+String(m).padStart(2,'0');$('mSel').value=m-1;$('ySel').value=y;
+    try{const s=JSON.parse(localStorage.getItem('escala5x2v2')||'null');if(s){if(Array.isArray(s.emps)&&s.emps.length)emps=s.emps.filter(x=>x&&x.name).map(x=>({name:String(x.name),role:String(x.role||''),sob:x.mode?x.mode!=='off':x.sob!==false,mode:x.mode||(x.sob===false?'off':'auto'),ga:GA_LIST.includes(x.ga)?x.ga:'',go:GO_LIST.includes(x.go)?x.go:'',team:String(x.team||''),...(()=>{const r=canonCity(x.city,UFS.includes(x.uf)?x.uf:'');return{city:r.city,uf:UFS.includes(r.uf)?r.uf:''}})()}));if(Array.isArray(s.open))state.open=s.open;if(!s.gaMig){emps.forEach(e=>{if(!e.ga&&SAMPLE.some(x=>x.name===e.name)){e.ga='Miguel Barros de Carvalho Junior';e.go='Ivandro Pessoa da Nóbrega Alencar'}})}
+if(s.oc&&typeof s.oc==='object')oc=s.oc;if(s.ov&&typeof s.ov==='object')ov=s.ov;if(s.fix&&typeof s.fix==='object')fix=s.fix;if(s.subFix&&typeof s.subFix==='object')subFix=s.subFix;if(s.subMig)state.subMig=true;if(s.subMig2)state.subMig2=true;if(Array.isArray(s.vac))vac=s.vac.filter(v=>v&&v.name&&v.s&&v.e);if(s.imgPre)state.imgPre=true;if(Array.isArray(s.saOff))saOff=s.saOff;if(s.ocD&&typeof s.ocD==='object')ocD=s.ocD;if(s.ocIn&&s.ocIn.cov===false)$('ocCov').checked=false;if(s.ocIn&&s.ocIn.fit===false)$('ocFit').checked=false;if(s.cyc){$('cycDay').value=s.cyc.d||15;$('cycBy').value=s.cyc.b||'end'}if(s.ocIn&&s.ocIn.anc)$('ocAnc').value=s.ocIn.anc;if(s.ocIn){const o=s.ocIn;$('ocOn').checked=o.on!==false;$('ocAlt').checked=o.alt!==false;$('ocMin').value=o.min||1;$('ocSd').value=o.sd;$('ocSt').value=o.st||'18:00';$('ocEd').value=o.ed;$('ocEt').value=o.et||'08:00';if(o.inf){$('ocInfOn').checked=!!o.inf.on;$('ocInfOn').dataset.set='1';$('ocInfBody').hidden=!o.inf.on;$('ocISd').value=o.inf.sd;$('ocISt').value=o.inf.st||'18:00';$('ocIEd').value=o.inf.ed;$('ocIEt').value=o.inf.et||'08:00'}}$('minWeek').value=s.mw||5;$('minSat').value=s.ms||5;$('minSun').value=s.mu||4}}catch(e){}
+  try{
+    let done=false;try{const s2=JSON.parse(localStorage.getItem('escala5x2v2')||'null');done=!!(s2&&s2.legMerge)}catch(e){}
+    if(!done){
+      const DEMO=['Ana Souza','Bruno Lima','Carla Mendes','Diego Alves','Elisa Rocha','Felipe Costa','Gabriela Nunes','Henrique Dias'].map(norm);
+      let L=null;try{L=JSON.parse(localStorage.getItem('escala5x2')||'null')}catch(e){}
+      if(L&&Array.isArray(L.emps))L.emps.forEach(x=>{
+        if(!x||!x.name)return;const n=norm(x.name);
+        if(DEMO.includes(n)||emps.some(e=>norm(e.name)===n))return;
+        const mode=x.mode||(x.sob===false?'off':'auto');
+        emps.push({name:String(x.name),role:String(x.role||''),sob:mode!=='off',mode,ga:GA_LIST.includes(x.ga)?x.ga:'',go:GO_LIST.includes(x.go)?x.go:'',team:String(x.team||''),city:String(x.city||''),uf:''});
+        if(L.oc&&L.oc[x.name])oc[x.name]=L.oc[x.name];
+      });
+      ['Renato','Mamede'].forEach(p=>{if(!emps.some(e=>norm(e.name).includes(norm(p))))emps.push({name:p,role:'Técnico',sob:true,mode:'auto',ga:'',go:'',team:''})});
+    }
+    legMerge=true;
+  }catch(e){}
+  // recupera sobreaviso (semanas, modo, ajustes por dia) configurado na versão anterior
+  try{
+    let d2=false;try{const s3=JSON.parse(localStorage.getItem('escala5x2v2')||'null');d2=!!(s3&&s3.ocMerge)}catch(e){}
+    if(!d2){
+      let L=null;try{L=JSON.parse(localStorage.getItem('escala5x2')||'null')}catch(e){}
+      if(L&&Array.isArray(L.emps)){
+        const has=o=>o&&((Array.isArray(o)&&o.length)||(!Array.isArray(o)&&Object.keys(o).length));
+        L.emps.forEach(x=>{
+          if(!x||!x.name)return;const cur=emps.find(e=>norm(e.name)===norm(x.name));if(!cur)return;
+          const lw=L.oc&&(L.oc[x.name]||L.oc[cur.name]);
+          if(has(lw)&&!has(oc[cur.name])){
+            oc[cur.name]=lw;
+            const lm=x.mode||(x.sob===false?'off':'');
+            if(lm&&lm!=='off'){cur.mode=lm;cur.sob=true}
+            if(L.ocD&&has(L.ocD[x.name])&&!has(ocD[cur.name]))ocD[cur.name]=L.ocD[x.name];
+          }
+        });
+        if(L.ov&&typeof L.ov==='object'&&!has(ov))ov=L.ov;
+        if(Array.isArray(L.saOff)&&!saOff.length)saOff=L.saOff.slice();
+        if(L.ocIn&&!(()=>{try{return JSON.parse(localStorage.getItem('escala5x2v2')||'null').ocIn}catch(e){return null}})()){const o=L.ocIn;if(o.sd)$('ocSd').value=o.sd;if(o.st)$('ocSt').value=o.st;if(o.ed)$('ocEd').value=o.ed;if(o.et)$('ocEt').value=o.et;if(o.anc)$('ocAnc').value=o.anc}
+      }
+    }
+  }catch(e){}
+  if(!state.subMig){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[v.name])subFix[v.name]=w.name;state.subMig=true}
+  if(!state.subMig2){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[w.name])subFix[w.name]=v.name;state.subMig2=true}
+  buildChips();renderEmps();if(!state.imgPre)applyPreset();else genNew();showView(location.hash==='#secundario'?'secundario':'principal');
+})();
+</script>
+</body>
+</html>
