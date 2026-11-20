@@ -327,7 +327,7 @@ table.sum th,table.sum td{padding:3px 6px;font-size:12px}
 <ul class="emps" id="empList"></ul>
 <div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (CSV)</button><span class="small" id="dlMsg" role="status">Modelo com as colunas Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade e UF. Abre no Excel; preencha e importe em "Importar lista".</span></div>
 <details class="imp"><summary><b>Importar lista</b> (CSV, TXT ou colar)</summary>
-<p class="hint">Uma pessoa por linha: <code>Nome</code>, <code>Nome;Cargo</code> ou <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe</code> (sobreaviso: não, A, B, manual; vazio = rodízio. GA e GO: nome da lista, ou parte dele. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso. Cargos de infraestrutura não formam equipe). Separador ; , ou tabulação. Cabeçalho "Nome" e linhas iniciadas por # são ignorados. Use "Copiar modelo" para ver um exemplo. Para Excel, salve como CSV.</p>
+<p class="hint">Uma pessoa por linha: <code>Nome</code>, <code>Nome;Cargo</code> ou <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe</code> (sobreaviso: não, A, B, manual; vazio = rodízio. GA e GO: nome da lista, ou parte dele. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso: toda modificação feita em um membro (folga T/F, sobreaviso, férias, substituto, GA, GO, UF e cidade) acontece também com os outros da equipe. Cargos de infraestrutura não formam equipe). Separador ; , ou tabulação. Cabeçalho "Nome" e linhas iniciadas por # são ignorados. Use "Copiar modelo" para ver um exemplo. Para Excel, salve como CSV.</p>
 <div class="radios"><label><input type="radio" name="impMode" value="add" checked>Adicionar à lista atual</label><label><input type="radio" name="impMode" value="replace">Substituir a lista</label></div>
 <input type="file" id="impFile" accept=".csv,.txt,.tsv,text/csv,text/plain">
 <label for="impText" style="margin-top:10px">Ou cole a lista aqui</label>
@@ -1275,7 +1275,7 @@ function renderCovers(cv,parts,cal){
     return `<tr><td>${fmtD(d.date)} ${DOW[d.dow]}</td><td>${esc(e.tit)}</td><td>${ctl}</td></tr>`}).join('');
   $('cvSum').textContent='Coberturas por pessoa: '+parts.filter(p=>cv.tally[p]).map(p=>p+' '+cv.tally[p]).join(' · ');
 }
-$('cvTbl').addEventListener('change',ev=>{const s=ev.target.closest('select[data-key]');if(!s)return;if(s.value)ov[s.dataset.key]=s.value;else delete ov[s.dataset.key];saveState();render()});
+$('cvTbl').addEventListener('change',ev=>{const s=ev.target.closest('select[data-key]');if(!s)return;const key=s.dataset.key,cut=key.lastIndexOf('|'),tit=key.slice(0,cut),iso=key.slice(cut+1);mates(tit).forEach(x=>{const k=x+'|'+iso;if(s.value&&s.value!==x)ov[k]=s.value;else delete ov[k]});saveState();render()});
 function ocRefresh(){if(!state.cfg){return}Object.assign(state.cfg,ocCfg());if(state.cfg.ocFit){genNew();return}applyModes(oc,mondaysOf(state.cal),repsOf(),state.cfg.ocMin,state.cfg.ocAnchor);syncTeams();saveState();render()}
 ['ocOn','ocAlt','ocCov','ocFit','ocAnc','ocMin','ocSd','ocSt','ocEd','ocEt','ocInfOn','ocISd','ocISt','ocIEd','ocIEt'].forEach(id=>$(id).addEventListener('change',ocRefresh));
 $('btnOcAuto').onclick=()=>{if(!state.cal)return;Object.assign(state.cfg,ocCfg());applyModes(oc,mondaysOf(state.cal),repsOf(),state.cfg.ocMin,state.cfg.ocAnchor);syncTeams();afterOC()};
@@ -1402,10 +1402,12 @@ $('vacAdd').onclick=()=>{const n=$('vacEmp').value,s=$('vacS').value,e=$('vacE')
   if(!n){m.textContent='Cadastre um colaborador primeiro.';return}
   if(!s||!e){m.textContent='Informe a data inicial e a final.';return}
   if(e<s){m.textContent='A data final não pode ser anterior à inicial.';return}
-  vac.push({name:n,s,e});m.textContent='Férias adicionadas.';$('vacS').value='';$('vacE').value='';vacChanged()};
-$('sfAdd').onclick=()=>{const a=$('sfTit').value,b=$('sfSub').value,m=$('sfMsg');if(!a||!b){m.textContent='Cadastre colaboradores primeiro.';return}if(a===b){m.textContent='O substituto precisa ser outra pessoa.';return}subFix[a]=b;if($('sfBoth').checked)subFix[b]=a;m.textContent='Substituto fixo definido.';sfChanged()};
-$('sfList').addEventListener('click',ev=>{const b=ev.target.closest('[data-sfdel]');if(!b)return;delete subFix[b.dataset.sfdel];sfChanged()});
-$('vacList').addEventListener('click',ev=>{const b=ev.target.closest('[data-vdel]');if(!b)return;vac.splice(+b.dataset.vdel,1);vacChanged()});
+  // regra da equipe (pedido do usuário, 2026-11-20): o que muda em um membro muda nos outros
+  const eq=mates(n);eq.forEach(x=>{if(!vac.some(v=>v.name===x&&v.s===s&&v.e===e))vac.push({name:x,s,e})});
+  m.textContent=eq.length>1?'Férias adicionadas para os '+eq.length+' colaboradores da equipe.':'Férias adicionadas.';$('vacS').value='';$('vacE').value='';vacChanged()};
+$('sfAdd').onclick=()=>{const a=$('sfTit').value,b=$('sfSub').value,m=$('sfMsg');if(!a||!b){m.textContent='Cadastre colaboradores primeiro.';return}if(a===b){m.textContent='O substituto precisa ser outra pessoa.';return}if(mates(a).includes(b)){m.textContent='O substituto não pode ser da mesma equipe do titular (a equipe folga e fica de sobreaviso junta).';return}mates(a).forEach(x=>{subFix[x]=b});if($('sfBoth').checked)mates(b).forEach(x=>{subFix[x]=a});m.textContent=mates(a).length>1?'Substituto fixo definido para toda a equipe.':'Substituto fixo definido.';sfChanged()};
+$('sfList').addEventListener('click',ev=>{const b=ev.target.closest('[data-sfdel]');if(!b)return;const t=b.dataset.sfdel,sub=subFix[t];mates(t).forEach(x=>{if(subFix[x]===sub)delete subFix[x]});sfChanged()});
+$('vacList').addEventListener('click',ev=>{const b=ev.target.closest('[data-vdel]');if(!b)return;const v=vac[+b.dataset.vdel];if(!v)return;const eq=mates(v.name);vac=vac.filter(x=>!(eq.includes(x.name)&&x.s===v.s&&x.e===v.e));vacChanged()});
 $('btnClear').onclick=()=>{if(GA_LOCK){emps=[];afterRoster();say('impMsg','Lista da sua área limpa.');return}emps=[];renderEmps();state.grid=null;$('checks').innerHTML='<li class="warn"><span class="ic">!</span><span>Cadastre ou importe colaboradores para gerar a escala.</span></li>';$('tbl').innerHTML='';$('sum').innerHTML='';say('impMsg','Lista limpa.')};
 $('btnSample').onclick=()=>{emps=SAMPLE.map(x=>({...x}));afterRoster();say('impMsg','Exemplo carregado.')};
 const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
