@@ -340,6 +340,20 @@ body.paramLock #openDays .chip{cursor:not-allowed;opacity:.75}
 td.name{font-size:14px!important;width:250px!important;min-width:200px!important;max-width:290px!important}
 small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;margin-top:2px}
 .tm{font-size:11px!important}
+.cvNat{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:0 0 8px;padding:8px 10px;border:1px solid var(--acc);border-radius:10px;background:var(--acc2)}
+.cvNat .cvNatTit{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--acc);margin-right:4px}
+.cvNat label{margin:0;font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap}
+.cvNat select{width:auto;flex:1 1 220px;min-width:180px;max-width:340px;padding:4px 6px;font-size:13px}
+.cvNat .btn{padding:4px 14px;white-space:nowrap}
+.btnVideo{flex:none;display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--acc);font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.06);white-space:nowrap}
+.btnVideo:hover{background:var(--acc2)}
+#vidModal{position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+#vidModal[hidden]{display:none}
+.vidBox{background:var(--card);border-radius:14px;padding:12px;width:min(1180px,100%);max-height:100%;display:flex;flex-direction:column;gap:8px;box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.vidHead{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px}
+.vidBox video{width:100%;max-height:calc(100vh - 140px);background:#000;border-radius:10px}
+.vidNota{margin:0;color:var(--mut)}
+@media(max-width:520px){.btnVideo span{display:none}}
 </style>
 </head>
 <body>
@@ -347,7 +361,7 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 <main>
 
 
-<div class="topbar"><nav class="tabs" role="tablist"><button type="button" id="tabMain" role="tab" aria-selected="true"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 11.5h2M11.5 11.5h2M6.5 14h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Escala</span></button><button type="button" id="tabSec" role="tab" aria-selected="false"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Configurações</span><span id="secBadge"></span></button></nav><div class="monthbar"><button type="button" class="btn sec" id="mPrev" aria-label="Mês anterior">‹</button><select id="mSel" aria-label="Mês"></select><select id="ySel" aria-label="Ano"></select><button type="button" class="btn sec" id="mNext" aria-label="Próximo mês">›</button><button type="button" class="btn sec" id="mNow">Hoje</button><span class="small" id="cycInfo"></span><button class="btn" id="btnGen">Gerar escala</button><button class="btn sec" id="btnVar">Outra variação</button><button type="button" class="btn sec" id="cfgTog" aria-expanded="false" title="Mostrar/ocultar parâmetros">⚙ Parâmetros ▾</button></div></div>
+<div class="topbar"><nav class="tabs" role="tablist"><button type="button" id="tabMain" role="tab" aria-selected="true"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 11.5h2M11.5 11.5h2M6.5 14h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Escala</span></button><button type="button" id="tabSec" role="tab" aria-selected="false"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Configurações</span><span id="secBadge"></span></button></nav><button type="button" class="btnVideo" id="btnVideo" title="Assistir ao vídeo explicativo do painel (3 min)"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.2 6.6v6.8l5.4-3.4z" fill="currentColor"/></svg><span>Vídeo explicativo</span></button><div class="monthbar"><button type="button" class="btn sec" id="mPrev" aria-label="Mês anterior">‹</button><select id="mSel" aria-label="Mês"></select><select id="ySel" aria-label="Ano"></select><button type="button" class="btn sec" id="mNext" aria-label="Próximo mês">›</button><button type="button" class="btn sec" id="mNow">Hoje</button><span class="small" id="cycInfo"></span><button class="btn" id="btnGen">Gerar escala</button><button class="btn sec" id="btnVar">Outra variação</button><button type="button" class="btn sec" id="cfgTog" aria-expanded="false" title="Mostrar/ocultar parâmetros">⚙ Parâmetros ▾</button></div></div>
 <div id="viewMain" class="view">
 <section class="card cfg">
 <h2 style="display:none">Configuração</h2>
@@ -422,7 +436,7 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 <div class="vacRow"><div><label for="vacEmp">Colaborador</label><select id="vacEmp"></select></div><div><label for="vacS">Data inicial</label><input type="date" id="vacS"></div><div><label for="vacE">Data final</label><input type="date" id="vacE"></div><div><button type="button" class="btn" id="vacAdd">Adicionar férias</button></div></div>
 <div class="small" id="vacMsg" role="status" style="min-height:18px;margin-top:6px"></div>
 <ul class="vacList" id="vacList"></ul></section>
-<section class="card" id="sfCard"><h2>Substituto fixo (cobertura de folga)</h2>
+<section class="card" id="sfCard"><h2>Substituto natural (cobertura de folga)</h2>
 <p class="small" style="margin:0 0 10px">Define quem sempre cobre a folga de um colaborador de sobreaviso. Se o substituto fixo também estiver de folga ou férias no dia, o painel escolhe outro automaticamente.</p>
 <div class="vacRow" style="grid-template-columns:1fr 1fr auto"><div><label for="sfTit">Colaborador de sobreaviso</label><select id="sfTit"></select></div><div><label for="sfSub">Sempre substituído por</label><select id="sfSub"></select></div><div><button type="button" class="btn" id="sfAdd">Definir</button></div></div>
 <label class="chk" style="margin-top:8px"><input type="checkbox" id="sfBoth" checked><span>Valer também no sentido contrário (os dois se cobrem)</span></label>
@@ -471,11 +485,13 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 </div>
 <div class="card" id="cvCard"><h2>Cobertura das folgas no sobreaviso</h2>
 <p class="hint" style="margin:0 0 8px">Quando o colaborador de sobreaviso está de folga, outro que esteja trabalhando naquele dia assume. Folgas seguidas da mesma pessoa (ex.: sábado e domingo) são cobertas pelo mesmo colega. Entre uma folga e outra, o painel alterna os colegas, não repete a mesma pessoa em sequência e equilibra o total. Você pode trocar o substituto na lista.</p>
+<div class="cvNat" aria-label="Substituto natural"><span class="cvNatTit">Substituto natural</span><label for="cvnTit">Técnico de sobreaviso</label><select id="cvnTit"></select><label for="cvnSub">Substituto natural</label><select id="cvnSub" disabled></select><button type="button" class="btn" id="cvnDef" disabled>Definir</button><button type="button" class="btn sec" id="cvnRem" hidden>Remover</button><span class="small" id="cvnMsg" role="status"></span></div>
 <div class="cvFilt" aria-label="Filtros da cobertura das folgas"><span class="efTit">Filtrar</span><label for="cvfGA">GA</label><select id="cvfGA"></select><label for="cvfTit">Folga de</label><select id="cvfTit"></select><label for="cvfSub">Substituto</label><select id="cvfSub"></select><label for="cvfDe">De</label><input type="date" id="cvfDe"><label for="cvfAte">até</label><input type="date" id="cvfAte"><label class="chk" style="margin:0"><input type="checkbox" id="cvfSem"><span>Só sem substituto</span></label><button type="button" class="btn sec" id="cvfLimpar">Limpar</button><span class="small" id="cvfInfo"></span></div>
 <div class="scroll"><table class="cvT" id="cvTbl"></table></div>
 <p class="small" id="cvSum" style="margin:8px 0 0"></p></div>
 </div>
 </main>
+<div id="vidModal" hidden role="dialog" aria-modal="true" aria-label="Vídeo explicativo do Painel Escala 5x2"><div class="vidBox"><div class="vidHead"><b>Vídeo explicativo · Painel Escala 5x2 e a nova lei (EC 141/2026)</b><button type="button" class="btn sec" id="vidClose" aria-label="Fechar o vídeo">Fechar ✕</button></div><video id="vidPlayer" controls preload="none" playsinline poster="assets/video/escala5x2-tutorial-capa.jpg"></video><p class="small vidNota">3 min · como configurar, cadastrar, gerar a escala, lançar o sobreaviso, definir quem cobre a folga e sincronizar. Equipe do exemplo é fictícia.</p></div></div>
 <div id="notice" hidden role="status" aria-live="polite"><div id="noticePanel" hidden><div class="nh"><b>Conformidade</b><button type="button" id="noticeX" aria-label="Fechar">×</button></div><ul id="noticeList"></ul><div id="noticeUndo" hidden></div></div><button type="button" id="noticeBtn"></button></div>
 <div id="imgModal" hidden role="dialog" aria-modal="true" aria-label="Imagem da tabela"><div class="box"><p class="small" style="margin:0 0 10px">O navegador não permitiu copiar direto. Pressione e segure a imagem (ou clique com o botão direito) e escolha <b>Copiar imagem</b>.</p><img id="imgPrev" alt="Imagem da tabela"><div class="btns"><button type="button" class="btn" id="imgClose">Fechar</button></div></div></div>
 <script>
@@ -1376,12 +1392,29 @@ function cvFillFilters(list){
   const gaDe=n=>{const p=emps.find(x=>x.name===n)||OUTROS.find(x=>x.name===n);return(p&&p.ga)||''};
   const gas=list.map(e=>gaDe(e.tit));
   CVF.ga=opt('cvfGA',gas,'Todos os GAs',CVF.ga,gas.some(g=>!g)?'<option value="__none">Sem GA</option>':'')||'';
-  CVF.tit=opt('cvfTit',list.map(e=>e.tit),'Todos',CVF.tit)||'';
+  CVF.tit=opt('cvfTit',list.map(e=>e.tit).concat(CVF.tit?[CVF.tit]:[]),'Todos',CVF.tit)||'';
   CVF.sub=opt('cvfSub',list.map(e=>e.sub),'Todos',CVF.sub)||'';
   if(GA_LOCK&&$('cvfGA')){$('cvfGA').disabled=true}
 }
+// SUBSTITUTO NATURAL (pedido do usuário, 2026-11-20): lista com todos os técnicos de sobreaviso;
+// ao escolher um, a tabela filtra as folgas dele e aparece a lista com os demais para escolher o
+// substituto natural — quem cobre a folga dele por padrão. Grava no mesmo cadastro do "Substituto
+// fixo" (subFix), que o cálculo da cobertura já usa primeiro, e vale para a equipe inteira.
+function cvnFill(){
+  const t=$('cvnTit'),sb=$('cvnSub');if(!t)return;
+  const parts=[...new Set(emps.filter(e=>e.mode!=='off').map(e=>e.name))].sort(azSort);
+  const cur=parts.includes(t.value)?t.value:(CVF.tit&&parts.includes(CVF.tit)?CVF.tit:'');
+  t.innerHTML='<option value="">Escolha o técnico…</option>'+parts.map(n=>'<option value="'+esc(n)+'">'+esc(n)+(subFix[n]?' — natural: '+esc(subFix[n]):'')+'</option>').join('');
+  t.value=cur;
+  const eq=cur?mates(cur):[];
+  const outros=cur?[...new Set(emps.map(e=>e.name))].filter(n=>!eq.includes(n)).sort(azSort):[];
+  sb.innerHTML='<option value="">'+(cur?'Escolha o substituto natural…':'Escolha primeiro o técnico')+'</option>'+outros.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join('');
+  sb.value=cur&&subFix[cur]&&outros.includes(subFix[cur])?subFix[cur]:'';
+  sb.disabled=!cur;$('cvnDef').disabled=!cur;$('cvnRem').hidden=!(cur&&subFix[cur]);
+}
 function renderCovers(cv,parts,cal){
   cvUltimo={cv,parts,cal};
+  try{cvnFill()}catch(e){}
   if(cv.list.length)cvFillFilters(cv.list);
   if(!cv.list.length){$('cvTbl').innerHTML='<tr><td>Nenhuma folga cai dentro de uma semana de sobreaviso.</td></tr>';$('cvSum').textContent='';return}
   const cvVis=cv.list.filter(cvFiltOk);if($('cvfInfo'))$('cvfInfo').textContent=cvVis.length===cv.list.length?'':'Mostrando '+cvVis.length+' de '+cv.list.length;
@@ -1390,7 +1423,7 @@ function renderCovers(cv,parts,cal){
     const todos=[...new Set(state.cfg.names)].filter(p=>p!==e.tit).sort(azSort);
     const opts=['<option value="">Automático</option>',...todos.map(p=>`<option value="${esc(p)}"${e.forced&&e.sub===p?' selected':''}>${esc(p)}${e.cands.includes(p)?'':' — ⚠ indisponível no dia'}</option>`)].join('');
     const lab=e.sub?esc(e.sub)+(e.fora?' <span class="forced" style="color:var(--bad)">⚠ fora da regra: está de folga, sobreaviso ou férias neste dia</span>':''):'<b style="color:var(--bad)">sem substituto</b>';
-    const ctl=e.first?`${lab}${e.forced?' <span class="forced">(ajustado)</span>':e.fixed?' <span class="forced">(substituto fixo)</span>':''}<br><select data-key="${esc(e.key)}" aria-label="Trocar substituto de ${esc(e.tit)} a partir de ${fmtD(d.date)}">${opts}</select>`:`${lab} <span class="small">(mesmo do dia anterior)</span>`;
+    const ctl=e.first?`${lab}${e.forced?' <span class="forced">(ajustado)</span>':e.fixed?' <span class="forced">(substituto natural)</span>':''}<br><select data-key="${esc(e.key)}" aria-label="Trocar substituto de ${esc(e.tit)} a partir de ${fmtD(d.date)}">${opts}</select>`:`${lab} <span class="small">(mesmo do dia anterior)</span>`;
     return `<tr><td>${fmtD(d.date)} ${DOW[d.dow]}</td><td>${esc(e.tit)}</td><td>${ctl}</td></tr>`}).join('');
   $('cvSum').textContent='Coberturas por pessoa: '+parts.filter(p=>cv.tally[p]).map(p=>p+' '+cv.tally[p]).join(' · ');
 }
@@ -1603,6 +1636,25 @@ document.addEventListener('click',ev=>{
   if(d){try{localStorage.removeItem(BKP_KEY)}catch(e){}renderBkp()}
 });
 function syncIniciar(){if(!SYNC)return;syBuscar(true);setInterval(()=>{if(!document.hidden)syBuscar(false)},45000)}
+$('cvnTit')&&$('cvnTit').addEventListener('change',()=>{const v=$('cvnTit').value;CVF.tit=v;if($('cvfTit'))$('cvfTit').value=v;$('cvnMsg').textContent='';cvnFill();if(cvUltimo)renderCovers(cvUltimo.cv,cvUltimo.parts,cvUltimo.cal)});
+$('cvfTit')&&$('cvfTit').addEventListener('change',()=>{if($('cvnTit')){$('cvnTit').value=$('cvfTit').value;cvnFill()}});
+$('cvnDef')&&$('cvnDef').addEventListener('click',()=>{
+  const a=$('cvnTit').value,b=$('cvnSub').value,m=$('cvnMsg');
+  if(!a){m.textContent='Escolha o técnico de sobreaviso.';return}
+  if(!b){m.textContent='Escolha o substituto natural na lista.';return}
+  if(mates(a).includes(b)){m.textContent='O substituto não pode ser da mesma equipe (a equipe folga e fica de sobreaviso junta).';return}
+  mates(a).forEach(x=>{subFix[x]=b});
+  m.textContent='Substituto natural de '+a+(mates(a).length>1?' (e da equipe)':'')+': '+b+'.';
+  sfChanged();cvnFill();
+});
+$('cvnRem')&&$('cvnRem').addEventListener('click',()=>{const a=$('cvnTit').value;if(!a)return;const sub=subFix[a];mates(a).forEach(x=>{if(subFix[x]===sub)delete subFix[x]});$('cvnMsg').textContent='Substituto natural removido.';sfChanged();cvnFill()});
+// vídeo explicativo (pedido do usuário, 2026-11-20) — o arquivo só é baixado quando a janela abre
+function abrirVideo(){const v=$('vidPlayer');if(!v.getAttribute('src'))v.src='assets/video/escala5x2-tutorial.mp4';$('vidModal').hidden=false;try{v.play()}catch(e){}}
+function fecharVideo(){const v=$('vidPlayer');try{v.pause()}catch(e){}$('vidModal').hidden=true}
+$('btnVideo')&&$('btnVideo').addEventListener('click',abrirVideo);
+$('vidClose')&&$('vidClose').addEventListener('click',fecharVideo);
+$('vidModal')&&$('vidModal').addEventListener('click',ev=>{if(ev.target.id==='vidModal')fecharVideo()});
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&$('vidModal')&&!$('vidModal').hidden)fecharVideo()});
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
   if(GA_LOCK){ga=GA_LOCK;go=GA_GO[GA_LOCK]||go||''}
