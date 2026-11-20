@@ -697,7 +697,8 @@ function computeCovers(grid,cal,names,parts,oc,cfg,ov){
   blocks.forEach((b,bi)=>{
     const first=b.evs[0];let sub=null,forced=false;
     let fixedF=false;
-    if(ov[first.key]&&b.cands.includes(ov[first.key])){sub=ov[first.key];forced=true}
+    let foraRegra=false;
+    if(ov[first.key]&&ov[first.key]!==b.tit&&names.includes(ov[first.key])){sub=ov[first.key];forced=true;foraRegra=!b.cands.includes(sub)}
     else if(cfg.fixedSub&&cfg.fixedSub[b.tit]&&b.cands.includes(cfg.fixedSub[b.tit])&&b.evs.every(x=>!taken[cfg.fixedSub[b.tit]].has(x.i))){sub=cfg.fixedSub[b.tit];fixedF=true}
     else if(b.cands.length){
       let pool=b.cands.filter(p=>!first.tits.includes(p)&&b.evs.every(x=>!taken[p].has(x.i)));if(!pool.length)pool=b.cands.filter(p=>b.evs.every(x=>!taken[p].has(x.i)));
@@ -709,8 +710,8 @@ function computeCovers(grid,cal,names,parts,oc,cfg,ov){
       }
     }
     for(const p of b.cands)opp[p]--;
-    if(sub){b.evs.forEach(x=>taken[sub].add(x.i));tally[sub]+=b.evs.length;last[sub]=b.evs[b.evs.length-1].i;prev=sub}
-    b.evs.forEach((x,k)=>list.push({iso:x.iso,i:x.i,tit:x.tit,key:x.key,sub,forced,fixed:fixedF,cands:b.cands,block:bi,first:k===0}));
+    if(sub){if(!taken[sub])taken[sub]=new Set();if(tally[sub]==null)tally[sub]=0;b.evs.forEach(x=>taken[sub].add(x.i));tally[sub]+=b.evs.length;last[sub]=b.evs[b.evs.length-1].i;prev=sub}
+    b.evs.forEach((x,k)=>list.push({iso:x.iso,i:x.i,tit:x.tit,key:x.key,sub,forced,fora:foraRegra,fixed:fixedF,cands:b.cands,block:bi,first:k===0}));
   });
   list.sort((a,b)=>a.i-b.i||parts.indexOf(a.tit)-parts.indexOf(b.tit));
   return{list,tally};
@@ -1385,8 +1386,9 @@ function renderCovers(cv,parts,cal){
   const cvVis=cv.list.filter(cvFiltOk);if($('cvfInfo'))$('cvfInfo').textContent=cvVis.length===cv.list.length?'':'Mostrando '+cvVis.length+' de '+cv.list.length;
   $('cvTbl').innerHTML='<tr><th>Data</th><th>Folga de (sobreaviso)</th><th>Substituto</th></tr>'+(cvVis.length?'':'<tr><td colspan="3" class="small">Nenhuma cobertura com esses filtros.</td></tr>')+cvVis.map(e=>{
     const d=cal.days[e.i];
-    const opts=['<option value="">Automático</option>',...e.cands.map(p=>`<option value="${esc(p)}"${e.forced&&e.sub===p?' selected':''}>${esc(p)}</option>`)].join('');
-    const lab=e.sub?esc(e.sub):'<b style="color:var(--bad)">sem substituto</b>';
+    const todos=[...new Set(state.cfg.names)].filter(p=>p!==e.tit).sort(azSort);
+    const opts=['<option value="">Automático</option>',...todos.map(p=>`<option value="${esc(p)}"${e.forced&&e.sub===p?' selected':''}>${esc(p)}${e.cands.includes(p)?'':' — ⚠ indisponível no dia'}</option>`)].join('');
+    const lab=e.sub?esc(e.sub)+(e.fora?' <span class="forced" style="color:var(--bad)">⚠ fora da regra: está de folga, sobreaviso ou férias neste dia</span>':''):'<b style="color:var(--bad)">sem substituto</b>';
     const ctl=e.first?`${lab}${e.forced?' <span class="forced">(ajustado)</span>':e.fixed?' <span class="forced">(substituto fixo)</span>':''}<br><select data-key="${esc(e.key)}" aria-label="Trocar substituto de ${esc(e.tit)} a partir de ${fmtD(d.date)}">${opts}</select>`:`${lab} <span class="small">(mesmo do dia anterior)</span>`;
     return `<tr><td>${fmtD(d.date)} ${DOW[d.dow]}</td><td>${esc(e.tit)}</td><td>${ctl}</td></tr>`}).join('');
   $('cvSum').textContent='Coberturas por pessoa: '+parts.filter(p=>cv.tally[p]).map(p=>p+' '+cv.tally[p]).join(' · ');
