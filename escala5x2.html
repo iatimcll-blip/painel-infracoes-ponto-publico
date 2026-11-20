@@ -331,6 +331,8 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 .hdrR{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .syncSt{font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.18);color:#fff;white-space:nowrap}
 .syncSt.err{background:#fde68a;color:#7c2d12}
+.bkpBox{margin:8px 0;padding:8px 10px;border:1px solid #f59e0b;border-radius:10px;background:#fffbeb;font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:1080px}
+.bkpBox .btn{padding:3px 10px;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -393,6 +395,7 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 </form>
 <p class="msg" id="addMsg" role="status"></p>
 <div class="empFilt" aria-label="Filtros da lista de colaboradores"><span class="efTit">Filtrar</span><label for="efGO">GO</label><select id="efGO"></select><label for="efGA">GA</label><select id="efGA"></select><label for="efUF">UF</label><select id="efUF"></select><label for="efCity">Cidade</label><select id="efCity"></select><button type="button" class="btn sec" id="efClear">Limpar</button><span class="small" id="efInfo"></span></div>
+<div class="bkpBox" id="bkpBox" hidden></div>
 <ul class="emps" id="empList"></ul>
 </div>
 <div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (Excel)</button><span class="small" id="dlMsg" role="status">Planilha no formato exato da importação (Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade, UF), já com os colaboradores da sua área. Preencha e importe em "Importar lista".</span></div>
@@ -1438,7 +1441,15 @@ const chaveGA=g=>'ga:'+String(g||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toU
 const SYNC_KEY='escala5x2sync';
 let SY={sent:{},seen:{}};try{SY=Object.assign(SY,JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'))}catch(e){}
 const sySave=()=>{try{localStorage.setItem(SYNC_KEY,JSON.stringify(SY))}catch(e){}};
-let syTimer=null,syBusy=false,syAplicando=false,syOk=false;
+let syTimer=null,syBusy=false,syAplicando=false,syOk=false,syErro='';
+// havia escala salva NESTE navegador antes desta abertura? (o GA pode ter trabalhado nela antes
+// da sincronização existir) — lido antes de qualquer gravação desta abertura
+const HAD_LOCAL=(()=>{try{return !!localStorage.getItem('escala5x2v2')}catch(e){return false}})();
+// cópia de segurança: antes de o servidor substituir a área de quem pode gravá-la, a versão deste
+// navegador fica guardada aqui e pode ser restaurada (botão em Configurações > Colaboradores)
+const BKP_KEY='escala5x2bkp';
+function bkpLer(){try{return JSON.parse(localStorage.getItem(BKP_KEY)||'{}')||{}}catch(e){return{}}}
+function bkpGuardar(ch,f){if(!f||!f.emps||!f.emps.length)return;const b=bkpLer();b[ch]={em:new Date().toISOString(),dados:f};try{localStorage.setItem(BKP_KEY,JSON.stringify(b))}catch(e){}}
 function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)}
 function todosEmps(){return GA_LOCK?emps.concat(OUTROS.filter(o=>!emps.some(e=>e.name===o.name))):emps.slice()}
 const chaveDe=p=>(p&&p.ga&&GA_LIST.includes(p.ga))?chaveGA(p.ga):'geral';
@@ -1489,12 +1500,18 @@ async function syEnviar(){
       const f=fatia(ch),j=stable(f);
       if(SY.sent[ch]===j)continue;
       if(!SY.sent[ch]&&!f.emps.length&&ch!=='geral')continue; // nada a enviar de uma fatia que nunca existiu
-      try{const r=await SYNC.salvar(ch,f);SY.sent[ch]=j;SY.seen[ch]=r.atualizado_em||SY.seen[ch];enviou++}catch(e){erro=e}
+      try{const r=await SYNC.salvar(ch,f);SY.sent[ch]=j;SY.seen[ch]=r.atualizado_em||SY.seen[ch];enviou++}catch(e){erro=e;console.error('Escala 5X2: falha ao sincronizar '+ch,e)}
     }
     sySave();
   }finally{syBusy=false}
-  if(erro)syStatus(String(erro.message||'').includes('escala5x2_salvar')||/function|does not exist|schema/i.test(String(erro.message||''))?'☁ Sincronização indisponível no servidor':'☁ Não sincronizou — tenta de novo sozinho',true);
-  else if(enviou||syOk)syStatus('☁ Sincronizado às '+hhmm());
+  if(erro){
+    const m=String(erro.message||'');
+    syErro=m==='sessao'||m==='sem-sessao'?'☁ Sua sessão expirou — saia e entre de novo com seu acesso (Configurações do painel) para sincronizar'
+      :m==='permissao'?'☁ Sem permissão para gravar esta área — confira se entrou com o acesso do GA certo'
+      :/escala5x2_salvar|function|does not exist|schema/i.test(m)?'☁ Sincronização indisponível no servidor'
+      :'☁ Não sincronizou — tenta de novo sozinho';
+    syStatus(syErro,true);
+  }else{syErro='';if(enviou||syOk)syStatus('☁ Sincronizado às '+hhmm())}
 }
 function syncAgendar(){if(!SYNC||syAplicando)return;clearTimeout(syTimer);syTimer=setTimeout(syEnviar,2000)}
 async function syBuscar(inicial){
@@ -1512,17 +1529,37 @@ async function syBuscar(inicial){
       const sujo=grav.has(ch)&&SY.sent[ch]&&jLocal!==SY.sent[ch];
       if(sujo)return; // alteração local ainda não enviada vence
       if(SY.seen[ch]===r.atualizado_em&&SY.sent[ch])return;
-      if(jLocal!==stable(r.dados||{})){aplicarFatia(ch,r.dados);mudou=true}
+      const eu=PAINEL&&PAINEL.username;
+      if(!SY.sent[ch]&&GA_LOCK&&ch===chaveGA(GA_LOCK)&&HAD_LOCAL&&jLocal!==stable(r.dados||{})&&r.autor!==eu&&stable(fatia(ch).emps)!=='[]'){
+        bkpGuardar(ch,r.dados);SY.seen[ch]=r.atualizado_em;return; // a versão do GA (dono) vai pro servidor em syEnviar
+      }
+      if(jLocal!==stable(r.dados||{})){if(grav.has(ch))bkpGuardar(ch,fatia(ch));aplicarFatia(ch,r.dados);mudou=true}
       SY.seen[ch]=r.atualizado_em;if(grav.has(ch))SY.sent[ch]=stable(fatia(ch));
     });
     sySave();
   }finally{syAplicando=false}
   if(mudou){_saveState0();renderEmps();if(state.cal)genNew();else render()}
-  syStatus(SYNC.podeGravar()?'☁ Sincronizado às '+hhmm():'☁ Atualizado às '+hhmm()+' (somente leitura — entre com seu acesso para editar)');
-  syEnviar();
+  if(!SYNC.podeGravar())syStatus(PAINEL&&PAINEL.role==='ga'?'☁ Sua sessão expirou — saia e entre de novo com seu acesso para sincronizar':'☁ Atualizado às '+hhmm()+' (somente leitura — entre com seu acesso para editar)',PAINEL&&PAINEL.role==='ga');
+  else if(!syErro)syStatus('☁ Sincronizado às '+hhmm());
+  await syEnviar();
+  renderBkp();
 }
 const _saveState0=saveState;
 saveState=function(){_saveState0();syncAgendar()};
+function renderBkp(){
+  const box=$('bkpBox');if(!box)return;const b=bkpLer();
+  const chs=Object.keys(b).filter(ch=>chavesGravaveis().includes(ch));
+  box.hidden=!chs.length;
+  box.innerHTML=chs.length?'<b>Cópia de segurança deste navegador</b> — versão que estava aqui antes de o servidor atualizar: '+chs.map(ch=>'<button type="button" class="btn sec" data-bkp="'+esc(ch)+'">Restaurar '+esc(ch==='geral'?'sem GA':ch.slice(3))+' ('+b[ch].dados.emps.length+' colab., '+new Date(b[ch].em).toLocaleString('pt-BR')+')</button>').join(' ')+' <button type="button" class="btn sec" data-bkpdel="1">Descartar cópia</button>':'';
+}
+document.addEventListener('click',ev=>{
+  const r=ev.target.closest&&ev.target.closest('[data-bkp]');
+  if(r){const ch=r.dataset.bkp,b=bkpLer()[ch];if(!b)return;if(!confirm('Restaurar a versão deste navegador para '+(ch==='geral'?'sem GA':ch.slice(3))+'? Ela substitui a atual e é enviada ao servidor.'))return;
+    syAplicando=true;try{aplicarFatia(ch,b.dados)}finally{syAplicando=false}
+    renderEmps();if(state.cal)genNew();else render();saveState();say('impMsg','Cópia de segurança restaurada e enviada para sincronizar.');return}
+  const d=ev.target.closest&&ev.target.closest('[data-bkpdel]');
+  if(d){try{localStorage.removeItem(BKP_KEY)}catch(e){}renderBkp()}
+});
 function syncIniciar(){if(!SYNC)return;syBuscar(true);setInterval(()=>{if(!document.hidden)syBuscar(false)},45000)}
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */

@@ -1393,7 +1393,7 @@ function isAdmin(){ return AUTH.currentRole === 'admin'; }
 window.painelEscalaContexto = function(){
   const pares = [], vistos = new Set();
   try { Object.values(STATE.hierMap || {}).forEach(h => { if (h && h.ga && !vistos.has(h.ga)) { vistos.add(h.ga); pares.push({ ga: h.ga, go: h.go || '' }); } }); } catch(e) {}
-  return { role: AUTH.currentRole, gaNome: AUTH.currentGaNome, pares };
+  return { role: AUTH.currentRole, gaNome: AUTH.currentGaNome, username: AUTH.currentUser, pares };
 };
 // sincronização da aba Escala 5X2 (pedido do usuário, 2026-11-20) — a escala lê/grava pelo
 // cliente do Supabase deste painel; a gravação usa o token da sessão do login (painel_sessoes)
