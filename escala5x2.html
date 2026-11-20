@@ -308,6 +308,9 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 #empCard .empFilt .efTit{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin-right:2px}
 #empCard .empFilt .btn{padding:4px 12px;white-space:nowrap}
 #empCard .empFilt #efInfo{white-space:nowrap;color:var(--mut)}
+.impErr{margin:8px 0 0;padding:10px 12px;border:1px solid var(--bad);border-radius:10px;background:var(--badbg);color:var(--bad);font-size:13px}
+.impErr ul{margin:6px 0 0;padding-left:18px;color:var(--ink)}
+.impErr li{margin:2px 0}
 </style>
 </head>
 <body>
@@ -373,15 +376,16 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 <div class="empFilt" aria-label="Filtros da lista de colaboradores"><span class="efTit">Filtrar</span><label for="efGO">GO</label><select id="efGO"></select><label for="efGA">GA</label><select id="efGA"></select><label for="efUF">UF</label><select id="efUF"></select><label for="efCity">Cidade</label><select id="efCity"></select><button type="button" class="btn sec" id="efClear">Limpar</button><span class="small" id="efInfo"></span></div>
 <ul class="emps" id="empList"></ul>
 </div>
-<div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (CSV)</button><span class="small" id="dlMsg" role="status">Modelo com as colunas Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade e UF. Abre no Excel; preencha e importe em "Importar lista".</span></div>
-<details class="imp"><summary><b>Importar lista</b> (CSV, TXT ou colar)</summary>
-<p class="hint">Uma pessoa por linha: <code>Nome</code>, <code>Nome;Cargo</code> ou <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe</code> (sobreaviso: não, A, B, manual; vazio = rodízio. GA e GO: nome da lista, ou parte dele. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso: toda modificação feita em um membro (folga T/F, sobreaviso, férias, substituto, GA, GO, UF e cidade) acontece também com os outros da equipe. Cargos de infraestrutura não formam equipe). Separador ; , ou tabulação. Cabeçalho "Nome" e linhas iniciadas por # são ignorados. Use "Copiar modelo" para ver um exemplo. Para Excel, salve como CSV.</p>
+<div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (Excel)</button><span class="small" id="dlMsg" role="status">Planilha no formato exato da importação (Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade, UF), já com os colaboradores da sua área. Preencha e importe em "Importar lista".</span></div>
+<details class="imp"><summary><b>Importar lista</b> (planilha padrão .xlsx ou .csv, ou colar)</summary>
+<p class="hint">Use a <b>planilha padrão</b> (botão acima): colunas <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe;Cidade;UF</code>, nesta ordem. <b>Obrigatórios:</b> Nome, Cargo, GA, GO, Cidade e UF. Sobreaviso: vazio = rodízio, A, B, manual ou não. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso: toda modificação feita em um membro (folga T/F, sobreaviso, férias, substituto, GA, GO, UF e cidade) acontece também com os outros da equipe. Cargos de infraestrutura não formam equipe. Se faltar alguma informação, <b>nada é importado</b> e aparece a lista do que corrigir. Cada GA importa só a própria área; "Substituir a lista" troca só os colaboradores dos GAs que estão na planilha.</p>
 <div class="radios"><label><input type="radio" name="impMode" value="add" checked>Adicionar à lista atual</label><label><input type="radio" name="impMode" value="replace">Substituir a lista</label></div>
-<input type="file" id="impFile" accept=".csv,.txt,.tsv,text/csv,text/plain">
+<input type="file" id="impFile" accept=".xlsx,.xls,.csv,.txt,.tsv,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
 <label for="impText" style="margin-top:10px">Ou cole a lista aqui</label>
-<textarea id="impText" style="min-height:90px" placeholder="Ana Souza;Caixa&#10;Bruno Lima;Estoque"></textarea>
+<textarea id="impText" style="min-height:90px" placeholder="Nome;Cargo;Sobreaviso;GA;GO;Equipe;Cidade;UF&#10;Maria Silva;Técnico;;Nome do GA;Nome do GO;E1;Teresina;PI"></textarea>
 <div class="btns"><button type="button" class="btn sec" id="btnImp">Importar texto colado</button><button type="button" class="btn sec" id="btnModel">Copiar modelo</button><button type="button" class="btn sec" id="btnExpEmp">Copiar lista atual</button><button type="button" class="btn sec" id="btnClear">Limpar lista</button><button type="button" class="btn sec" id="btnSample">Carregar base de equipes</button><button type="button" class="btn sec" id="btnPre">Aplicar escala fixa (Renato, Mamede, Lucas)</button></div>
 <p class="msg" id="impMsg" role="status"></p>
+<div class="impErr" id="impErr" role="alert" hidden></div>
 </details>
 </section>
 <section class="card" id="vacCard"><h2>Férias</h2>
@@ -1387,16 +1391,52 @@ function splitLine(line){
   for(const ch of line){if(ch==='"'){q=!q}else if(ch===sep&&!q){out.push(cur);cur=''}else cur+=ch}
   out.push(cur);return out.map(s=>s.trim());
 }
-function importText(txt,mode){
-  const lines=txt.replace(/^\uFEFF/,'').split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&!l.startsWith('#'));
-  if(lines.length&&/^(nome|colaborador|funcion[aá]rio|name)\b/i.test(lines[0]))lines.shift();
-  const before=emps.slice();
-  if(mode==='replace')emps=[];
+// ===== IMPORTAÇÃO DA PLANILHA PADRÃO (pedido do usuário, 2026-11-20) =====
+// Mesmo formato do "Baixar planilha padrão": Nome;Cargo;Sobreaviso;GA;GO;Equipe;Cidade;UF.
+// Valida TODAS as linhas antes de importar; havendo qualquer erro (informação faltando, GA/GO/UF/
+// cidade inválidos, nome repetido, colaborador de outro GA) NADA é importado e aparece o alerta
+// com a lista do que corrigir. Um GA só importa a PRÓPRIA área; "Substituir" troca só a lista dos
+// GAs que estão na planilha — nunca mexe nos colaboradores dos outros GAs.
+const IMP_COLS=['Nome','Cargo','Sobreaviso','GA','GO','Equipe','Cidade','UF'];
+const SOB_IMP={'':'auto','rodizio':'auto','auto':'auto','a':'A','semana sim':'A','b':'B','semana nao':'B','manual':'manual','nao':'off','n':'off','0':'off','false':'off','x':'off','nao participa':'off','off':'off'};
+const SOB_EXP={off:'não',A:'A',B:'B',manual:'manual',auto:''};
+function rowsFromText(txt){return String(txt||'').replace(/^\uFEFF/,'').split(/\r?\n/).map(l=>splitLine(l))}
+function importRows(rows,mode){
+  const errs=[],ok=[];
+  const limpa=rows.map((r,i)=>({n:i+1,c:(r||[]).map(x=>String(x==null?'':x).trim())})).filter(r=>r.c.some(Boolean)&&!r.c[0].startsWith('#'));
+  if(limpa.length&&/^(nome|colaborador)$/i.test(norm(limpa[0].c[0]))){
+    const h=limpa.shift().c.map(norm),esp=IMP_COLS.map(norm);
+    if(!esp.every((x,k)=>h[k]===x))errs.push('Cabeçalho diferente da planilha padrão. As colunas devem ser, nesta ordem: '+IMP_COLS.join(', ')+'. Baixe a planilha padrão e use ela.');
+  }
+  if(!limpa.length&&!errs.length)errs.push('A planilha não tem nenhum colaborador preenchido.');
+  const nomesArq=new Map();
+  if(!errs.length)limpa.forEach(({n,c})=>{
+    const[nome,cargo,sob,ga,go,equipe,cidade,uf]=IMP_COLS.map((_,k)=>c[k]||'');
+    const quem=nome?'"'+nome+'"':'(sem nome)';const e=[];
+    const falta=[];if(!nome)falta.push('Nome');if(!cargo)falta.push('Cargo');if(!ga)falta.push('GA');if(!go)falta.push('GO');if(!cidade)falta.push('Cidade');if(!uf)falta.push('UF');
+    if(falta.length)e.push('falta preencher '+falta.join(', '));
+    const sobK=norm(sob);if(!(sobK in SOB_IMP))e.push('Sobreaviso "'+sob+'" inválido (use vazio, A, B, manual ou não)');
+    const gaM=ga?matchList(GA_LIST,ga):'';if(ga&&!gaM)e.push('GA "'+ga+'" não encontrado na lista de GAs');
+    if(gaM&&GA_LOCK&&gaM!==GA_LOCK)e.push('pertence ao GA '+gaM+' — você só pode importar colaboradores da sua área ('+GA_LOCK+')');
+    const goM=go?matchList(GO_LIST,go):'';if(go&&!goM)e.push('GO "'+go+'" não encontrado na lista de GOs');
+    const ufU=uf.toUpperCase();if(uf&&!UFS.includes(ufU))e.push('UF "'+uf+'" inválida (use MA, PA ou PI)');
+    let cid='';if(cidade&&UFS.includes(ufU)){const r=canonCity(normName(cidade),ufU);if((CITIES[ufU]||[]).includes(r.city))cid=r.city;else e.push('cidade "'+cidade+'" não existe na UF '+ufU)}
+    const nk=normName(nome).toLowerCase();
+    if(nome){if(nomesArq.has(nk))e.push('nome repetido na planilha (também na linha '+nomesArq.get(nk)+')');else nomesArq.set(nk,n)}
+    if(nome&&gaM){
+      const outro=(GA_LOCK?OUTROS:emps).find(x=>x.name.toLowerCase()===nk&&x.ga&&x.ga!==gaM);
+      if(outro)e.push('já está cadastrado no GA '+outro.ga+' — só esse GA (ou o administrador) pode alterá-lo');
+    }
+    if(e.length)errs.push('Linha '+n+' '+quem+': '+e.join('; ')+'.');
+    else ok.push({nome,cargo,sob:SOB_IMP[sobK],ga:gaM,go:goM,equipe,cidade:cid,uf:ufU});
+  });
+  if(errs.length)return{errors:errs,added:0,dup:0};
+  if(mode==='replace'){const gas=new Set(ok.map(r=>r.ga));emps=GA_LOCK?[]:emps.filter(e=>!gas.has(e.ga))}
   let added=0,dup=0;
-  for(const l of lines){const c=splitLine(l);const m3=(c[2]||'').trim().toLowerCase();const r=addEmp(c[0]||'',c[1]||'',/^(n|nao|não|0|false|x)$/.test(m3)?'off':m3==='a'?'A':m3==='b'?'B':m3==='manual'?'manual':'auto',matchList(GA_LIST,c[3]),matchList(GO_LIST,c[4]),c[5]||'',c[6]||'',c[7]||'');if(r==='ok')added++;else if(r==='dup')dup++}
-  if(!added&&mode==='replace')emps=before;
-  return{added,dup,total:lines.length};
+  ok.forEach(r=>{const x=addEmp(r.nome,r.cargo,r.sob,r.ga,r.go,r.equipe,r.cidade,r.uf);if(x==='ok')added++;else if(x==='dup')dup++});
+  return{added,dup,total:ok.length,errors:[]};
 }
+function importText(txt,mode){return importRows(rowsFromText(txt),mode)}
 function afterRoster(){renderEmps();genNew()}
 $('newUF').innerHTML=ufOpts('');$('newCity').innerHTML=cityOpts('','');
 $('newUF').addEventListener('change',()=>{$('newCity').innerHTML=cityOpts($('newUF').value,'')});
@@ -1421,31 +1461,77 @@ $('empList').addEventListener('change',ev=>{
 });
 $('empList').addEventListener('click',ev=>{const b=ev.target.closest('.xbtn');if(!b)return;emps.splice(+b.dataset.i,1);afterRoster()});
 function impMode(){return document.querySelector('input[name=impMode]:checked').value}
-function reportImp(r){say('impMsg',r.added?`${r.added} importado(s)`+(r.dup?`, ${r.dup} ignorado(s) por nome repetido`:'')+'.':'Nada importado'+(r.dup?` (${r.dup} repetido(s))`:'')+'. Confira o formato.',!r.added)}
+function reportImp(r){
+  const box=$('impErr');
+  if(r.errors&&r.errors.length){
+    const mx=25,l=r.errors.slice(0,mx);
+    box.innerHTML='<b>⚠ Importação cancelada — nada foi importado.</b> Verifique e preencha as informações abaixo na planilha e importe de novo:<ul>'+l.map(t=>'<li>'+esc(t)+'</li>').join('')+(r.errors.length>mx?'<li>… e mais '+(r.errors.length-mx)+' problema(s).</li>':'')+'</ul>';
+    box.hidden=false;const d=box.closest('details');if(d)d.open=true;
+    say('impMsg',r.errors.length+' problema(s) na planilha. Nada foi importado.',true);
+    try{box.scrollIntoView({block:'nearest',behavior:'smooth'})}catch(e){}
+    try{alert('Importação cancelada: '+r.errors.length+' problema(s) na planilha.\n\n'+l.slice(0,8).join('\n')+(r.errors.length>8?'\n…':'')+'\n\nVerifique e preencha as informações e importe de novo.')}catch(e){}
+    return;
+  }
+  box.hidden=true;box.innerHTML='';
+  say('impMsg',r.added?r.added+' importado(s)'+(r.dup?', '+r.dup+' já estava(m) na lista e foi(ram) ignorado(s)':'')+'.':'Nada importado'+(r.dup?' ('+r.dup+' já estava(m) na lista)':'')+'.',!r.added);
+}
 $('btnImp').onclick=()=>{const r=importText($('impText').value,impMode());reportImp(r);if(r.added){$('impText').value='';afterRoster()}};
+// lê .xlsx (SheetJS, carregado sob demanda) ou .csv/.txt — CSV salvo pelo Excel vem em ANSI
+// (windows-1252), não UTF-8: decodifica com fallback pra não estragar acentos (São Luís, etc.)
+let XLSX_P=null;
+function loadXLSX(){if(window.XLSX)return Promise.resolve(window.XLSX);if(XLSX_P)return XLSX_P;XLSX_P=new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';sc.onload=()=>res(window.XLSX);sc.onerror=()=>{XLSX_P=null;rej(new Error('xlsx'))};document.head.appendChild(sc)});return XLSX_P}
+async function rowsFromFile(f){
+  const buf=await f.arrayBuffer();
+  if(/\.xlsx?$/i.test(f.name)){const X=await loadXLSX();const wb=X.read(buf,{type:'array'});const nm=wb.SheetNames.find(n=>/colaborador/i.test(n))||wb.SheetNames[0];return X.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:false,defval:''})}
+  let txt;try{txt=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){txt=new TextDecoder('windows-1252').decode(buf)}
+  return rowsFromText(txt);
+}
 $('impFile').addEventListener('change',async ev=>{
   const f=ev.target.files[0];if(!f)return;
-  try{const txt=await f.text();const r=importText(txt,impMode());reportImp(r);if(r.added)afterRoster()}catch(e){say('impMsg','Não foi possível ler o arquivo.',true)}
+  try{const r=importRows(await rowsFromFile(f),impMode());reportImp(r);if(r.added)afterRoster()}catch(e){say('impMsg','Não foi possível ler o arquivo (use a planilha padrão em .xlsx ou .csv).',true)}
   ev.target.value='';
 });
-function modelTxt(){return 'Nome;Cargo;Sobreaviso;GA;GO;Equipe;Cidade;UF\nNome Sobrenome 1;Técnico de Rede;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;E1;Teresina;PI\nNome Sobrenome 2;Oficial de Rede;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;E1;São Luís;MA\nNome Sobrenome 3;Técnico de Infraestrutura;;Miguel Barros de Carvalho Junior;Ivandro Pessoa da Nóbrega Alencar;;Belém;PA'}
+// linhas da planilha padrão: cabeçalho + colaboradores da área de quem baixa (GA: só os dele;
+// administrador: todos). Sem ninguém cadastrado, vai 1 linha de exemplo começando com # (ignorada).
+function modelRows(){
+  const L=emps.slice().sort((a,b)=>azSort(a.ga||'',b.ga||'')||azSort(a.team||'~',b.team||'~')||azSort(a.name,b.name)).map(e=>[e.name,e.role||'',SOB_EXP[e.mode||'auto']||'',e.ga||'',e.go||'',e.team||'',e.city||'',e.uf||'']);
+  if(!L.length)L.push(['# Exemplo (apague esta linha): Maria Silva','Técnico','',GA_LOCK||GA_LIST[0]||'',(GA_LOCK&&GA_GO[GA_LOCK])||GO_LIST[0]||'','E1','Teresina','PI']);
+  return[IMP_COLS.slice()].concat(L);
+}
+function modelTxt(){return modelRows().map(r=>r.map(x=>/[;"\n]/.test(x)?'"'+String(x).replace(/"/g,'""')+'"':x).join(';')).join('\n')}
+function baixarBlob(nome,blob){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=nome;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove()},1500)}
 $('btnModel').onclick=async()=>{
   const txt=modelTxt();$('impText').value=txt;
   try{await navigator.clipboard.writeText(txt);say('impMsg','Modelo copiado e colado na caixa. Troque os dados de exemplo e importe.')}catch(e){$('impText').select();say('impMsg','Modelo na caixa. Troque os dados de exemplo e clique em Importar.')}
 };
 $('btnDlModel').onclick=async()=>{
-  const csv='\ufeff'+modelTxt().replace(/\n/g,'\r\n')+'\r\n';
-  let dl=null;try{dl=window.claude&&await window.claude.use('downloads')}catch(e){}
-  if(dl){
-    try{await dl.save({filename:'modelo_importacao_colaboradores.csv',data:csv});say('dlMsg','Planilha padrão salva. Preencha no Excel e use "Importar lista" (arquivo CSV).');return}
-    catch(e){if(e&&e.code==='declined'){say('dlMsg','Download cancelado.');return}}
+  const area=GA_LOCK?('_'+GA_LOCK.split(' ')[0]):'';const base='planilha_padrao_colaboradores_5x2'+area;
+  try{
+    const X=await loadXLSX();const wb=X.utils.book_new();
+    const ws=X.utils.aoa_to_sheet(modelRows());ws['!cols']=[{wch:38},{wch:18},{wch:12},{wch:36},{wch:36},{wch:9},{wch:24},{wch:6}];
+    X.utils.book_append_sheet(wb,ws,'Colaboradores');
+    const ins=[['Coluna','Obrigatório','Como preencher'],
+      ['Nome','Sim','Nome completo. Não pode repetir.'],
+      ['Cargo','Sim','Ex.: Técnico, Oficial, Infra. Cargos com "Infra" não formam equipe.'],
+      ['Sobreaviso','Não','Vazio = Rodízio · A = Semana sim · B = Semana não · manual · não = não participa'],
+      ['GA','Sim',GA_LOCK?('Só a sua área: '+GA_LOCK):'Nome do GA (lista abaixo)'],
+      ['GO','Sim','Nome do GO (lista abaixo)'],
+      ['Equipe','Não','E1, E2... O mesmo texto em duas ou mais pessoas forma uma equipe.'],
+      ['Cidade','Sim','Cidade da UF informada (com acento, ex.: São Luís).'],
+      ['UF','Sim','MA, PA ou PI'],[],
+      ['Importar','','Em "Importar lista", escolha este arquivo (.xlsx). Se faltar alguma informação, nada é importado e aparece a lista do que corrigir.'],[],
+      ['GAs válidos'],...(GA_LOCK?[GA_LOCK]:GA_LIST).map(g=>['',g]),[],['GOs válidos'],...GO_LIST.map(g=>['',g])];
+    const wi=X.utils.aoa_to_sheet(ins);wi['!cols']=[{wch:14},{wch:42},{wch:95}];X.utils.book_append_sheet(wb,wi,'Instruções');
+    const out=X.write(wb,{bookType:'xlsx',type:'array'});
+    baixarBlob(base+'.xlsx',new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    say('dlMsg','Planilha padrão baixada ('+base+'.xlsx). Preencha todas as colunas obrigatórias e importe em "Importar lista".');
+  }catch(e){
+    baixarBlob(base+'.csv',new Blob(['\ufeff'+modelTxt().replace(/\n/g,'\r\n')+'\r\n'],{type:'text/csv;charset=utf-8'}));
+    say('dlMsg','Planilha padrão baixada em CSV ('+base+'.csv). Preencha no Excel e importe em "Importar lista".');
   }
-  $('impText').value=modelTxt();
-  try{await navigator.clipboard.writeText(modelTxt());say('dlMsg','Não foi possível baixar aqui. O modelo foi copiado e colado na caixa de importação: cole numa planilha e salve como CSV.')}
-  catch(e){say('dlMsg','Não foi possível baixar aqui. O modelo está na caixa de importação: copie e cole numa planilha.')}
 };
 $('btnExpEmp').onclick=async()=>{
-  const txt=emps.map(e=>e.name+';'+e.role+';'+({off:'não',A:'A',B:'B',manual:'manual',auto:''}[e.mode||'auto'])+';'+(e.ga||'')+';'+(e.go||'')+';'+(e.team||'')+';'+(e.city||'')+';'+(e.uf||'')).join('\n');$('impText').value=txt;
+  const txt=modelTxt();$('impText').value=txt;
   try{await navigator.clipboard.writeText(txt);say('impMsg','Lista copiada.')}catch(e){$('impText').select();say('impMsg','Copie o texto da caixa acima.')}
 };
 $('btnPre').onclick=applyPreset;
