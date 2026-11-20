@@ -1395,6 +1395,26 @@ window.painelEscalaContexto = function(){
   try { Object.values(STATE.hierMap || {}).forEach(h => { if (h && h.ga && !vistos.has(h.ga)) { vistos.add(h.ga); pares.push({ ga: h.ga, go: h.go || '' }); } }); } catch(e) {}
   return { role: AUTH.currentRole, gaNome: AUTH.currentGaNome, pares };
 };
+// sincronização da aba Escala 5X2 (pedido do usuário, 2026-11-20) — a escala lê/grava pelo
+// cliente do Supabase deste painel; a gravação usa o token da sessão do login (painel_sessoes)
+// e o servidor só deixa um GA gravar a PRÓPRIA fatia (ver supabase_escala5x2.sql).
+window.painelEscalaSync = {
+  disponivel(){ return !!sb; },
+  podeGravar(){ return !!tokenFotos() && (isAdmin() || isGA()); },
+  async ler(){
+    const { data, error } = await withTimeout(sb.from('escala5x2_estado').select('chave,dados,autor,atualizado_em'), 15000, 'ler escala 5x2');
+    if (error) throw error;
+    return data || [];
+  },
+  async salvar(chave, dados){
+    const tk = tokenFotos();
+    if (!tk) throw new Error('sem-sessao');
+    const { data, error } = await withTimeout(sb.rpc('escala5x2_salvar', { p_token: tk, p_chave: chave, p_dados: dados }), 15000, 'gravar escala 5x2');
+    if (error) throw error;
+    if (!data || !data.ok) throw new Error((data && data.erro) || 'recusado');
+    return data;
+  }
+};
 // GA (Gestor de Área) — login próprio, só pra escrever Justificativa com autoria registrada,
 // restrito aos colaboradores da PRÓPRIA área (ver campoJustEhEditavelPara). Não é Admin: não
 // anexa Base/Hierarquia, não apaga nada — pedido explícito do usuário ("só Justificativa").

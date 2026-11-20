@@ -322,10 +322,19 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 /* cartão de parâmetros só aparece quando "⚙ Parâmetros" está aberto */
 .card.cfg:has(> #cfgBody[hidden]){display:none}
 @media(max-width:1100px){main>.topbar{flex-wrap:wrap}.topbar .monthbar{flex-basis:100%;flex-wrap:wrap}}
+.cvFilt{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--work)}
+.cvFilt label{margin:0;font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap}
+.cvFilt select{width:auto;flex:1 1 150px;min-width:120px;max-width:280px;padding:4px 6px;font-size:13px}
+.cvFilt input[type=date]{width:auto;padding:4px 6px;font-size:13px}
+.cvFilt .efTit{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.cvFilt .btn{padding:4px 12px;white-space:nowrap}
+.hdrR{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.syncSt{font-size:12px;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.18);color:#fff;white-space:nowrap}
+.syncSt.err{background:#fde68a;color:#7c2d12}
 </style>
 </head>
 <body>
-<header><div class="hero"><div><span class="eyebrow">EC 141/2026 · fim da escala 6x1</span><h1>Painel de Escala 5x2</h1><p>Escala, sobreaviso e cobertura de folgas em um só lugar</p></div><span class="badge" id="stageBadge"></span></div></header>
+<header><div class="hero"><div><span class="eyebrow">EC 141/2026 · fim da escala 6x1</span><h1>Painel de Escala 5x2</h1><p>Escala, sobreaviso e cobertura de folgas em um só lugar</p></div><span class="hdrR"><span class="syncSt" id="syncSt" hidden></span><span class="badge" id="stageBadge"></span></span></div></header>
 <main>
 
 
@@ -452,6 +461,7 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 </div>
 <div class="card" id="cvCard"><h2>Cobertura das folgas no sobreaviso</h2>
 <p class="hint" style="margin:0 0 8px">Quando o colaborador de sobreaviso está de folga, outro que esteja trabalhando naquele dia assume. Folgas seguidas da mesma pessoa (ex.: sábado e domingo) são cobertas pelo mesmo colega. Entre uma folga e outra, o painel alterna os colegas, não repete a mesma pessoa em sequência e equilibra o total. Você pode trocar o substituto na lista.</p>
+<div class="cvFilt" aria-label="Filtros da cobertura das folgas"><span class="efTit">Filtrar</span><label for="cvfGA">GA</label><select id="cvfGA"></select><label for="cvfTit">Folga de</label><select id="cvfTit"></select><label for="cvfSub">Substituto</label><select id="cvfSub"></select><label for="cvfDe">De</label><input type="date" id="cvfDe"><label for="cvfAte">até</label><input type="date" id="cvfAte"><label class="chk" style="margin:0"><input type="checkbox" id="cvfSem"><span>Só sem substituto</span></label><button type="button" class="btn sec" id="cvfLimpar">Limpar</button><span class="small" id="cvfInfo"></span></div>
 <div class="scroll"><table class="cvT" id="cvTbl"></table></div>
 <p class="small" id="cvSum" style="margin:8px 0 0"></p></div>
 </div>
@@ -1327,9 +1337,32 @@ $('btnImgSa').onclick=function(){copyImage('sa',this)};
 $('imgClose').onclick=()=>{$('imgModal').hidden=true};
 $('imgModal').addEventListener('click',ev=>{if(ev.target.id==='imgModal')$('imgModal').hidden=true});
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape')$('imgModal').hidden=true});
+// filtros da tabela de cobertura (pedido do usuário, 2026-11-20): GA do titular, titular,
+// substituto, período e "só sem substituto" — listas de A a Z; só escondem linhas da tabela
+const CVF={ga:'',tit:'',sub:'',de:'',ate:'',sem:false};let cvUltimo=null;
+function cvFiltOk(e){
+  if(CVF.ga){const p=emps.find(x=>x.name===e.tit)||OUTROS.find(x=>x.name===e.tit);const g=(p&&p.ga)||'';if(CVF.ga==='__none'?!!g:g!==CVF.ga)return false}
+  if(CVF.tit&&e.tit!==CVF.tit)return false;
+  if(CVF.sub&&(e.sub||'')!==CVF.sub)return false;
+  if(CVF.sem&&e.sub)return false;
+  if(CVF.de&&e.iso<CVF.de)return false;if(CVF.ate&&e.iso>CVF.ate)return false;
+  return true;
+}
+function cvFillFilters(list){
+  const opt=(id,vals,todos,cur,extra)=>{const el=$(id);if(!el)return;const v=[...new Set(vals.filter(Boolean))].sort(azSort);if(cur&&cur!=='__none'&&!v.includes(cur)&&id!=='cvfGA')cur='';el.innerHTML='<option value="">'+todos+'</option>'+v.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('')+(extra||'');el.value=cur;return el.value};
+  const gaDe=n=>{const p=emps.find(x=>x.name===n)||OUTROS.find(x=>x.name===n);return(p&&p.ga)||''};
+  const gas=list.map(e=>gaDe(e.tit));
+  CVF.ga=opt('cvfGA',gas,'Todos os GAs',CVF.ga,gas.some(g=>!g)?'<option value="__none">Sem GA</option>':'')||'';
+  CVF.tit=opt('cvfTit',list.map(e=>e.tit),'Todos',CVF.tit)||'';
+  CVF.sub=opt('cvfSub',list.map(e=>e.sub),'Todos',CVF.sub)||'';
+  if(GA_LOCK&&$('cvfGA')){$('cvfGA').disabled=true}
+}
 function renderCovers(cv,parts,cal){
+  cvUltimo={cv,parts,cal};
+  if(cv.list.length)cvFillFilters(cv.list);
   if(!cv.list.length){$('cvTbl').innerHTML='<tr><td>Nenhuma folga cai dentro de uma semana de sobreaviso.</td></tr>';$('cvSum').textContent='';return}
-  $('cvTbl').innerHTML='<tr><th>Data</th><th>Folga de (sobreaviso)</th><th>Substituto</th></tr>'+cv.list.map(e=>{
+  const cvVis=cv.list.filter(cvFiltOk);if($('cvfInfo'))$('cvfInfo').textContent=cvVis.length===cv.list.length?'':'Mostrando '+cvVis.length+' de '+cv.list.length;
+  $('cvTbl').innerHTML='<tr><th>Data</th><th>Folga de (sobreaviso)</th><th>Substituto</th></tr>'+(cvVis.length?'':'<tr><td colspan="3" class="small">Nenhuma cobertura com esses filtros.</td></tr>')+cvVis.map(e=>{
     const d=cal.days[e.i];
     const opts=['<option value="">Automático</option>',...e.cands.map(p=>`<option value="${esc(p)}"${e.forced&&e.sub===p?' selected':''}>${esc(p)}</option>`)].join('');
     const lab=e.sub?esc(e.sub):'<b style="color:var(--bad)">sem substituto</b>';
@@ -1388,6 +1421,109 @@ function renderEmps(){
 }
 ['efGO','efGA','efUF','efCity'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{const k={efGO:'go',efGA:'ga',efUF:'uf',efCity:'city'}[id];EF[k]=$(id).value;if(k==='uf')EF.city='';renderEmps()}));
 $('efClear')&&$('efClear').addEventListener('click',()=>{EF.go=EF.uf=EF.city='';if(!GA_LOCK)EF.ga='';renderEmps()});
+['cvfGA','cvfTit','cvfSub','cvfDe','cvfAte','cvfSem'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{CVF.ga=$('cvfGA').value;CVF.tit=$('cvfTit').value;CVF.sub=$('cvfSub').value;CVF.de=$('cvfDe').value;CVF.ate=$('cvfAte').value;CVF.sem=$('cvfSem').checked;if(cvUltimo)renderCovers(cvUltimo.cv,cvUltimo.parts,cvUltimo.cal)}));
+$('cvfLimpar')&&$('cvfLimpar').addEventListener('click',()=>{if(!GA_LOCK)CVF.ga='';CVF.tit=CVF.sub=CVF.de=CVF.ate='';CVF.sem=false;$('cvfDe').value='';$('cvfAte').value='';$('cvfSem').checked=false;if(cvUltimo)renderCovers(cvUltimo.cv,cvUltimo.parts,cvUltimo.cal)});
+// ============================================================================================
+// SINCRONIZAÇÃO AUTOMÁTICA (pedido do usuário, 2026-11-20): "quando o GA atualizar com seu acesso
+// as informações são sincronizadas automaticamente". A escala continua salva no navegador e, além
+// disso, vai pro servidor (tabela escala5x2_estado, ver supabase_escala5x2.sql) em FATIAS:
+// 'ga:<GA>' = colaboradores daquele GA e tudo que é deles (folgas fixadas, férias, sobreaviso,
+// ajustes por dia, substitutos); 'geral' = quem está sem GA + dias sem sobreaviso.
+// GA logado grava só a própria fatia (o servidor confere); Admin grava todas; sem login = só lê.
+// Grava ~2s depois de cada alteração; a cada 45s busca o que os outros mudaram. Se há alteração
+// local ainda não enviada, ela vence (é enviada) em vez de ser sobrescrita.
+// ============================================================================================
+const SYNC=(()=>{try{return window.parent&&window.parent!==window&&window.parent.painelEscalaSync||null}catch(e){return null}})();
+const chaveGA=g=>'ga:'+String(g||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+const SYNC_KEY='escala5x2sync';
+let SY={sent:{},seen:{}};try{SY=Object.assign(SY,JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'))}catch(e){}
+const sySave=()=>{try{localStorage.setItem(SYNC_KEY,JSON.stringify(SY))}catch(e){}};
+let syTimer=null,syBusy=false,syAplicando=false,syOk=false;
+function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)}
+function todosEmps(){return GA_LOCK?emps.concat(OUTROS.filter(o=>!emps.some(e=>e.name===o.name))):emps.slice()}
+const chaveDe=p=>(p&&p.ga&&GA_LIST.includes(p.ga))?chaveGA(p.ga):'geral';
+function fatia(ch){
+  const lst=todosEmps().filter(p=>chaveDe(p)===ch).sort((a,b)=>azSort(a.name,b.name));
+  const nm=new Set(lst.map(p=>p.name));
+  const pick=o=>{const r={};Object.keys(o||{}).sort().forEach(k=>{if(nm.has(k))r[k]=o[k]});return r};
+  const f={emps:lst.map(p=>({name:p.name,role:p.role||'',mode:p.mode||'auto',ga:p.ga||'',go:p.go||'',team:p.team||'',city:p.city||'',uf:p.uf||''})),
+    fix:pick(fix),oc:pick(oc),ocD:pick(ocD),subFix:pick(subFix),
+    ov:(()=>{const r={};Object.keys(ov||{}).sort().forEach(k=>{if(nm.has(k.slice(0,k.lastIndexOf('|'))))r[k]=ov[k]});return r})(),
+    vac:vac.filter(v=>nm.has(v.name)).map(v=>({name:v.name,s:v.s,e:v.e})).sort((a,b)=>azSort(a.name+a.s,b.name+b.s))};
+  if(ch==='geral')f.saOff=(saOff||[]).slice().sort();
+  return f;
+}
+function chavesGravaveis(serverChaves){
+  if(!SYNC||!SYNC.podeGravar())return [];
+  if(GA_LOCK)return [chaveGA(GA_LOCK)];
+  if(!PAINEL||PAINEL.role!=='admin')return [];
+  const s=new Set(['geral',...todosEmps().map(chaveDe),...(serverChaves||[]),...Object.keys(SY.sent)]);return [...s];
+}
+function aplicarFatia(ch,d){
+  d=d||{};
+  const okEmp=p=>p&&p.name&&(ch==='geral'?!(p.ga&&GA_LIST.includes(p.ga)):chaveGA(p.ga)===ch);
+  const novos=(Array.isArray(d.emps)?d.emps:[]).filter(okEmp).map(x=>({name:String(x.name),role:String(x.role||''),mode:x.mode||'auto',sob:(x.mode||'auto')!=='off',ga:x.ga||'',go:x.go||'',team:String(x.team||''),city:String(x.city||''),uf:UFS.includes(x.uf)?x.uf:''}));
+  const all=todosEmps();
+  const saem=new Set(all.filter(p=>chaveDe(p)===ch).map(p=>p.name));
+  const nm=new Set(novos.map(p=>p.name));
+  const resto=all.filter(p=>chaveDe(p)!==ch&&!nm.has(p.name));
+  const tira=o=>{Object.keys(o).forEach(k=>{if(saem.has(k)||nm.has(k))delete o[k]})};
+  [fix,oc,ocD,subFix].forEach(tira);
+  Object.keys(ov).forEach(k=>{const t=k.slice(0,k.lastIndexOf('|'));if(saem.has(t)||nm.has(t))delete ov[k]});
+  const pega=(dst,src)=>{Object.keys(src||{}).forEach(k=>{if(nm.has(k))dst[k]=src[k]})};
+  pega(fix,d.fix);pega(oc,d.oc);pega(ocD,d.ocD);pega(subFix,d.subFix);
+  Object.keys(d.ov||{}).forEach(k=>{if(nm.has(k.slice(0,k.lastIndexOf('|'))))ov[k]=d.ov[k]});
+  vac=vac.filter(v=>!saem.has(v.name)&&!nm.has(v.name)).concat((Array.isArray(d.vac)?d.vac:[]).filter(v=>v&&nm.has(v.name)&&v.s&&v.e));
+  if(ch==='geral'&&Array.isArray(d.saOff)){saOff=d.saOff.slice();if(state.cfg)state.cfg.saOff=new Set(saOff)}
+  const juntos=resto.concat(novos);
+  if(GA_LOCK){emps=juntos.filter(p=>p.ga===GA_LOCK);OUTROS=juntos.filter(p=>p.ga!==GA_LOCK)}else emps=juntos;
+}
+function syStatus(t,err){const el=$('syncSt');if(!el)return;el.hidden=!t;el.textContent=t||'';el.classList.toggle('err',!!err)}
+const hhmm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+async function syEnviar(){
+  if(!SYNC||syBusy||syAplicando)return;
+  const chs=chavesGravaveis();if(!chs.length)return;
+  syBusy=true;let enviou=0,erro=null;
+  try{
+    for(const ch of chs){
+      const f=fatia(ch),j=stable(f);
+      if(SY.sent[ch]===j)continue;
+      if(!SY.sent[ch]&&!f.emps.length&&ch!=='geral')continue; // nada a enviar de uma fatia que nunca existiu
+      try{const r=await SYNC.salvar(ch,f);SY.sent[ch]=j;SY.seen[ch]=r.atualizado_em||SY.seen[ch];enviou++}catch(e){erro=e}
+    }
+    sySave();
+  }finally{syBusy=false}
+  if(erro)syStatus(String(erro.message||'').includes('escala5x2_salvar')||/function|does not exist|schema/i.test(String(erro.message||''))?'☁ Sincronização indisponível no servidor':'☁ Não sincronizou — tenta de novo sozinho',true);
+  else if(enviou||syOk)syStatus('☁ Sincronizado às '+hhmm());
+}
+function syncAgendar(){if(!SYNC||syAplicando)return;clearTimeout(syTimer);syTimer=setTimeout(syEnviar,2000)}
+async function syBuscar(inicial){
+  if(!SYNC||!SYNC.disponivel()||syBusy)return;
+  let rows;try{rows=await SYNC.ler()}catch(e){syStatus('☁ Sincronização indisponível no servidor',true);return}
+  syOk=true;
+  const grav=new Set(chavesGravaveis(rows.map(r=>r.chave)));
+  let mudou=false;
+  syAplicando=true;
+  try{
+    rows.forEach(r=>{
+      const ch=r.chave;if(ch!=='geral'&&!ch.startsWith('ga:'))return;
+      if(GA_LOCK&&ch!==chaveGA(GA_LOCK)&&ch!=='geral')return; // GA só precisa da própria área (+ quem está sem GA)
+      const jLocal=stable(fatia(ch));
+      const sujo=grav.has(ch)&&SY.sent[ch]&&jLocal!==SY.sent[ch];
+      if(sujo)return; // alteração local ainda não enviada vence
+      if(SY.seen[ch]===r.atualizado_em&&SY.sent[ch])return;
+      if(jLocal!==stable(r.dados||{})){aplicarFatia(ch,r.dados);mudou=true}
+      SY.seen[ch]=r.atualizado_em;if(grav.has(ch))SY.sent[ch]=stable(fatia(ch));
+    });
+    sySave();
+  }finally{syAplicando=false}
+  if(mudou){_saveState0();renderEmps();if(state.cal)genNew();else render()}
+  syStatus(SYNC.podeGravar()?'☁ Sincronizado às '+hhmm():'☁ Atualizado às '+hhmm()+' (somente leitura — entre com seu acesso para editar)');
+  syEnviar();
+}
+const _saveState0=saveState;
+saveState=function(){_saveState0();syncAgendar()};
+function syncIniciar(){if(!SYNC)return;syBuscar(true);setInterval(()=>{if(!document.hidden)syBuscar(false)},45000)}
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
   if(GA_LOCK){ga=GA_LOCK;go=GA_GO[GA_LOCK]||go||''}
@@ -1645,7 +1781,7 @@ if(s.oc&&typeof s.oc==='object')oc=s.oc;if(s.ov&&typeof s.ov==='object')ov=s.ov;
   if(!state.subMig){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[v.name])subFix[v.name]=w.name;state.subMig=true}
   if(!state.subMig2){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[w.name])subFix[w.name]=v.name;state.subMig2=true}
   if(GA_LOCK){OUTROS=emps.filter(e=>e.ga!==GA_LOCK);emps=emps.filter(e=>e.ga===GA_LOCK);['btnSample','btnPre'].forEach(id=>{$(id).hidden=true});$('fGA').value=GA_LOCK}
-  buildChips();renderEmps();if(!state.imgPre&&!GA_LOCK)applyPreset();else genNew();showView(location.hash==='#secundario'?'secundario':'principal');
+  buildChips();renderEmps();if(!state.imgPre&&!GA_LOCK)applyPreset();else genNew();showView(location.hash==='#secundario'?'secundario':'principal');setTimeout(syncIniciar,400);
 })();
 </script>
 </body>
