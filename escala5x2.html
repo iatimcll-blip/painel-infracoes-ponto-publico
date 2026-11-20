@@ -335,6 +335,10 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 .bkpBox .btn{padding:3px 10px;font-size:12.5px}
 .lockNote{margin:0 0 8px;padding:6px 10px;border-radius:8px;background:#eef2ff;color:#3730a3;font-size:12.5px;font-weight:600}
 body.paramLock #openDays .chip{cursor:not-allowed;opacity:.75}
+/* nome e cidade dos colaboradores maiores na escala e no sobreaviso (pedido do usuário, 2026-11-20) */
+td.name{font-size:14px!important;width:250px!important;min-width:200px!important;max-width:290px!important}
+small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;margin-top:2px}
+.tm{font-size:11px!important}
 </style>
 </head>
 <body>
@@ -1090,7 +1094,14 @@ function applyPreset(){
 // membros da mesma equipe sempre em linhas seguidas (pedido do usuário, 2026-11-20: "a visão do GA
 // na escala mostrará a equipe junta e não dispersa") — mantém a ordem de chegada de cada
 // equipe/pessoa e puxa os colegas de equipe para logo depois do primeiro membro
-function agruparEquipes(list){const out=[],vist=new Set();list.forEach(p=>{if(!p||vist.has(p.name))return;const k=teamKey(p);if(!k){out.push(p);vist.add(p.name);return}list.forEach(q=>{if(q&&!vist.has(q.name)&&teamKey(q)===k){out.push(q);vist.add(q.name)}})});return out}
+// equipes em ordem crescente (E1, E2, ... E10 — ordem numérica, pedido do usuário 2026-11-20);
+// dentro da equipe, a ordem de cadastro; quem não tem equipe vem depois, de A a Z
+function agruparEquipes(list){
+  const eq=new Map(),sem=[],vist=new Set();
+  list.forEach(p=>{if(!p||vist.has(p.name))return;vist.add(p.name);const k=teamKey(p);if(k){if(!eq.has(k))eq.set(k,[]);eq.get(k).push(p)}else sem.push(p)});
+  const ks=[...eq.keys()].sort((a,b)=>a.localeCompare(b,'pt',{numeric:true,sensitivity:'base'}));
+  return ks.flatMap(k=>eq.get(k)).concat(sem.sort((a,b)=>azSort(a.name,b.name)));
+}
 function genNew(){
   emps=agruparEquipes(emps);
   const cfg=readCfg();
@@ -1263,8 +1274,8 @@ $('ocTbl').addEventListener('click',ev=>{
 function drawTable(kind){
   const{cal,cfg,grid}=state;const sa=kind==='sa';
   const rows=cfg.names.map((_,e)=>e).filter(vis);
-  const CW=28,NW=250,PAD=18,TT=44,HH=40,FT=40,S=2;
-  const hasC=rows.some(e=>emps[e]&&emps[e].city),RH=hasC?36:26;
+  const CW=28,NW=290,PAD=18,TT=44,HH=40,FT=40,S=2;
+  const hasC=rows.some(e=>emps[e]&&emps[e].city),RH=hasC?40:28;
   const W=PAD*2+NW+cal.days.length*CW,H=PAD+TT+HH+rows.length*RH+RH+FT+PAD;
   const cv=document.createElement('canvas');cv.width=W*S;cv.height=H*S;
   const x=cv.getContext('2d');x.scale(S,S);
@@ -1295,8 +1306,8 @@ function drawTable(kind){
     last=key;
     let nx=PAD+8;
     if(tk){const h=teamHue(tk),lab=tk.slice(0,6);x.font='700 10px '+FF;const w=x.measureText(lab).width+10;rr(nx,y+(hasC?6:6),w,15,5,`hsl(${h} 75% 90%)`);tx(lab,nx+w/2,y+(hasC?13.5:13.5),'700 10px '+FF,`hsl(${h} 60% 28%)`,'center');nx+=w+6}
-    tx(fit(cfg.names[e],NW-(nx-PAD)-6,'600 12.5px '+FF),nx,y+(hasC?14:13),'600 12.5px '+FF,'#0f172a');
-    if(hasC&&emps[e]&&emps[e].city)tx(fit(emps[e].city+(emps[e].uf?'/'+emps[e].uf:''),NW-(nx-PAD)-6,'400 10.5px '+FF),nx,y+27,'400 10.5px '+FF,'#64748b');
+    tx(fit(cfg.names[e],NW-(nx-PAD)-6,'600 14px '+FF),nx,y+(hasC?15:14),'600 14px '+FF,'#0f172a');
+    if(hasC&&emps[e]&&emps[e].city)tx(fit(emps[e].city+(emps[e].uf?'/'+emps[e].uf:''),NW-(nx-PAD)-6,'500 12px '+FF),nx,y+31,'500 12px '+FF,'#475569');
     cal.days.forEach((d,i)=>{
       const cx=PAD+NW+i*CW+1,w=CW-2;let bg=null,fg=null,txt='',al=d.inMonth?1:.5;
       if(!sa){const v=grid[e][i];if(state.cvMap[e+'|'+i]){bg='#fed7aa';fg='#9a3412';txt='C'}else if(v==='V'){bg='#ede9fe';fg='#5b21b6';txt='FÉ'}else if(v==='F'){bg='#fee2e2';fg='#b91c1c';txt='F'}else{bg='#1e3a8a';fg='#fff';txt='T'}}
