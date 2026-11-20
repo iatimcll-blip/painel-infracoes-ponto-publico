@@ -289,6 +289,25 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 /* em tela estreita a barra de mês/botões quebra linha em vez de passar da largura da tela */
 @media(max-width:820px){.monthbar{flex-wrap:wrap!important}}
 @media(max-width:520px){.tabs{width:100%}.tabs button{flex:1 1 0!important;justify-content:center;padding:8px 10px!important}}
+
+/* ===== Colaboradores (Configurações): cadastro, filtros e cada colaborador em UMA linha só
+   (pedido do usuário, 2026-11-20) — em tela estreita o bloco rola de lado em vez de quebrar ===== */
+#empCard .colScroll{overflow-x:auto;padding-bottom:4px}
+#empCard .addrow,#empCard .emps li{display:grid!important;grid-template-columns:minmax(170px,1.5fr) minmax(110px,.8fr) 70px 74px minmax(140px,1fr) minmax(170px,1.2fr) minmax(170px,1.2fr) 120px 36px!important;gap:6px!important;min-width:1080px;align-items:end}
+#empCard .emps li{align-items:center}
+#empCard .addrow>*,#empCard .emps li>*{grid-column:auto!important;grid-row:auto!important;min-width:0}
+#empCard .addrow>button[type=submit]{grid-column:span 2!important;white-space:nowrap}
+#empCard .emps{min-width:1080px}
+#empCard .emps li[hidden]{display:none!important}
+#empCard .addrow input,#empCard .addrow select,#empCard .emps li input,#empCard .emps li select{height:32px!important;padding:4px 8px!important;font-size:13px!important;box-sizing:border-box}
+#empCard .addrow>button[type=submit]{height:32px;padding:0 14px}
+#empCard .addrow label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#empCard .empFilt{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;min-width:1080px;margin:8px 0 2px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--work)}
+#empCard .empFilt label{margin:0;font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap}
+#empCard .empFilt select{width:auto;flex:1 1 0;min-width:0;padding:4px 6px;font-size:13px}
+#empCard .empFilt .efTit{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin-right:2px}
+#empCard .empFilt .btn{padding:4px 12px;white-space:nowrap}
+#empCard .empFilt #efInfo{white-space:nowrap;color:var(--mut)}
 </style>
 </head>
 <body>
@@ -339,6 +358,7 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 <div id="viewSec" class="view" hidden>
 <section class="card" id="empCard">
 <h2>Colaboradores <span class="small" id="empCount"></span></h2>
+<div class="colScroll">
 <form id="addForm" class="addrow">
 <div><label for="newName">Nome</label><input type="text" id="newName" autocomplete="off" placeholder="Ex.: Maria Silva" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></div>
 <div><label for="newRole">Cargo / setor (opcional)</label><input type="text" id="newRole" autocomplete="off" placeholder="Ex.: Caixa" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit"></div>
@@ -350,7 +370,9 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 <button type="submit" class="btn">Cadastrar</button>
 </form>
 <p class="msg" id="addMsg" role="status"></p>
+<div class="empFilt" aria-label="Filtros da lista de colaboradores"><span class="efTit">Filtrar</span><label for="efGO">GO</label><select id="efGO"></select><label for="efGA">GA</label><select id="efGA"></select><label for="efUF">UF</label><select id="efUF"></select><label for="efCity">Cidade</label><select id="efCity"></select><button type="button" class="btn sec" id="efClear">Limpar</button><span class="small" id="efInfo"></span></div>
 <ul class="emps" id="empList"></ul>
+</div>
 <div class="btns" style="margin:12px 0 4px"><button type="button" class="btn" id="btnDlModel">Baixar planilha padrão (CSV)</button><span class="small" id="dlMsg" role="status">Modelo com as colunas Nome, Cargo, Sobreaviso, GA, GO, Equipe, Cidade e UF. Abre no Excel; preencha e importe em "Importar lista".</span></div>
 <details class="imp"><summary><b>Importar lista</b> (CSV, TXT ou colar)</summary>
 <p class="hint">Uma pessoa por linha: <code>Nome</code>, <code>Nome;Cargo</code> ou <code>Nome;Cargo;Sobreaviso;GA;GO;Equipe</code> (sobreaviso: não, A, B, manual; vazio = rodízio. GA e GO: nome da lista, ou parte dele. Equipe: o mesmo texto em duas ou mais pessoas forma uma equipe, que compartilha folgas e sobreaviso: toda modificação feita em um membro (folga T/F, sobreaviso, férias, substituto, GA, GO, UF e cidade) acontece também com os outros da equipe. Cargos de infraestrutura não formam equipe). Separador ; , ou tabulação. Cabeçalho "Nome" e linhas iniciadas por # são ignorados. Use "Copiar modelo" para ver um exemplo. Para Excel, salve como CSV.</p>
@@ -1329,12 +1351,29 @@ function buildChips(){
 $('openDays').addEventListener('click',ev=>{const b=ev.target.closest('.chip');if(!b)return;const d=+b.dataset.d;state.open[d]=!state.open[d];b.setAttribute('aria-pressed',state.open[d]);genNew()});
 
 function normName(s){return s.trim().replace(/\s+/g,' ')}
+// filtros da lista de Colaboradores (Configurações) — GO, GA, UF, Cidade, todos de A a Z (pedido
+// do usuário, 2026-11-20). Só escondem linhas: os índices data-i continuam os mesmos.
+const EF={go:'',ga:'',uf:'',city:''};
+const efVal=(p,k)=>String((p&&p[k])||'').trim();
+function empFiltOk(p){return ['go','ga','uf','city'].every(k=>!EF[k]||(EF[k]==='__none'?!efVal(p,k):efVal(p,k)===EF[k]))}
+function renderEmpFilters(){
+  const mk=(id,k,todos,extra)=>{const sel=$(id);if(!sel)return;let base=emps;if(k==='city'&&EF.uf)base=emps.filter(p=>EF.uf==='__none'?!efVal(p,'uf'):efVal(p,'uf')===EF.uf);
+    const vals=[...new Set(base.map(p=>efVal(p,k)).filter(Boolean).concat(extra||[]))].sort(azSort);
+    if(EF[k]&&EF[k]!=='__none'&&!vals.includes(EF[k]))EF[k]='';
+    const semV=base.some(p=>!efVal(p,k));
+    sel.innerHTML=`<option value="">${todos}</option>`+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')+(semV?'<option value="__none">(vazio)</option>':'');sel.value=EF[k]};
+  mk('efGO','go','Todos os GOs');mk('efGA','ga','Todos os GAs');mk('efUF','uf','Todas as UFs');mk('efCity','city','Todas as cidades');
+  if(GA_LOCK&&$('efGA'))$('efGA').disabled=true;
+}
 function renderEmps(){
-  fillRoles();setTimeout(()=>{try{renderVac();renderSubFix()}catch(e){}},0);
+  fillRoles();renderEmpFilters();setTimeout(()=>{try{renderVac();renderSubFix()}catch(e){}},0);
   $('empCount').textContent='('+emps.length+')';
   const spE=makeSep();
-  $('empList').innerHTML=emps.map((p,i)=>`<li${spE(i)}><input type="text" class="nm" data-i="${i}" value="${esc(p.name)}" aria-label="Nome do colaborador ${i+1}"><input type="text" class="role" data-i="${i}" value="${esc(p.role)}" placeholder="Cargo" aria-label="Cargo de ${esc(p.name)}"><input type="text" class="team" data-i="${i}" value="${isInfra(p)?'':esc(p.team||'')}" placeholder="${isInfra(p)?'Sem equipe':'Equipe'}" maxlength="12"${isInfra(p)?' disabled title="Técnicos de infraestrutura não formam equipe"':''} aria-label="Equipe de ${esc(p.name)}"><select class="uf" data-i="${i}" aria-label="UF de ${esc(p.name)}">${ufOpts(p.uf||'')}</select><select class="city" data-i="${i}" aria-label="Cidade de ${esc(p.name)}">${cityOpts(p.uf||'',p.city||'')}</select><select class="ga" data-i="${i}"${GA_LOCK?' disabled':''} aria-label="GA de ${esc(p.name)}">${gOpts(GA_LIST,p.ga,'GA: —')}</select><select class="go" data-i="${i}" aria-label="GO de ${esc(p.name)}">${gOpts(GO_LIST,p.go,'GO: —')}</select><select class="mode" data-i="${i}" aria-label="Sobreaviso de ${esc(p.name)}">${MODES.map(([v,l])=>`<option value="${v}"${(p.mode||'auto')===v?' selected':''}>${l}</option>`).join('')}</select><button type="button" class="xbtn" data-i="${i}" aria-label="Remover ${esc(p.name)}">✕</button></li>`).join('');
+  const nVis=emps.filter(empFiltOk).length;if($('efInfo'))$('efInfo').textContent=nVis===emps.length?'':'Mostrando '+nVis+' de '+emps.length;
+  $('empList').innerHTML=emps.map((p,i)=>`<li${spE(i)}${empFiltOk(p)?'':' hidden'}><input type="text" class="nm" data-i="${i}" value="${esc(p.name)}" aria-label="Nome do colaborador ${i+1}"><input type="text" class="role" data-i="${i}" value="${esc(p.role)}" placeholder="Cargo" aria-label="Cargo de ${esc(p.name)}"><input type="text" class="team" data-i="${i}" value="${isInfra(p)?'':esc(p.team||'')}" placeholder="${isInfra(p)?'Sem equipe':'Equipe'}" maxlength="12"${isInfra(p)?' disabled title="Técnicos de infraestrutura não formam equipe"':''} aria-label="Equipe de ${esc(p.name)}"><select class="uf" data-i="${i}" aria-label="UF de ${esc(p.name)}">${ufOpts(p.uf||'')}</select><select class="city" data-i="${i}" aria-label="Cidade de ${esc(p.name)}">${cityOpts(p.uf||'',p.city||'')}</select><select class="ga" data-i="${i}"${GA_LOCK?' disabled':''} aria-label="GA de ${esc(p.name)}">${gOpts(GA_LIST,p.ga,'GA: —')}</select><select class="go" data-i="${i}" aria-label="GO de ${esc(p.name)}">${gOpts(GO_LIST,p.go,'GO: —')}</select><select class="mode" data-i="${i}" aria-label="Sobreaviso de ${esc(p.name)}">${MODES.map(([v,l])=>`<option value="${v}"${(p.mode||'auto')===v?' selected':''}>${l}</option>`).join('')}</select><button type="button" class="xbtn" data-i="${i}" aria-label="Remover ${esc(p.name)}">✕</button></li>`).join('');
 }
+['efGO','efGA','efUF','efCity'].forEach(id=>$(id)&&$(id).addEventListener('change',()=>{const k={efGO:'go',efGA:'ga',efUF:'uf',efCity:'city'}[id];EF[k]=$(id).value;if(k==='uf')EF.city='';renderEmps()}));
+$('efClear')&&$('efClear').addEventListener('click',()=>{EF.go=EF.uf=EF.city='';if(!GA_LOCK)EF.ga='';renderEmps()});
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
   if(GA_LOCK){ga=GA_LOCK;go=GA_GO[GA_LOCK]||go||''}
