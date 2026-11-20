@@ -758,73 +758,6 @@
   }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
-  /* ---------- Jarvis, o assistente embutido (chat; pedido do usuário: "deixar o robozinho como
-     uma figura humana... chamado Jarvis", livre pra arrastar pra qualquer ponto da tela) ---------- */
-  .robo-fab{
-    position:fixed; right:20px; bottom:20px; z-index:190; width:52px; height:52px; border-radius:50%;
-    background:var(--s1); color:#fff; border:none; cursor:grab; display:none; align-items:center;
-    justify-content:center; box-shadow:0 10px 26px rgba(0,0,0,.28); transition:transform .15s; touch-action:none;
-  }
-  .robo-fab:hover{ transform:scale(1.06); }
-  .robo-fab.dragging{ cursor:grabbing; transition:none; box-shadow:0 16px 36px rgba(0,0,0,.4); }
-  .robo-fab.show{ display:flex; }
-  .jarvis-badge{
-    position:absolute; top:-2px; right:-2px; width:14px; height:14px; border-radius:50%;
-    background:var(--critical); border:2px solid var(--page); display:none;
-  }
-  .robo-fab.has-novidade .jarvis-badge{ display:block; }
-  /* ---------- Jarvis humanoide: movimentos (pedido do usuário: "O robo deverá ser um
-     humanoide com movimentos e caracteristicas") — respirar/balançar, piscar, e acenar quando
-     se apresenta. transform-box é o que faz transform-origin funcionar certinho em elementos
-     SVG (sem isto, o navegador gira/escala a partir do canto do SVG inteiro, não do próprio
-     elemento): fill-box pro corpo/cabeça/olhos (gira em torno do próprio centro, não importa a
-     posição exata), view-box pro braço (precisa de um ponto fixo e exato — o ombro — senão o
-     aceno pivota do lugar errado). */
-  @keyframes jarvis-bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-1.1px); } }
-  @keyframes jarvis-blink{ 0%,90%,100%{ transform:scaleY(1); } 95%{ transform:scaleY(.12); } }
-  @keyframes jarvis-wave{
-    0%,100%{ transform:rotate(0deg); } 15%{ transform:rotate(-26deg); } 30%{ transform:rotate(6deg); }
-    45%{ transform:rotate(-22deg); } 60%{ transform:rotate(4deg); } 75%{ transform:rotate(0deg); }
-  }
-  @keyframes jarvis-pensar{ 0%,100%{ transform:rotate(0deg) translateY(0); } 50%{ transform:rotate(-3deg) translateY(-.6px); } }
-  .jarvis-avatar .jv-head, .jarvis-avatar .jv-body{ animation:jarvis-bob 3.1s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
-  .jarvis-avatar .jv-head{ animation-delay:.12s; }
-  .jarvis-avatar .jv-eye{ animation:jarvis-blink 4.6s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
-  .jarvis-avatar .jv-eye-r{ animation-delay:.08s; }
-  .jarvis-avatar .jv-arm{ transform-box:view-box; transform-origin:24px 24px; }
-  .robo-fab.saudando .jarvis-avatar .jv-arm{ animation:jarvis-wave 1.1s ease-in-out 2; }
-  .robo-fab.pensando .jarvis-avatar .jv-head, .robo-fab.pensando .jarvis-avatar .jv-body{ animation:jarvis-pensar .9s ease-in-out infinite; }
-  @media (prefers-reduced-motion:reduce){
-    .jarvis-avatar .jv-head, .jarvis-avatar .jv-body, .jarvis-avatar .jv-eye, .jarvis-avatar .jv-arm{ animation:none !important; }
-  }
-  .robo-panel{
-    position:fixed; right:20px; bottom:84px; z-index:190; width:360px; max-width:calc(100vw - 32px);
-    height:480px; max-height:calc(100vh - 120px); background:var(--surface-raised); border:1px solid var(--border);
-    border-radius:14px; box-shadow:0 24px 64px rgba(0,0,0,.3); display:none; flex-direction:column; overflow:hidden;
-  }
-  .robo-panel.show{ display:flex; }
-  .robo-head{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--grid); flex:none; }
-  .robo-head .m-name{ font-size:13px; font-weight:700; }
-  .robo-head .m-sub{ font-size:10.5px; color:var(--text-muted); margin-top:1px; }
-  .robo-head-texts{ flex:1; }
-  .robo-msgs{ flex:1; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
-  .robo-msg{ max-width:88%; font-size:12.5px; line-height:1.5; padding:8px 11px; border-radius:11px; white-space:pre-wrap; }
-  .robo-msg.user{ align-self:flex-end; background:var(--s1); color:#fff; border-bottom-right-radius:3px; }
-  .robo-msg.bot{ align-self:flex-start; background:var(--surface); color:var(--text-primary); border:1px solid var(--grid); border-bottom-left-radius:3px; }
-  .robo-msg.bot.erro{ color:var(--critical); border-color:var(--critical); }
-  .robo-msg.bot.robo-typing-msg{ color:var(--text-muted); font-style:italic; }
-  .robo-form{ display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--grid); flex:none; }
-  .robo-form textarea{
-    flex:1; resize:none; font-family:var(--sans); font-size:12.5px; color:var(--text-primary); background:var(--surface);
-    border:1px solid var(--border); border-radius:9px; padding:8px 10px; max-height:72px;
-  }
-  .robo-form textarea:focus{ outline:2px solid var(--s1); outline-offset:1px; }
-  .robo-send-btn{
-    flex:none; width:36px; height:36px; border-radius:9px; background:var(--s1); color:#fff; border:none; cursor:pointer;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .robo-send-btn:disabled{ opacity:.5; cursor:not-allowed; }
-  @media (max-width:480px){ .robo-panel{ right:16px; left:16px; width:auto; bottom:80px; } .robo-fab{ right:16px; } }
 
   /* ---------- verificação base x hierarquia ---------- */
   .verif-summary{ margin:0 0 10px; font-size:12.5px; color:var(--text-secondary); }
@@ -1276,30 +1209,6 @@
 
 <div class="tooltip" id="tooltip"></div>
 <div class="toast" id="toast"></div>
-
-<button type="button" class="robo-fab" id="robo-fab" title="Jarvis — arraste pra mover, clique pra conversar" aria-label="Abrir conversa com o Jarvis">
-  <span id="jarvis-avatar-fab"></span>
-  <span class="jarvis-badge" id="jarvis-badge" aria-hidden="true"></span>
-</button>
-<div class="robo-panel" id="robo-panel">
-  <div class="robo-head">
-    <span id="jarvis-avatar-head"></span>
-    <div class="robo-head-texts">
-      <div class="m-name">Jarvis</div>
-      <div class="m-sub" id="robo-sub"></div>
-    </div>
-    <button type="button" class="modal-close" id="robo-close" aria-label="Fechar">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-    </button>
-  </div>
-  <div class="robo-msgs" id="robo-msgs"></div>
-  <form class="robo-form" id="robo-form">
-    <textarea id="robo-input" rows="1" placeholder="Pergunte sobre infrações, pendências, ou peça pra salvar uma Justificativa…"></textarea>
-    <button type="submit" class="robo-send-btn" id="robo-send" aria-label="Enviar">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-4 6 4 6-12-6z" fill="currentColor"/></svg>
-    </button>
-  </form>
-</div>
 
 <div class="hier-editor" id="hier-editor">
   <div class="he-title" id="he-title">Definir hierarquia</div>
@@ -5518,10 +5427,6 @@ function updateRoleBadge(){
     badge.classList.remove('is-admin', 'needs-relogin');
     badge.title = '';
   }
-  // o botão do "robozinho" (ver seção ROBOZINHO perto do boot()) depende do mesmo estado de
-  // login — atualiza aqui pra nunca precisar lembrar de chamar nos ~12 lugares que já chamam
-  // updateRoleBadge() depois de login/logout.
-  atualizarRoboVisibilidade();
 }
 // checa (com timeout — não pode travar o boot) se o Admin local também tem uma sessão de
 // escrita válida no Supabase, e atualiza o aviso no badge. Chamada no boot e depois de login.
@@ -5573,7 +5478,6 @@ function renderSettingsPanel(){
         recomputeAndRender();
         showToast(isGA() ? ('Entrou como GA: ' + currentGaNome() + '.') : ('Entrou como administrador: ' + AUTH.currentUser + '.'));
         checkSupabaseSessionForBadge(); // authLogin() acabou de tentar renovar a sessão no Supabase com a senha atual (só se for Admin)
-        saudarSeNecessario(); // pedido do usuário: Jarvis se apresenta sempre que alguém acessa o painel
       } else {
         errEl.textContent = 'Usuário ou senha incorretos.';
       }
@@ -8433,273 +8337,6 @@ function wireRealtimeSync(){
   }
 }
 
-// ============================================================================================
-// JARVIS — assistente de chat embutido no painel, com cara de gente (pedido do usuário: "Deixar
-// o robozinho como uma figura humana um rapaz jovem chamado Jarvis"). O painel NUNCA fala direto
-// com a API de IA — só com a Edge Function "robo-painel" do Supabase, que guarda a chave de IA
-// em segredo no servidor e faz as consultas/gravações reais (ver
-// supabase/functions/robo-painel/index.ts e SUPABASE_SCHEMA.md "Robô do painel"). Isto também
-// significa que, sem a Edge Function implantada (e a ANTHROPIC_API_KEY configurada), o botão
-// aparece mas qualquer mensagem só volta com um erro amigável — a UI já fica pronta pro dia que
-// a função for implantada, sem precisar de outro deploy do painel em si.
-// Só aparece pra quem está logado (Admin/GA/Usuário Padrão autenticado via authLogin) — os
-// dados que ele pode revelar/alterar já são tão sensíveis quanto o resto da tela, então não faz
-// sentido oferecer o chat pra quem nem entrou com usuário/senha.
-// Avatar humanoide (pedido do usuário: "O robo deverá ser um humanoide com movimentos e
-// caracteristicas") — corpo (.jv-body) + cabeça (.jv-head) balançam devagar (jarvis-bob, ver
-// CSS), olhos (.jv-eye) piscam sozinhos de vez em quando (jarvis-blink), e o braço (.jv-arm)
-// acena quando o Jarvis se apresenta (.saudando no #robo-fab) ou balança diferente enquanto
-// "pensa" numa resposta (.pensando). Uma função só gera o mesmo SVG em 2 tamanhos (o avatar
-// pequeno do botão flutuante e o maior dentro do cabeçalho da conversa), pra nunca divergir.
-function jarvisAvatarSVG(px){
-  return '<svg class="jarvis-avatar" width="'+px+'" height="'+px+'" viewBox="0 0 34 36" fill="none" aria-hidden="true">' +
-    '<g class="jv-body"><path d="M5 33c0-6 5-10 12-10s12 4 12 10" fill="#F4F4F4"/></g>' +
-    '<g class="jv-arm">' +
-      '<path d="M24 24c3-.6 5.2 1.4 5.6 4.6" stroke="#1E88E5" stroke-width="3.1" stroke-linecap="round" fill="none"/>' +
-      '<circle cx="30" cy="29" r="1.7" fill="#F2C09B"/>' +
-    '</g>' +
-    '<g class="jv-head">' +
-      '<circle cx="17" cy="14" r="7.2" fill="#F2C09B"/>' +
-      '<path d="M10.1 13.1c.2-4 3.2-7 6.9-7s6.7 3 6.9 7c-1.4-2-3.8-2.8-6.9-2.8s-5.5.8-6.9 2.8z" fill="#3A2A1E"/>' +
-      '<circle class="jv-eye jv-eye-l" cx="13.8" cy="14.5" r=".95" fill="#2A1E16"/>' +
-      '<circle class="jv-eye jv-eye-r" cx="20.2" cy="14.5" r=".95" fill="#2A1E16"/>' +
-      '<path d="M13.9 17.6c.8.8 3.4.8 4.2 0" stroke="#8A4A32" stroke-width="1" stroke-linecap="round" fill="none"/>' +
-    '</g>' +
-  '</svg>';
-}
-document.getElementById('jarvis-avatar-fab').innerHTML = jarvisAvatarSVG(34);
-document.getElementById('jarvis-avatar-head').innerHTML = jarvisAvatarSVG(40);
-// força o braço a acenar de novo a cada saudação (adicionar a MESMA classe 2x seguidas não
-// reinicia uma animação CSS já em andamento — precisa remover, forçar um reflow lendo
-// offsetWidth, e só então adicionar de novo).
-function acenarJarvis(){
-  const fab = document.getElementById('robo-fab');
-  fab.classList.remove('saudando');
-  void fab.offsetWidth;
-  fab.classList.add('saudando');
-}
-const ROBO_HISTORICO = [];
-let roboEnviando = false;
-function atualizarRoboVisibilidade(){
-  const fab = document.getElementById('robo-fab');
-  if (!fab) return;
-  const logado = !!(sb && AUTH.currentUser);
-  fab.classList.toggle('show', logado);
-  if (!logado) document.getElementById('robo-panel').classList.remove('show');
-  const sub = document.getElementById('robo-sub');
-  if (sub) sub.textContent = isAdmin() ? 'Vê todas as áreas' : (isGA() ? 'Área: ' + currentGaNome() : '');
-}
-function roboAppendMsg(role, texto, extraCls){
-  const box = document.getElementById('robo-msgs');
-  const div = document.createElement('div');
-  div.className = 'robo-msg ' + (role === 'user' ? 'user' : 'bot') + (extraCls ? ' ' + extraCls : '');
-  div.textContent = texto;
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-  return div;
-}
-function abrirRobo(){
-  document.getElementById('robo-panel').classList.add('show');
-  reposicionarPainelJarvis();
-  if (!ROBO_HISTORICO.length) {
-    roboAppendMsg('bot', 'Oi! Sou o Jarvis. Posso consultar infrações, listar pendências de Justificativa, salvar uma Justificativa (FCA), ou mandar um recado pra outro usuário do painel — só pedir.');
-  }
-  document.getElementById('robo-input').focus();
-}
-function fecharRobo(){ document.getElementById('robo-panel').classList.remove('show'); }
-async function enviarMensagemRobo(texto){
-  roboAppendMsg('user', texto);
-  ROBO_HISTORICO.push({ role: 'user', content: texto });
-  roboEnviando = true;
-  document.getElementById('robo-send').disabled = true;
-  document.getElementById('robo-fab').classList.add('pensando'); // avatar "pensa" enquanto espera a resposta
-  const typing = roboAppendMsg('bot', 'digitando…', 'robo-typing-msg');
-  try {
-    const { data, error } = await withTimeout(sb.functions.invoke('robo-painel', {
-      body: { mensagens: ROBO_HISTORICO, contexto: { username: AUTH.currentUser, role: AUTH.currentRole, gaNome: AUTH.currentGaNome } },
-    }), 45000, 'falar com o Jarvis');
-    typing.remove();
-    if (error || !data || data.erro) throw new Error((data && data.erro) || (error && error.message) || 'falha desconhecida');
-    roboAppendMsg('bot', data.resposta || '(sem resposta)');
-    ROBO_HISTORICO.push({ role: 'assistant', content: data.resposta || '' });
-    // alterou_dados vem da própria Edge Function (true só se salvar_justificativa gravou de
-    // verdade) — mais confiável que tentar adivinhar pelo texto livre da resposta.
-    if (data.alterou_dados && sb) { await loadFromSupabase(); recomputeAndRender(); }
-  } catch(e) {
-    typing.remove();
-    console.error('Falha ao falar com o Jarvis.', e);
-    roboAppendMsg('bot', 'Não consegui falar com o Jarvis agora — tente de novo em instantes.', 'erro');
-  } finally {
-    roboEnviando = false;
-    document.getElementById('robo-send').disabled = false;
-    document.getElementById('robo-fab').classList.remove('pensando');
-  }
-}
-
-// ---------- posição livre na tela (pedido: "deixar ele livre a tela pra que o usuário possa
-// colocar ele em qualquer ponto da tela") ----------
-// pointerdown/move/up cobre mouse E touch com a mesma API. Um clique sem deslocamento continua
-// abrindo o chat; só vira "arrastar" depois de passar de um limiar mínimo de movimento, senão
-// qualquer clique normal (sem querer mover nada) seria interpretado como arraste.
-const JARVIS_POS_KEY = 'painelInfracoes.jarvisPos.v1';
-let jarvisArrastando = false, jarvisMoveu = false, jarvisStartX = 0, jarvisStartY = 0, jarvisOrigLeft = 0, jarvisOrigTop = 0;
-function aplicarPosicaoJarvis(left, top){
-  const fab = document.getElementById('robo-fab');
-  const w = fab.offsetWidth || 52, h = fab.offsetHeight || 52;
-  const maxLeft = window.innerWidth - w - 8, maxTop = window.innerHeight - h - 8;
-  left = Math.max(8, Math.min(left, maxLeft));
-  top = Math.max(8, Math.min(top, maxTop));
-  fab.style.left = left + 'px'; fab.style.top = top + 'px';
-  fab.style.right = 'auto'; fab.style.bottom = 'auto';
-  if (document.getElementById('robo-panel').classList.contains('show')) reposicionarPainelJarvis();
-}
-function restaurarPosicaoJarvisSalva(){
-  try {
-    const salvo = JSON.parse(localStorage.getItem(JARVIS_POS_KEY) || 'null');
-    if (salvo && typeof salvo.left === 'number' && typeof salvo.top === 'number') aplicarPosicaoJarvis(salvo.left, salvo.top);
-  } catch(e) { /* posição salva corrompida — ignora, fica no canto padrão */ }
-}
-// painel de conversa abre do lado do avatar, não mais travado no canto da tela — escolhe acima/
-// abaixo conforme o espaço disponível, sempre dentro da viewport.
-function reposicionarPainelJarvis(){
-  const fab = document.getElementById('robo-fab'), panel = document.getElementById('robo-panel');
-  const r = fab.getBoundingClientRect();
-  const panelW = panel.offsetWidth || 360, panelH = panel.offsetHeight || 480;
-  let left = r.left + r.width / 2 - panelW / 2;
-  left = Math.max(8, Math.min(left, window.innerWidth - panelW - 8));
-  let top;
-  const espacoAbaixo = window.innerHeight - r.bottom;
-  if (espacoAbaixo >= panelH + 12 || espacoAbaixo >= r.top) {
-    top = Math.min(r.bottom + 10, window.innerHeight - panelH - 8);
-  } else {
-    top = Math.max(8, r.top - panelH - 10);
-  }
-  panel.style.left = left + 'px'; panel.style.top = Math.max(8, top) + 'px';
-  panel.style.right = 'auto'; panel.style.bottom = 'auto';
-}
-document.getElementById('robo-fab').addEventListener('pointerdown', evt => {
-  jarvisArrastando = true; jarvisMoveu = false;
-  jarvisStartX = evt.clientX; jarvisStartY = evt.clientY;
-  const r = document.getElementById('robo-fab').getBoundingClientRect();
-  jarvisOrigLeft = r.left; jarvisOrigTop = r.top;
-  try { document.getElementById('robo-fab').setPointerCapture(evt.pointerId); } catch(e) {}
-});
-document.getElementById('robo-fab').addEventListener('pointermove', evt => {
-  if (!jarvisArrastando) return;
-  const dx = evt.clientX - jarvisStartX, dy = evt.clientY - jarvisStartY;
-  if (Math.abs(dx) > 4 || Math.abs(dy) > 4) jarvisMoveu = true;
-  if (jarvisMoveu) {
-    document.getElementById('robo-fab').classList.add('dragging');
-    aplicarPosicaoJarvis(jarvisOrigLeft + dx, jarvisOrigTop + dy);
-  }
-});
-document.getElementById('robo-fab').addEventListener('pointerup', () => {
-  if (!jarvisArrastando) return;
-  jarvisArrastando = false;
-  document.getElementById('robo-fab').classList.remove('dragging');
-  if (jarvisMoveu) {
-    const r = document.getElementById('robo-fab').getBoundingClientRect();
-    try { localStorage.setItem(JARVIS_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch(e) {}
-  }
-});
-window.addEventListener('resize', () => {
-  if (document.getElementById('robo-fab').classList.contains('show')) restaurarPosicaoJarvisSalva();
-});
-document.getElementById('robo-fab').addEventListener('click', () => {
-  if (jarvisMoveu) { jarvisMoveu = false; return; } // foi um arraste, não um clique — não abre o chat
-  abrirRobo();
-});
-document.getElementById('robo-close').addEventListener('click', fecharRobo);
-document.getElementById('robo-form').addEventListener('submit', evt => {
-  evt.preventDefault();
-  if (roboEnviando) return;
-  const input = document.getElementById('robo-input');
-  const texto = input.value.trim();
-  if (!texto) return;
-  input.value = '';
-  enviarMensagemRobo(texto);
-});
-document.getElementById('robo-input').addEventListener('keydown', evt => {
-  if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); document.getElementById('robo-form').requestSubmit(); }
-});
-
-// ---------- saudação por horário + lembrete de pendências + mensagens recebidas ----------
-// pedido do usuário: "Sempre que alguém acessar o painel ele deverá se apresentar cordialmente
-// e de acordo com a hora comprimentar com um bom dia, boa tarde ou boa noite, e uma breve
-// apresentação do que ele pode ajudar" + "sempre sugerir algo quando ainda houver pendência sem
-// ser invasivo mas como forma de lembrar o usuario". Tudo calculado no cliente (sem chamar a
-// IA) — mais rápido, sem custo, e sem depender da Edge Function pra uma saudação fixa.
-function saudacaoPorHora(){
-  const h = new Date().getHours();
-  if (h >= 5 && h < 12) return 'Bom dia';
-  if (h >= 12 && h < 18) return 'Boa tarde';
-  return 'Boa noite';
-}
-function primeiroNomeDe(nomeOuUsername){
-  return (nomeOuUsername || '').trim().split(/\s+/)[0] || '';
-}
-// conta quantas infrações do ciclo atual (sempre pelo ciclo canônico de cada data — ver
-// periodoCanonicoDaData — não importa qual filtro Ciclo/Semana/Período está ativo na tela) ainda
-// não têm Justificativa (FCA) preenchida, escopado à própria área se for um GA. Reaproveita os
-// mesmos dados já carregados em STATE.lastDerived — nenhuma chamada de rede extra.
-function contarPendenciasCicloAtual(){
-  const d = STATE.lastDerived;
-  if (!d || !d.hierBlocks) return 0;
-  let blocks = d.hierBlocks;
-  if (isGA()) blocks = blocks.filter(b => b.ga === currentGaNome());
-  let count = 0;
-  blocks.forEach(b => (b.colaboradores || []).forEach(c => (c.datas || []).forEach(iso => {
-    const pc = periodoCanonicoDaData(iso);
-    const chave = justificativaKeyData(c.nome, pc.periodType, pc.periodKey, iso);
-    const texto = (STATE.justificativas[chave] || {}).texto;
-    if (!texto || !texto.trim()) count++;
-  })));
-  return count;
-}
-async function buscarMensagensJarvisNaoLidas(){
-  if (!sb || !AUTH.currentUser) return [];
-  const { data, error } = await withTimeout(
-    sb.from('painel_mensagens').select('remetente,texto,criado_em').eq('destinatario', AUTH.currentUser).eq('lida', false).order('criado_em'),
-    10000, 'buscar mensagens'
-  );
-  if (error) throw error;
-  return data || [];
-}
-// dispara 1x por login/acesso (não a cada recomputeAndRender, que roda várias vezes por sessão)
-// — guardado pelo username atual, então um logout+login de outra pessoa no mesmo navegador
-// (ex.: um totem/computador compartilhado) dispara uma saudação nova pra quem entrou.
-let jarvisUltimoSaudado = null;
-async function saudarSeNecessario(){
-  if (!AUTH.currentUser || AUTH.currentUser === jarvisUltimoSaudado) return;
-  jarvisUltimoSaudado = AUTH.currentUser;
-  if (!document.getElementById('robo-fab').classList.contains('show')) return; // não está logado de verdade ainda
-  const nome = primeiroNomeDe(isGA() ? currentGaNome() : AUTH.currentUser);
-  let msg = saudacaoPorHora() + (nome ? ', ' + nome : '') + '! Eu sou o Jarvis, o assistente do painel. ' +
-    'Posso consultar infrações, listar pendências de Justificativa, salvar uma Justificativa (FCA) por você, ou mandar um recado pra outro usuário — é só pedir.';
-  const pend = contarPendenciasCicloAtual();
-  if (pend > 0) {
-    msg += '\n\nAh, um lembrete sem pressa: ainda ' + (pend === 1 ? 'tem 1 infração sem' : 'tem ' + pend + ' infrações sem') + ' Justificativa nesse ciclo, quando quiser dar uma olhada.';
-  }
-  let mensagens = [];
-  try { mensagens = await buscarMensagensJarvisNaoLidas(); } catch(e) { console.error('Não foi possível buscar as mensagens do Jarvis.', e); }
-  if (mensagens.length) {
-    msg += '\n\nVocê também ' + (mensagens.length === 1 ? 'tem 1 mensagem nova' : 'tem ' + mensagens.length + ' mensagens novas') + ':';
-    mensagens.forEach(m => { msg += '\n• ' + (m.remetente || 'alguém') + ': ' + m.texto; });
-    try { await sb.rpc('marcar_mensagens_lidas_painel', { p_destinatario: AUTH.currentUser }); } catch(e) { console.error('Não foi possível marcar as mensagens do Jarvis como lidas.', e); }
-  }
-  ROBO_HISTORICO.length = 0; // acesso novo = conversa nova (pode ser outra pessoa no mesmo navegador)
-  document.getElementById('robo-msgs').innerHTML = '';
-  roboAppendMsg('bot', msg);
-  // entra no histórico como se o próprio Jarvis tivesse dito (rastro real da conversa, pro
-  // modelo "lembrar" que já se apresentou) — também evita abrirRobo() emendar a mensagem
-  // genérica de boas-vindas em cima da saudação (aquele "if (!ROBO_HISTORICO.length)" só dispara
-  // quando a conversa está de fato vazia).
-  ROBO_HISTORICO.push({ role: 'assistant', content: msg });
-  document.getElementById('robo-fab').classList.toggle('has-novidade', pend > 0 || mensagens.length > 0);
-  acenarJarvis(); // "se apresentar cordialmente" — acena ao se apresentar
-  abrirRobo();
-}
-restaurarPosicaoJarvisSalva(); // aplica a posição onde o Jarvis foi largado da última vez (se alguma)
 
 (async function boot(){
   enhanceSections();
@@ -8733,9 +8370,6 @@ restaurarPosicaoJarvisSalva(); // aplica a posição onde o Jarvis foi largado d
   tentarRecarregarDados(1);
   await loadAuxPaineis();
   wireRealtimeSync();
-  // pedido do usuário: "Sempre que alguém acessar o painel ele deverá se apresentar" — cobre
-  // quem já estava logado (sessão restaurada do localStorage) reabrindo/recarregando a página;
-  // um login feito manualmente na tela é saudado separadamente (ver doLogin em renderSettingsPanel).
-  saudarSeNecessario();
+  // (assistente Jarvis retirado a pedido do usuário, 2026-11-20)
 })();
 </script>
