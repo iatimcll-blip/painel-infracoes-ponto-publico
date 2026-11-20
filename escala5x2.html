@@ -311,6 +311,17 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 .impErr{margin:8px 0 0;padding:10px 12px;border:1px solid var(--bad);border-radius:10px;background:var(--badbg);color:var(--bad);font-size:13px}
 .impErr ul{margin:6px 0 0;padding-left:18px;color:var(--ink)}
 .impErr li{margin:2px 0}
+
+/* ===== menu do ciclo na MESMA linha dos botões Escala / Configurações (pedido do usuário, 2026-11-20) ===== */
+main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;min-width:0}
+.topbar .tabs{margin:0!important;flex:none}
+.topbar .monthbar{flex:1 1 auto;min-width:0;display:flex;flex-wrap:nowrap;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 8px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.topbar .monthbar .btn{padding:4px 12px;font-size:13px;white-space:nowrap}
+.topbar .monthbar select{min-width:90px;padding:4px 6px;font-size:13px;flex:0 1 150px;width:auto}
+.topbar .monthbar>.small{flex:1 1 120px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* cartão de parâmetros só aparece quando "⚙ Parâmetros" está aberto */
+.card.cfg:has(> #cfgBody[hidden]){display:none}
+@media(max-width:1100px){main>.topbar{flex-wrap:wrap}.topbar .monthbar{flex-basis:100%;flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -318,11 +329,10 @@ main>.view{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 2px 28px;align-
 <main>
 
 
-<nav class="tabs" role="tablist"><button type="button" id="tabMain" role="tab" aria-selected="true"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 11.5h2M11.5 11.5h2M6.5 14h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Escala</span></button><button type="button" id="tabSec" role="tab" aria-selected="false"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Configurações</span><span id="secBadge"></span></button></nav>
+<div class="topbar"><nav class="tabs" role="tablist"><button type="button" id="tabMain" role="tab" aria-selected="true"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.5h14M7 2.8v3.4M13 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M6.5 11.5h2M11.5 11.5h2M6.5 14h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Escala</span></button><button type="button" id="tabSec" role="tab" aria-selected="false"><svg class="tabIc" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Configurações</span><span id="secBadge"></span></button></nav><div class="monthbar"><button type="button" class="btn sec" id="mPrev" aria-label="Mês anterior">‹</button><select id="mSel" aria-label="Mês"></select><select id="ySel" aria-label="Ano"></select><button type="button" class="btn sec" id="mNext" aria-label="Próximo mês">›</button><button type="button" class="btn sec" id="mNow">Hoje</button><span class="small" id="cycInfo"></span><button class="btn" id="btnGen">Gerar escala</button><button class="btn sec" id="btnVar">Outra variação</button><button type="button" class="btn sec" id="cfgTog" aria-expanded="false" title="Mostrar/ocultar parâmetros">⚙ Parâmetros ▾</button></div></div>
 <div id="viewMain" class="view">
 <section class="card cfg">
 <h2 style="display:none">Configuração</h2>
-<div class="monthbar"><button type="button" class="btn sec" id="mPrev" aria-label="Mês anterior">‹</button><select id="mSel" aria-label="Mês"></select><select id="ySel" aria-label="Ano"></select><button type="button" class="btn sec" id="mNext" aria-label="Próximo mês">›</button><button type="button" class="btn sec" id="mNow">Hoje</button><span class="small" id="cycInfo"></span><button class="btn" id="btnGen">Gerar escala</button><button class="btn sec" id="btnVar">Outra variação</button><button type="button" class="btn sec" id="cfgTog" aria-expanded="false" title="Mostrar/ocultar parâmetros">⚙ Parâmetros ▾</button></div>
 <input type="hidden" id="month">
 <div id="cfgBody" hidden>
 <div class="cgrid">
@@ -867,7 +877,7 @@ function runFix(fx){const f=FIXES[fx];if(!f)return;let msg='';const snap=takeSna
   const left=noticeN;noticeMsg=msg+(left?` Ainda há ${left} ${left>1?'itens':'item'} para revisar.`:' Tudo conforme.');
   noticeMsgSig=sigOf(lastItems||[]);updateNotice(lastItems||[]);if(left)$('noticePanel').hidden=false}
 let lastItems=null;
-(function(){const b=$('cfgTog'),bd=$('cfgBody');if(!b)return;const set=o=>{bd.hidden=!o;b.setAttribute('aria-expanded',o);b.textContent='⚙ Parâmetros '+(o?'▴':'▾');try{localStorage.setItem('escala5x2cfg',o?'1':'0')}catch(e){}};let o=false;try{o=localStorage.getItem('escala5x2cfg')==='1'}catch(e){}set(o);b.onclick=()=>set(bd.hidden)})();
+(function(){const b=$('cfgTog'),bd=$('cfgBody');if(!b)return;const set=o=>{bd.hidden=!o;b.setAttribute('aria-expanded',o);b.textContent='⚙ Parâmetros '+(o?'▴':'▾');try{localStorage.setItem('escala5x2cfg',o?'1':'0')}catch(e){}};let o=false;try{o=localStorage.getItem('escala5x2cfg')==='1'}catch(e){}set(o);b.onclick=()=>{if(bd.hidden&&$('viewSec')&&!$('viewSec').hidden)showView('principal');set(bd.hidden)}})();
 function mirrorFilters(){patState();FIDS.forEach(id=>{const a=$(id),b=$(id+'2');if(!a||!b)return;if(b.innerHTML!==a.innerHTML)b.innerHTML=a.innerHTML;b.value=a.value})}
 function fillRoles(){const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS_AZ.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
   const sc=$('fCity');if(sc){const cc=sc.value,cs=[...new Set(emps.map(e=>(e.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));sc.innerHTML='<option value="">Todas as cidades</option>'+cs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(cs.length&&emps.some(e=>!(e.city||'').trim())?'<option value="__none">Sem cidade</option>':'');if([...sc.options].some(o=>o.value===cc))sc.value=cc;const dl=$('cityList');if(dl)dl.innerHTML=cs.map(x=>`<option value="${esc(x)}">`).join('')}
