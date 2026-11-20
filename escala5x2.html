@@ -333,6 +333,8 @@ main>.topbar{flex:none;display:flex;align-items:center;gap:10px;margin:2px 0 0;m
 .syncSt.err{background:#fde68a;color:#7c2d12}
 .bkpBox{margin:8px 0;padding:8px 10px;border:1px solid #f59e0b;border-radius:10px;background:#fffbeb;font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:1080px}
 .bkpBox .btn{padding:3px 10px;font-size:12.5px}
+.lockNote{margin:0 0 8px;padding:6px 10px;border-radius:8px;background:#eef2ff;color:#3730a3;font-size:12.5px;font-weight:600}
+body.paramLock #openDays .chip{cursor:not-allowed;opacity:.75}
 </style>
 </head>
 <body>
@@ -845,7 +847,7 @@ const sigOf=items=>items.filter(i=>i.k!=='ok').map(i=>i.k+i.t+(i.d||'')).join('|
 const FIXES={
   regen:{sug:'Gerar a escala novamente com as regras do ciclo, testando várias combinações e ficando com a que tiver menos problemas. Ajustes manuais de T/F nas células são refeitos; escalas fixas (Renato, Mamede, Lucas) são mantidas.',run(){const seed0=state.seed;let best=null;for(let s=1;s<=8;s++){state.seed=s;genNew();if(best===null||noticeN<best.n){best={n:noticeN,s}}if(noticeN===0)break}if(state.seed!==best.s){state.seed=best.s;genNew()}return 'Escala gerada novamente (variação '+best.s+').'}},
   ocauto:{sug:'Redistribuir o rodízio de sobreaviso automaticamente, respeitando alternância de semanas e a quantidade por semana. Colaboradores em modo Manual não são alterados.',run(){$('btnOcAuto').click();return 'Rodízio de sobreaviso redistribuído.'}},
-  ocaltoff:{sug:'Desligar a exigência de semanas alternadas (sim/não), já que há poucas pessoas no sobreaviso. Alternativa: marcar mais colaboradores para o sobreaviso.',run(){const c=$('ocAlt');c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}));return 'Exigência de semanas alternadas desligada.'}},
+  ocaltoff:{sug:'Desligar a exigência de semanas alternadas (sim/não), já que há poucas pessoas no sobreaviso. Alternativa: marcar mais colaboradores para o sobreaviso.',run(){if(GA_LOCK)return 'Este parâmetro é definido pelo administrador — peça a ele para ajustar.';const c=$('ocAlt');c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}));return 'Exigência de semanas alternadas desligada.'}},
   infraF:{sug:'Mover, dentro da mesma semana, uma das folgas dos técnicos de infra para outro dia em que o par esteja trabalhando.',run(){separateInfra();ensureCovers();render();return 'Folgas de infra separadas.'}},
   infraSA:{sug:'Tirar o sobreaviso de um dos dois técnicos de infra nas semanas em que ambos estão escalados.',run(){enforcePairOC();syncTeams();afterOC();return 'Sobreaviso de infra separado.'}},
   covfix:{sug:'Procurar um colega que possa trocar a folga para outro dia da semana e assim cobrir o sobreaviso (respeitando cobertura mínima e dias seguidos).',run(){ensureCovers();render();return 'Troca de folgas aplicada onde foi possível.'}},
@@ -1085,7 +1087,12 @@ function applyPreset(){
   state.imgPre=true;renderEmps();genNew();
 }
 
+// membros da mesma equipe sempre em linhas seguidas (pedido do usuário, 2026-11-20: "a visão do GA
+// na escala mostrará a equipe junta e não dispersa") — mantém a ordem de chegada de cada
+// equipe/pessoa e puxa os colegas de equipe para logo depois do primeiro membro
+function agruparEquipes(list){const out=[],vist=new Set();list.forEach(p=>{if(!p||vist.has(p.name))return;const k=teamKey(p);if(!k){out.push(p);vist.add(p.name);return}list.forEach(q=>{if(q&&!vist.has(q.name)&&teamKey(q)===k){out.push(q);vist.add(q.name)}})});return out}
 function genNew(){
+  emps=agruparEquipes(emps);
   const cfg=readCfg();
   if(!cfg.names.length){$('checks').innerHTML='<li class="fail"><span class="ic">✕</span><span>Cadastre ou importe ao menos um colaborador.</span></li>';return}
   const cal0=buildCalendar(cfg.year,cfg.month,cfg.cycleStart,cfg.cycleBy);
@@ -1398,7 +1405,7 @@ $('btnCsv').onclick=async()=>{
 function buildChips(){
   $('openDays').innerHTML=DOW.map((d,i)=>`<button type="button" class="chip" data-d="${i}" aria-pressed="${state.open[i]}">${d}</button>`).join('');
 }
-$('openDays').addEventListener('click',ev=>{const b=ev.target.closest('.chip');if(!b)return;const d=+b.dataset.d;state.open[d]=!state.open[d];b.setAttribute('aria-pressed',state.open[d]);genNew()});
+$('openDays').addEventListener('click',ev=>{const b=ev.target.closest('.chip');if(!b||GA_LOCK)return;const d=+b.dataset.d;state.open[d]=!state.open[d];b.setAttribute('aria-pressed',state.open[d]);genNew()});
 
 function normName(s){return s.trim().replace(/\s+/g,' ')}
 // filtros da lista de Colaboradores (Configurações) — GO, GA, UF, Cidade, todos de A a Z (pedido
@@ -1416,6 +1423,7 @@ function renderEmpFilters(){
   if(GA_LOCK&&$('efGA'))$('efGA').disabled=true;
 }
 function renderEmps(){
+  emps=agruparEquipes(emps);
   fillRoles();renderEmpFilters();setTimeout(()=>{try{renderVac();renderSubFix()}catch(e){}},0);
   $('empCount').textContent='('+emps.length+')';
   const spE=makeSep();
@@ -1454,15 +1462,34 @@ function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if
 function todosEmps(){return GA_LOCK?emps.concat(OUTROS.filter(o=>!emps.some(e=>e.name===o.name))):emps.slice()}
 const chaveDe=p=>(p&&p.ga&&GA_LIST.includes(p.ga))?chaveGA(p.ga):'geral';
 function fatia(ch){
-  const lst=todosEmps().filter(p=>chaveDe(p)===ch).sort((a,b)=>azSort(a.name,b.name));
+  const lst=agruparEquipes(todosEmps().filter(p=>chaveDe(p)===ch));
   const nm=new Set(lst.map(p=>p.name));
   const pick=o=>{const r={};Object.keys(o||{}).sort().forEach(k=>{if(nm.has(k))r[k]=o[k]});return r};
   const f={emps:lst.map(p=>({name:p.name,role:p.role||'',mode:p.mode||'auto',ga:p.ga||'',go:p.go||'',team:p.team||'',city:p.city||'',uf:p.uf||''})),
     fix:pick(fix),oc:pick(oc),ocD:pick(ocD),subFix:pick(subFix),
     ov:(()=>{const r={};Object.keys(ov||{}).sort().forEach(k=>{if(nm.has(k.slice(0,k.lastIndexOf('|'))))r[k]=ov[k]});return r})(),
     vac:vac.filter(v=>nm.has(v.name)).map(v=>({name:v.name,s:v.s,e:v.e})).sort((a,b)=>azSort(a.name+a.s,b.name+b.s))};
-  if(ch==='geral')f.saOff=(saOff||[]).slice().sort();
+  if(ch==='geral'){f.saOff=(saOff||[]).slice().sort();f.params=lerParams()}
   return f;
+}
+// PARÂMETROS (pedido do usuário, 2026-11-20: "todas as regras implementadas para o Admin terão que
+// estar no painel dos GA's" + decisão: seguem os do Admin, TRAVADOS para o GA). Vão na fatia
+// 'geral', que só o Admin grava; o painel do GA aplica e trava os controles.
+const PARAM_IDS=['cycDay','cycBy','entrada','intervalo','sunN','minWeek','minSat','minSun','force40','acordo','comp','st1','st2','ocOn','ocAlt','ocFit','ocCov','ocAnc','ocMin','ocSd','ocSt','ocEd','ocEt','ocInfOn','ocISd','ocISt','ocIEd','ocIEt'];
+function lerParams(){const v={};PARAM_IDS.forEach(id=>{const el=$(id);if(!el)return;v[id]=el.type==='checkbox'?!!el.checked:String(el.value)});return{v,open:(state.open||[]).map(Boolean)}}
+function aplicarParams(pr){
+  if(!pr||!pr.v)return false;let mud=false;
+  PARAM_IDS.forEach(id=>{const el=$(id);if(!el||!(id in pr.v))return;if(el.type==='checkbox'){if(el.checked!==!!pr.v[id]){el.checked=!!pr.v[id];mud=true}}else if(String(el.value)!==String(pr.v[id])){el.value=pr.v[id];mud=true}});
+  if(Array.isArray(pr.open)&&pr.open.length===7&&stable(pr.open.map(Boolean))!==stable((state.open||[]).map(Boolean))){state.open=pr.open.map(Boolean);mud=true;try{buildChips()}catch(e){}}
+  if($('ocInfBody'))$('ocInfBody').hidden=!$('ocInfOn').checked;
+  if(mud&&state.cfg)Object.assign(state.cfg,ocCfg());
+  return mud;
+}
+function travarParams(){
+  if(!GA_LOCK)return;
+  PARAM_IDS.forEach(id=>{const el=$(id);if(el){el.disabled=true;el.title='Definido pelo administrador — vale para todos os GAs'}});
+  document.body.classList.add('paramLock');
+  [['cfgBody','afterbegin'],['ocCard',null]].forEach(([id])=>{const el=$(id);if(!el||el.querySelector('.lockNote'))return;const n=document.createElement('p');n.className='lockNote';n.textContent='🔒 Parâmetros definidos pelo administrador — valem para todos os GAs e não podem ser alterados aqui.';if(id==='ocCard'){const h=el.querySelector('h2');h?h.after(n):el.prepend(n)}else el.prepend(n)});
 }
 function chavesGravaveis(serverChaves){
   if(!SYNC||!SYNC.podeGravar())return [];
@@ -1487,7 +1514,8 @@ function aplicarFatia(ch,d){
   vac=vac.filter(v=>!saem.has(v.name)&&!nm.has(v.name)).concat((Array.isArray(d.vac)?d.vac:[]).filter(v=>v&&nm.has(v.name)&&v.s&&v.e));
   if(ch==='geral'&&Array.isArray(d.saOff)){saOff=d.saOff.slice();if(state.cfg)state.cfg.saOff=new Set(saOff)}
   const juntos=resto.concat(novos);
-  if(GA_LOCK){emps=juntos.filter(p=>p.ga===GA_LOCK);OUTROS=juntos.filter(p=>p.ga!==GA_LOCK)}else emps=juntos;
+  if(GA_LOCK){emps=agruparEquipes(juntos.filter(p=>p.ga===GA_LOCK));OUTROS=juntos.filter(p=>p.ga!==GA_LOCK)}else emps=agruparEquipes(juntos);
+  if(ch==='geral'&&d.params)aplicarParams(d.params);
 }
 function syStatus(t,err){const el=$('syncSt');if(!el)return;el.hidden=!t;el.textContent=t||'';el.classList.toggle('err',!!err)}
 const hhmm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
@@ -1818,7 +1846,7 @@ if(s.oc&&typeof s.oc==='object')oc=s.oc;if(s.ov&&typeof s.ov==='object')ov=s.ov;
   if(!state.subMig){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[v.name])subFix[v.name]=w.name;state.subMig=true}
   if(!state.subMig2){const v=emps.find(e=>/^vagner/i.test(e.name)),w=emps.find(e=>/^waldec/i.test(e.name));if(v&&w&&!subFix[w.name])subFix[w.name]=v.name;state.subMig2=true}
   if(GA_LOCK){OUTROS=emps.filter(e=>e.ga!==GA_LOCK);emps=emps.filter(e=>e.ga===GA_LOCK);['btnSample','btnPre'].forEach(id=>{$(id).hidden=true});$('fGA').value=GA_LOCK}
-  buildChips();renderEmps();if(!state.imgPre&&!GA_LOCK)applyPreset();else genNew();showView(location.hash==='#secundario'?'secundario':'principal');setTimeout(syncIniciar,400);
+  buildChips();renderEmps();if(!state.imgPre&&!GA_LOCK)applyPreset();else genNew();showView(location.hash==='#secundario'?'secundario':'principal');travarParams();setTimeout(syncIniciar,400);
 })();
 </script>
 </body>
