@@ -136,7 +136,17 @@
   .tab-btn:hover{ color:var(--text-primary); }
   .tab-btn.active{ color:var(--s1); border-bottom-color:var(--s1); }
   .tab-panel{ display:none; flex-direction:column; gap:28px; }
-  .escala5x2-frame{ width:100%; height:calc(100vh - 150px); height:calc(100dvh - 150px); min-height:600px; border:1px solid var(--border); border-radius:12px; background:#f6f7f5; }
+  .escala5x2-frame{ display:block; width:100%; flex:1 1 auto; min-height:0; border:0; background:#f6f7f5; }
+  /* modo Escala 5X2: a escala ocupa a página inteira — sem filtro de ciclo/avisos do topo (não se
+     aplicam à escala), sem margens laterais; só o título compacto e as abas ficam visíveis */
+  body.modo-escala{ padding:6px 0 0; height:100vh; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
+  body.modo-escala .wrap{ gap:4px; flex:1 1 auto; min-height:0; }
+  body.modo-escala header, body.modo-escala .tab-bar{ padding-inline:16px; }
+  body.modo-escala header{ flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 12px; }
+  body.modo-escala .eyebrow-row, body.modo-escala .subtitle, body.modo-escala .filter-row,
+  body.modo-escala #source-note, body.modo-escala .header-sync-row{ display:none; }
+  body.modo-escala .title-row h1{ font-size:18px; }
+  body.modo-escala #tab-escala5x2.active{ display:flex; flex:1 1 auto; min-height:0; gap:0; }
   /* ---------- aba Apresentação ---------- */
   .ap-bloco{ display:flex; flex-direction:column; gap:12px; min-width:0; width:100%; }
   /* modo apresentação (aba Apresentação ativa): topo enxuto pra dar mais altura ao slide */
@@ -1469,6 +1479,13 @@ async function loadAuth(){
   } catch(e) {}
 }
 function isAdmin(){ return AUTH.currentRole === 'admin'; }
+// lido pela aba Escala 5X2 (escala5x2.html, no iframe): mesma regra do painel de Infrações — GA
+// logado só vê a própria área; a hierarquia GA→GO do painel completa as listas da escala.
+window.painelEscalaContexto = function(){
+  const pares = [], vistos = new Set();
+  try { Object.values(STATE.hierMap || {}).forEach(h => { if (h && h.ga && !vistos.has(h.ga)) { vistos.add(h.ga); pares.push({ ga: h.ga, go: h.go || '' }); } }); } catch(e) {}
+  return { role: AUTH.currentRole, gaNome: AUTH.currentGaNome, pares };
+};
 // GA (Gestor de Área) — login próprio, só pra escrever Justificativa com autoria registrada,
 // restrito aos colaboradores da PRÓPRIA área (ver campoJustEhEditavelPara). Não é Admin: não
 // anexa Base/Hierarquia, não apaga nada — pedido explícito do usuário ("só Justificativa").
@@ -7294,12 +7311,19 @@ document.getElementById('tab-bar').addEventListener('click', evt => {
   else if (alvo === 'dsr') renderDSR();
   else if (alvo === 'feriado') renderFeriado();
   // Escala 5X2: carrega a página da escala na primeira vez que a aba é aberta
-  else if (alvo === 'escala5x2') { const f = document.getElementById('escala5x2-frame'); if (!f.getAttribute('src')) f.src = 'escala5x2.html#principal'; }
+  else if (alvo === 'escala5x2') {
+    const f = document.getElementById('escala5x2-frame');
+    const sess = (AUTH.currentRole || '') + '|' + (AUTH.currentGaNome || '');
+    if (!f.getAttribute('src')) f.src = 'escala5x2.html#principal';
+    else if (f.dataset.sess !== sess) { try { f.contentWindow.location.reload(); } catch(e) { f.src = 'escala5x2.html#principal'; } }
+    f.dataset.sess = sess;
+  }
   // a apresentação usa os dados de Infrações — recalcula (repinta o filtro do topo como o de
   // Infrações) e monta a prévia
   else if (alvo === 'apresentacao') { window.scrollTo(0, 0); ajustarEscalaApresentacao(); recomputeAndRender(); agendarPreviaApresentacao(); }
   // modo apresentação: topo enxuto (sem subtítulo/avisos) pra sobrar mais tela pro slide
   document.body.classList.toggle('modo-apresentacao', alvo === 'apresentacao');
+  document.body.classList.toggle('modo-escala', alvo === 'escala5x2');
   if (alvo === 'apresentacao') setTimeout(ajustarEscalaApresentacao, 0);
 });
 
