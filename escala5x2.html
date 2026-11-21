@@ -354,6 +354,16 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 .vidBox video{width:100%;max-height:calc(100vh - 140px);background:#000;border-radius:10px}
 .vidNota{margin:0;color:var(--mut)}
 @media(max-width:520px){.btnVideo span{display:none}}
+.lblEq{font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap}
+.eqf{position:relative;display:inline-block}
+.eqfDd>summary{list-style:none;cursor:pointer;padding:6px 30px 6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:13px;white-space:nowrap;min-width:170px;position:relative}
+.eqfDd>summary::-webkit-details-marker{display:none}
+.eqfDd>summary::after{content:'▾';position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--mut)}
+.eqfDd[open]>summary{border-color:var(--acc)}
+.eqfPanel{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:220px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.18);padding:6px}
+.eqfPanel label{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:13px;color:var(--ink);cursor:pointer;margin:0}
+.eqfPanel label:hover{background:var(--acc2)}
+.eqfPanel .eqfAll{border-bottom:1px solid var(--line);border-radius:6px 6px 0 0;margin-bottom:4px;font-weight:600}
 </style>
 </head>
 <body>
@@ -386,7 +396,7 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 </div>
 </div>
 </section>
-<div class="card fbar"><label for="fGA" style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">Filtrar por GA</label><select id="fGA"></select><label for="fRole" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cargo / setor</label><select id="fRole"></select><label for="fUF" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">UF</label><select id="fUF"></select><label for="fCity" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cidade</label><select id="fCity"></select><span class="small" id="fInfo"></span></div>
+<div class="card fbar"><label for="fGA" style="margin:0;font-size:13px;font-weight:600;color:var(--ink)">Filtrar por GA</label><select id="fGA"></select><label for="fRole" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cargo / setor</label><select id="fRole"></select><label for="fUF" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">UF</label><select id="fUF"></select><label for="fCity" style="margin:0 0 0 6px;font-size:13px;font-weight:600;color:var(--ink)">Cidade</label><select id="fCity"></select><span class="lblEq">Equipes</span><span class="eqf" data-eqf></span><span class="small" id="fInfo"></span></div>
 <div class="card hasact"><button type="button" class="btn sec act" id="btnImgEsc">Copiar imagem</button><h2>Escala de <span class="mt"></span></h2>
 <div class="scroll"><table id="tbl"></table></div>
 <div class="legend"><span><b class="lt">T</b>Trabalho</span><span><b class="F">F</b>Folga</span><span><b class="lcv">C</b>Cobrindo sobreaviso de colega em folga</span><span><b class="lvac">FÉ</b>Férias</span><span><b class="lbad">dia</b>Vermelho: técnicos de infra que se cobrem com folga ou sobreaviso no mesmo dia (ajustar manualmente)</span><span>Toque em uma célula para alternar; a conformidade é recalculada.</span><span>Dias esmaecidos pertencem à semana vizinha e entram no cálculo.</span></div>
@@ -477,7 +487,7 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 </details>
 <div class="card" id="confCard" hidden><h2>Conformidade</h2><ul class="checks" id="checks"></ul><p class="small" id="hoursInfo" style="margin:10px 0 0"></p></div>
 <div class="card" id="ocWeekCard"><h2>Sobreaviso por semana</h2>
-<div class="fbar2" aria-label="Filtros da tabela de sobreaviso por semana"><label for="fGA2">GA</label><select id="fGA2"></select><label for="fRole2">Cargo / setor</label><select id="fRole2"></select><label for="fUF2">UF</label><select id="fUF2"></select><label for="fCity2">Cidade</label><select id="fCity2"></select></div>
+<div class="fbar2" aria-label="Filtros da tabela de sobreaviso por semana"><label for="fGA2">GA</label><select id="fGA2"></select><label for="fRole2">Cargo / setor</label><select id="fRole2"></select><label for="fUF2">UF</label><select id="fUF2"></select><label for="fCity2">Cidade</label><select id="fCity2"></select><span class="lblEq">Equipes</span><span class="eqf" data-eqf></span></div>
 <div class="btns" style="margin:0 0 8px"><button type="button" class="btn sec" id="patPrev" aria-label="Período anterior (voltar um ciclo)" title="Voltar um ciclo">‹</button><label for="patFrom" style="margin:0;font-size:12.5px;font-weight:600">Período: de</label><input type="date" id="patFrom" style="width:auto"><label for="patTo" style="margin:0;font-size:12.5px;font-weight:600">até</label><input type="date" id="patTo" style="width:auto"><button type="button" class="btn sec" id="patNext" aria-label="Próximo período (avançar um ciclo)" title="Avançar um ciclo">›</button><button type="button" class="btn" id="btnPat" disabled>Aplicar padrão</button><span class="small" id="ocPatMsg" role="status">Selecione um GA nos filtros para aplicar o padrão: continua o rodízio do ciclo anterior só para os colaboradores desse GA.</span></div>
 <p class="hint" style="margin:0 0 8px">Toque em uma célula para ligar ou desligar a semana inteira de sobreaviso de um colaborador (ele passa a "Manual" no cadastro).</p>
 <div class="scroll" style="margin-top:8px"><table id="ocTbl" class="ocT"></table></div>
@@ -823,7 +833,7 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 const tmin=(id,d)=>{const v=($(id).value||d).split(':');return (+v[0])*60+(+v[1]||0)};
 function coverPoolOf(){const P=infraPairs(),pool={},inf=emps.filter(isInfra);inf.forEach(e=>{const pr=P.find(p=>p.includes(e.name));pool[e.name]=pr?pr.filter(n=>n!==e.name):inf.filter(x=>x.name!==e.name).map(x=>x.name)});return pool}
 function ocCfg(){return{coverPool:coverPoolOf(),ocOn:$('ocOn').checked,ocAlt:$('ocAlt').checked,ocMin:Math.max(1,parseInt($('ocMin').value,10)||1),ocStartDow:+$('ocSd').value,ocStartMin:tmin('ocSt','18:00'),ocEndDow:+$('ocEd').value,ocEndMin:tmin('ocEt','08:00'),ocCover:$('ocCov').checked,infraWin:$('ocInfOn').checked?{ocStartDow:+$('ocISd').value,ocStartMin:tmin('ocISt','18:00'),ocEndDow:+$('ocIEd').value,ocEndMin:tmin('ocIEt','08:00')}:null,infraNames:new Set(emps.filter(isInfra).map(e=>e.name)),fixedSub:{...subFix},ocFit:$('ocFit').checked,ocAnchor:(()=>{const v=$('ocAnc').value||'2026-11-30';const[a,b,c]=v.split('-').map(Number);return new Date(Date.UTC(a,b-1,c))})()}}
-const vis=e=>{const f=$('fGA').value,r=$('fRole').value,ct=$('fCity').value,fu=$('fUF').value,p=emps[e];if(fu){const uu=p?(p.uf||''):'';if(fu==='__none'?!!uu:uu!==fu)return false}if(ct){const cc=p?(p.city||'').trim():'';if(ct==='__none'?!!cc:cc!==ct)return false}if(f){const g=p?p.ga:'';if(f==='__none'?!!g:g!==f)return false}if(r){const rr=p?(p.role||'').trim():'';if(r==='__none'?!!rr:rr!==r)return false}return true};
+const vis=e=>{if(EQF.size){const pe=emps[e];const k=(pe&&teamKey(pe))||'__none';if(!EQF.has(k))return false}const f=$('fGA').value,r=$('fRole').value,ct=$('fCity').value,fu=$('fUF').value,p=emps[e];if(fu){const uu=p?(p.uf||''):'';if(fu==='__none'?!!uu:uu!==fu)return false}if(ct){const cc=p?(p.city||'').trim():'';if(ct==='__none'?!!cc:cc!==ct)return false}if(f){const g=p?p.ga:'';if(f==='__none'?!!g:g!==f)return false}if(r){const rr=p?(p.role||'').trim():'';if(r==='__none'?!!rr:rr!==r)return false}return true};
 const FIDS=['fGA','fRole','fUF','fCity'];
 function patDefaults(){if(!state.cal)return;const f=$('patFrom'),t=$('patTo');if(!f.dataset.t)f.value=isoD(state.cal.cStart);if(!t.dataset.t)t.value=isoD(state.cal.cEnd)}
 function patState(){patDefaults();const b=$('btnPat');if(!b)return;const g=$('fGA').value,ok=!!g&&g!=='__none';b.disabled=!ok;b.title=ok?'':'Selecione um GA nos filtros'}
@@ -916,7 +926,7 @@ function runFix(fx){const f=FIXES[fx];if(!f)return;let msg='';const snap=takeSna
 let lastItems=null;
 (function(){const b=$('cfgTog'),bd=$('cfgBody');if(!b)return;const set=o=>{bd.hidden=!o;b.setAttribute('aria-expanded',o);b.textContent='⚙ Parâmetros '+(o?'▴':'▾');try{localStorage.setItem('escala5x2cfg',o?'1':'0')}catch(e){}};let o=false;try{o=localStorage.getItem('escala5x2cfg')==='1'}catch(e){}set(o);b.onclick=()=>{if(bd.hidden&&$('viewSec')&&!$('viewSec').hidden)showView('principal');set(bd.hidden)}})();
 function mirrorFilters(){patState();FIDS.forEach(id=>{const a=$(id),b=$(id+'2');if(!a||!b)return;if(b.innerHTML!==a.innerHTML)b.innerHTML=a.innerHTML;b.value=a.value})}
-function fillRoles(){const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS_AZ.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
+function fillRoles(){try{renderEqf()}catch(e){}const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS_AZ.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
   const sc=$('fCity');if(sc){const cc=sc.value,cs=[...new Set(emps.map(e=>(e.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));sc.innerHTML='<option value="">Todas as cidades</option>'+cs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(cs.length&&emps.some(e=>!(e.city||'').trim())?'<option value="__none">Sem cidade</option>':'');if([...sc.options].some(o=>o.value===cc))sc.value=cc;const dl=$('cityList');if(dl)dl.innerHTML=cs.map(x=>`<option value="${esc(x)}">`).join('')}
   const s=$('fRole');if(!s)return;const cur=s.value;const rs=[...new Set(emps.map(e=>(e.role||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));s.innerHTML='<option value="">Todos os cargos</option>'+rs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(emps.some(e=>!(e.role||'').trim())?'<option value="__none">Sem cargo</option>':'');if([...s.options].some(o=>o.value===cur))s.value=cur;mirrorFilters()}
 function makeSep(){let last=null;return e=>{const tk=teamKey(emps[e]);const k=tk?'T:'+tk:'S:'+e;const r=(last!==null&&k!==last)?' class="tsep"':'';last=k;return r}}
@@ -1668,6 +1678,30 @@ $('btnVideo')&&$('btnVideo').addEventListener('click',abrirVideo);
 $('vidClose')&&$('vidClose').addEventListener('click',fecharVideo);
 $('vidModal')&&$('vidModal').addEventListener('click',ev=>{if(ev.target.id==='vidModal')fecharVideo()});
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&$('vidModal')&&!$('vidModal').hidden)fecharVideo()});
+// FILTRO DE EQUIPES (pedido do usuário, 2026-11-20): marcar 2 ou mais equipes para analisar a
+// escala juntas. Nenhuma marcada = todas. Vale para a escala e para o sobreaviso por semana.
+var EQF=new Set();
+function eqfLista(){const ks=[...new Set(emps.map(e=>teamKey(e)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt',{numeric:true,sensitivity:'base'}));if(emps.some(e=>!teamKey(e)))ks.push('__none');return ks}
+const eqfNome=k=>k==='__none'?'Sem equipe':k;
+function eqfRotulo(){if(!EQF.size)return 'Todas as equipes';const l=eqfLista().filter(k=>EQF.has(k)).map(eqfNome);return l.length<=3?l.join(', '):l.slice(0,3).join(', ')+' +'+(l.length-3)}
+function renderEqf(){
+  const ks=eqfLista();[...EQF].forEach(k=>{if(!ks.includes(k))EQF.delete(k)});
+  document.querySelectorAll('[data-eqf]').forEach(host=>{
+    const aberto=!!(host.querySelector('details')||{}).open;
+    host.innerHTML='<details class="eqfDd"'+(aberto?' open':'')+'><summary>'+esc(eqfRotulo())+'</summary><div class="eqfPanel">'+
+      '<label class="eqfAll"><input type="checkbox" data-eq="__all"'+(EQF.size?'':' checked')+'><span>Todas as equipes</span></label>'+
+      ks.map(k=>'<label><input type="checkbox" data-eq="'+esc(k)+'"'+(EQF.has(k)?' checked':'')+'><span>'+esc(eqfNome(k))+'</span></label>').join('')+
+      '</div></details>';
+  });
+}
+document.addEventListener('change',ev=>{
+  const cb=ev.target.closest&&ev.target.closest('[data-eqf] input[data-eq]');if(!cb)return;
+  const k=cb.dataset.eq;
+  if(k==='__all')EQF.clear();else if(cb.checked)EQF.add(k);else EQF.delete(k);
+  if(EQF.size&&EQF.size===eqfLista().length)EQF.clear(); // todas marcadas = sem filtro
+  renderEqf();if(state.grid)render();
+});
+document.addEventListener('click',ev=>{document.querySelectorAll('.eqfDd[open]').forEach(d=>{if(!d.contains(ev.target))d.open=false})});
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
   if(GA_LOCK){ga=GA_LOCK;go=GA_GO[GA_LOCK]||go||''}
