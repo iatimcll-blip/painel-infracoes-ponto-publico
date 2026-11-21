@@ -1096,7 +1096,7 @@ function renderSubFix(){
   const o=emps.map(e=>e.name).sort(azSort).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');a.innerHTML=o;b.innerHTML=o;
   if(emps.some(e=>e.name===ca))a.value=ca;if(emps.some(e=>e.name===cb))b.value=cb;
   const L=Object.keys(subFix).filter(k=>emps.some(e=>e.name===k));
-  $('sfList').innerHTML=L.length?L.map(k=>`<li><span>Quando <b>${esc(k)}</b> estiver de folga no sobreaviso, cobre: <b>${esc(subFix[k])}</b></span><button type="button" class="btn sec" data-sfdel="${esc(k)}">Remover</button></li>`).join(''):'<li class="small">Nenhum substituto fixo.</li>';
+  $('sfList').innerHTML=L.length?L.map(k=>`<li><span>Quando <b>${esc(k)}</b> estiver de folga no sobreaviso, cobre: <b>${esc(subFix[k])}</b></span><button type="button" class="btn sec" data-sfdel="${esc(k)}">Remover</button></li>`).join(''):'<li class="small">Nenhum substituto natural.</li>';
 }
 function sfChanged(){saveState();renderSubFix();if(state.cfg){state.cfg.fixedSub={...subFix};render()}}
 function vacChanged(){saveState();renderVac();if(state.grid){applyVac();render()}}
