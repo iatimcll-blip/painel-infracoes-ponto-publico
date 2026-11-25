@@ -364,6 +364,8 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 .eqfPanel label{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;font-size:13px;color:var(--ink);cursor:pointer;margin:0}
 .eqfPanel label:hover{background:var(--acc2)}
 .eqfPanel .eqfAll{border-bottom:1px solid var(--line);border-radius:6px 6px 0 0;margin-bottom:4px;font-weight:600}
+td.seq6{background:#fee2e2!important;box-shadow:inset 0 -3px 0 #dc2626}
+.seq6tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;vertical-align:1px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -588,15 +590,18 @@ function generate(cfg){
 function validate(grid,cal,cfg){
   const n=grid.length,W=cal.weeks,N=Math.max(2,cfg.sundayEvery);
   const lim=cfg.maxStreak;
-  const issues={rest:[],streak:[],sunday:[],cover:[],hours:[]};
+  const issues={rest:[],streak:[],sunday:[],cover:[],hours:[],seis:[]};const alertas6=[];
   const emp=[];
   const wk=w=>cal.days[w*7].date;
   const wLimit=w=>stageFor(wk(w),cfg).limit;
   const wDaily=w=>dailyHours(wLimit(w),cfg.acordo);
   for(let e=0;e<n;e++){
-    const g=grid[e];let maxS=0,cur=0,monthF=0,monthSunF=0,hoursM=0,sunRun=0,maxSunRun=0,totalOff=0;
+    const g=grid[e];let cur6=0,maxS=0,cur=0,monthF=0,monthSunF=0,hoursM=0,sunRun=0,maxSunRun=0,totalOff=0;
     for(let i=0;i<g.length;i++){
       if(g[i]==='T'){cur++;maxS=Math.max(maxS,cur)}else{cur=0;if(g[i]!=='V')totalOff++}
+      // alerta de 6+ dias seguidos: conta só dentro do ciclo exibido (dias de fora ainda não foram planejados)
+      {const dentro=g[i]==='T'&&cal.days[i].inMonth;cur6=dentro?cur6+1:0;const fimRun=dentro&&(i===g.length-1||g[i+1]!=='T'||!cal.days[i+1].inMonth);
+       if(fimRun&&cur6>=6){const i0=i-cur6+1;alertas6.push({e,i0,i1:i,len:cur6});issues.seis.push(`${cfg.names[e]}: ${cur6} dias seguidos (${fmtD(cal.days[i0].date)} a ${fmtD(cal.days[i].date)})`)}}
       const day=cal.days[i];
       if(day.inMonth){
         if(g[i]==='F')monthF++;else if(g[i]!=='V')hoursM+=wDaily(Math.floor(i/7));
@@ -623,7 +628,7 @@ function validate(grid,cal,cfg){
     const d=cal.days[i];
     if(cfg.open[d.dow]&&c<cfg.minStaff[d.dow])issues.cover.push(`${fmtD(d.date)} (${DOW[d.dow]}): ${c} de ${cfg.minStaff[d.dow]} pessoas`);
   }
-  return{issues,emp,coverage};
+  return{issues,emp,coverage,alertas6};
 }
 function toCSV(names,grid,cal){
   const rows=[['Colaborador',...cal.days.map(d=>fmtD(d.date)+' '+DOW[d.dow])]];
@@ -1214,6 +1219,7 @@ function render(){
   const add=(arr,okT,failT,kind,fx)=>{items.push(arr.length?{k:kind||'fail',t:failT,fx,d:arr.slice(0,3).join(' · ')+(arr.length>3?` · +${arr.length-3}`:'')}:{k:'ok',t:okT})};
   add(I.rest,cfg.comp?'Média de 2 folgas por semana mantida':'2 dias de descanso em todas as semanas','Descanso semanal insuficiente',undefined,'regen');
   add(I.streak,`Máximo de ${cfg.maxStreak} dias seguidos de trabalho respeitado`,'Dias seguidos de trabalho acima do limite',undefined,'regen');
+  add(I.seis||[],'Ninguém com 6 ou mais dias seguidos de trabalho','⚠ Colaborador com 6 ou mais dias seguidos de trabalho','fail');
   if(cfg.open[6])add(I.sunday,`Folga em domingo ao menos 1 vez a cada ${cfg.sundayEvery}`,'Rodízio de domingos fora da meta','warn','regen');
   add(I.cover,'Cobertura mínima atendida em todos os dias','Cobertura mínima não atendida (pouca gente para as folgas exigidas)',undefined,'regen');
   add(I.hours,'Carga semanal dentro do limite legal','Carga semanal acima do limite',undefined,'regen');
@@ -1256,7 +1262,7 @@ function render(){
   let h='<tr><th class="name">Colaborador</th>'+cal.days.map(d=>`<th class="${d.dow===6?'sun ':''}${d.inMonth?'':'out '}${d.dow===0?'mon ':''}${cfg.open[d.dow]?'':'closed'}">${DOW[d.dow]}<small>${fmtD(d.date).slice(0,2)}</small></th>`).join('')+'</tr>';
   const spM=makeSep();cfg.names.forEach((nm,e)=>{if(!vis(e))return;h+=`<tr${spM(e)}>${nameCell(nm)}`+grid[e].map((x,i)=>{const d=cal.days[i];if(x==='V')return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}"><button type="button" class="c V" disabled title="Férias" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: férias">FÉ</button></td>`;return `<td class="${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${cvMap[e+'|'+i]?`<button class="c cv" data-e="${e}" data-i="${i}" title="Cobrindo sobreaviso de ${esc(cvMap[e+'|'+i])}" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: Trabalho, cobrindo o sobreaviso de ${esc(cvMap[e+'|'+i])}">C</button>`:`<button class="c ${x}" data-e="${e}" data-i="${i}" aria-label="${esc(nm)}, ${fmtD(d.date)} ${DOW[d.dow]}: ${x==='T'?'Trabalho':'Folga'}">${x}</button>`}</td>`}).join('')+'</tr>'});
   h+='<tr class="cov"><td class="name">Em serviço</td>'+cal.days.map((d,i)=>{const low=cfg.open[d.dow]&&v.coverage[i]<cfg.minStaff[d.dow];return `<td class="${low?'low ':''}${d.inMonth?'':'out '}${d.dow===0?'mon':''}">${v.coverage[i]}</td>`}).join('')+'</tr>';
-  $('tbl').innerHTML=h;$('tbl').style.setProperty('--minw',(215+cal.days.length*25)+'px');
+  $('tbl').innerHTML=h;marcarSeq6(v);$('tbl').style.setProperty('--minw',(215+cal.days.length*25)+'px');
   state.v=v;state.cvMap=cvMap;
   renderSA(cfg,cal,cv);markCuts();markPairs();
   // summary
@@ -1750,6 +1756,17 @@ document.addEventListener('change',ev=>{
   renderEqf();if(state.grid)render();
 });
 document.addEventListener('click',ev=>{document.querySelectorAll('.eqfDd[open]').forEach(d=>{if(!d.contains(ev.target))d.open=false})});
+// destaca na escala as sequências de 6+ dias seguidos de trabalho (células e ⚠ no nome)
+function marcarSeq6(v){
+  try{const t=$('tbl');if(!t||!v||!v.alertas6)return;
+    v.alertas6.forEach(a=>{
+      let tr=null;
+      for(let i=a.i0;i<=a.i1;i++){const b=t.querySelector('button.c[data-e="'+a.e+'"][data-i="'+i+'"]');if(b){b.closest('td').classList.add('seq6');tr=tr||b.closest('tr')}}
+      const nm=tr&&tr.querySelector('td.name');
+      if(nm&&!nm.querySelector('.seq6tag')){const s=document.createElement('span');s.className='seq6tag';s.textContent='⚠ '+a.len+' dias';s.title=a.len+' dias seguidos de trabalho ('+fmtD(state.cal.days[a.i0].date)+' a '+fmtD(state.cal.days[a.i1].date)+')';nm.appendChild(s)}
+    });
+  }catch(e){console.error(e)}
+}
 function say(id,txt,err){const el=$(id);el.textContent=txt;el.className='msg'+(err?' err':'')}
 function addEmp(name,role,sob,ga,go,team,city,uf){/* sob = modo */
   if(GA_LOCK){ga=GA_LOCK;go=GA_GO[GA_LOCK]||go||''}
