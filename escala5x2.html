@@ -1817,13 +1817,42 @@ function planoFolgas(e){
   }
   return mud;
 }
+// o sobreaviso acompanha a correção (pedido do usuário, 2026-11-25): folga que vira trabalho numa semana de
+// sobreaviso vira dia de sobreaviso; dia de sobreaviso que vira folga passa o sobreaviso para outro dia de
+// trabalho da mesma semana (colado aos demais dias de sobreaviso), mantendo a quantidade
+function planoSobreaviso(e,mud){
+  const st=state,nm=st.cfg.names[e],g=st.grid[e].slice(),out=[],usados=new Set();
+  mud.forEach(m=>{g[m.i]=m.para});
+  const semanas=[...new Set(mud.map(m=>Math.floor(m.i/7)))];
+  semanas.forEach(w=>{
+    const ds=[0,1,2,3,4,5,6].map(k=>w*7+k);if(!ds.some(j=>saDiaOn(nm,j)))return;
+    const tirados=new Set();
+    const saAtual=j=>(saDiaOn(nm,j)&&!tirados.has(j))||usados.has(j);
+    mud.filter(m=>Math.floor(m.i/7)===w).forEach(m=>{
+      if(m.para==='T'&&!saDiaOn(nm,m.i)){out.push({i:m.i,on:1});usados.add(m.i)}
+      if(m.para==='F'&&saDiaOn(nm,m.i)){
+        out.push({i:m.i,on:0});tirados.add(m.i);
+        const viz=j=>(saAtual(j-1)?1:0)+(saAtual(j+1)?1:0);
+        const cand=ds.filter(j=>g[j]==='T'&&!saAtual(j)).sort((x,y)=>viz(y)-viz(x)||x-y);
+        if(cand.length){out.push({i:cand[0],on:1});usados.add(cand[0])}
+      }
+    });
+  });
+  return out;
+}
 function corrigirFolgas(e){
   const st=state,nm=st.cfg.names[e],mud=planoFolgas(e);
   if(!mud.length){alert(nm+': todas as semanas já têm 2 folgas.');return}
   const eq=mates(nm),DS=['dom','seg','ter','qua','qui','sex','sáb'];
-  const txt=mud.map(m=>'• '+fmtD(st.cal.days[m.i].date)+' ('+DS[st.cal.days[m.i].date.getUTCDay()]+'): '+(m.para==='F'?'trabalho → FOLGA'+(saDiaOn(nm,m.i)?' (era dia de sobreaviso — o sobreaviso desse dia sai)':''):'folga → TRABALHO')).join('\n');
-  if(!confirm('Corrigir a escala de '+nm+(eq.length>1?' (e da equipe: '+eq.filter(x=>x!==nm).join(', ')+')':'')+' para 2 folgas por semana (segunda a domingo)?\n\n'+txt))return;
+  const sam=planoSobreaviso(e,mud);
+  const dia=i=>fmtD(st.cal.days[i].date)+' ('+DS[st.cal.days[i].date.getUTCDay()]+')';
+  const txt=mud.map(m=>'• '+dia(m.i)+': '+(m.para==='F'?'trabalho → FOLGA'+(saDiaOn(nm,m.i)?' (era sobreaviso)':''):'folga → TRABALHO')).join('\n');
+  const txtSA=sam.filter(x=>x.on===1).map(x=>'• '+dia(x.i)+': passa a ser SOBREAVISO').join('\n');
+  if(!confirm('Corrigir a escala de '+nm+(eq.length>1?' (e da equipe: '+eq.filter(x=>x!==nm).join(', ')+')':'')+' para 2 folgas por semana (segunda a domingo)?\n\n'+txt+(txtSA?'\n\nSobreaviso acompanha a correção:\n'+txtSA:'')))return;
   mud.forEach(m=>{const iso=isoD(st.cal.days[m.i].date);eq.forEach(n=>{const k=st.cfg.names.indexOf(n);if(k<0)return;st.grid[k][m.i]=m.para;(fix[n]=fix[n]||{})[iso]=m.para})});
+  sam.forEach(x=>{const d=st.cal.days[x.i].date,iso=isoD(d),seg=isoD(new Date(d.getTime()-((d.getUTCDay()+6)%7)*864e5));
+    eq.forEach(n=>{(ocD[n]=ocD[n]||{})[iso]=x.on;if(x.on===1)setOC(oc,n,seg,true);const em=emps.find(y=>y.name===n);if(em){em.mode='manual';em.sob=true}})});
+  if(st.cfg)st.cfg.ocDayOv=ocD;
   saveState();render();
 }
 function marcarSeq6(v){
