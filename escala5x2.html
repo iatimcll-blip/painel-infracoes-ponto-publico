@@ -1545,7 +1545,7 @@ let syTimer=null,syBusy=false,syAplicando=false,syOk=false,syErro='';
 // fica na própria fatia no servidor (dados.importacoes), para nunca reaplicar por cima de ajustes manuais
 var IMPORTS={};try{IMPORTS=JSON.parse(localStorage.getItem('escala5x2imports')||'{}')||{}}catch(e){}
 const salvarImports=()=>{try{localStorage.setItem('escala5x2imports',JSON.stringify(IMPORTS))}catch(e){}};
-const PACOTES_ESCALA=['assets/escala-rh-2026-12-15.json'];
+const PACOTES_ESCALA=['assets/escala-rh-2026-12-15-v2.json'];
 // havia escala salva NESTE navegador antes desta abertura? (o GA pode ter trabalhado nela antes
 // da sincronização existir) — lido antes de qualquer gravação desta abertura
 const HAD_LOCAL=(()=>{try{return !!localStorage.getItem('escala5x2v2')}catch(e){return false}})();
@@ -1677,13 +1677,15 @@ async function syBuscar(inicial){
       const ch=r.chave;if(ch!=='geral'&&!ch.startsWith('ga:'))return;
       if(GA_LOCK&&ch!==chaveGA(GA_LOCK)&&ch!=='geral')return; // GA só precisa da própria área (+ quem está sem GA)
       const jLocal=stable(fatia(ch));
+      // alteração local ainda não enviada só vence se o servidor NÃO mudou desde a última leitura deste navegador;
+      // se outra pessoa/aparelho gravou depois, vale o servidor (a versão local vai para a cópia de segurança).
+      // Antes a local sempre vencia e um navegador com cópia antiga apagou o lançamento do RH (2026-11-25).
       const sujo=grav.has(ch)&&SY.sent[ch]&&jLocal!==SY.sent[ch];
-      if(sujo)return; // alteração local ainda não enviada vence
+      if(sujo&&SY.seen[ch]===r.atualizado_em)return;
+      if(sujo)bkpGuardar(ch,fatia(ch));
       if(SY.seen[ch]===r.atualizado_em&&SY.sent[ch])return;
       const eu=PAINEL&&PAINEL.username;
-      if(!SY.sent[ch]&&GA_LOCK&&ch===chaveGA(GA_LOCK)&&HAD_LOCAL&&jLocal!==stable(r.dados||{})&&r.autor!==eu&&stable(fatia(ch).emps)!=='[]'){
-        bkpGuardar(ch,r.dados);SY.seen[ch]=r.atualizado_em;return; // a versão do GA (dono) vai pro servidor em syEnviar
-      }
+      void eu; // (regra antiga "o GA vence na 1ª sincronização" retirada: podia apagar lançamentos do servidor)
       if(jLocal!==stable(r.dados||{})){if(grav.has(ch))bkpGuardar(ch,fatia(ch));aplicarFatia(ch,r.dados);mudou=true}
       SY.seen[ch]=r.atualizado_em;if(grav.has(ch))SY.sent[ch]=stable(fatia(ch));
     });
