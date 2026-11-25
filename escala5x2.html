@@ -1545,7 +1545,7 @@ let syTimer=null,syBusy=false,syAplicando=false,syOk=false,syErro='';
 // fica na própria fatia no servidor (dados.importacoes), para nunca reaplicar por cima de ajustes manuais
 var IMPORTS={};try{IMPORTS=JSON.parse(localStorage.getItem('escala5x2imports')||'{}')||{}}catch(e){}
 const salvarImports=()=>{try{localStorage.setItem('escala5x2imports',JSON.stringify(IMPORTS))}catch(e){}};
-const PACOTES_ESCALA=['assets/escala-rh-2026-12-15-v2.json'];
+const PACOTES_ESCALA=['assets/escala-rh-2026-12-15-v2.json','assets/escala-rh-2026-12-15-v3-miguel.json'];
 // havia escala salva NESTE navegador antes desta abertura? (o GA pode ter trabalhado nela antes
 // da sincronização existir) — lido antes de qualquer gravação desta abertura
 const HAD_LOCAL=(()=>{try{return !!localStorage.getItem('escala5x2v2')}catch(e){return false}})();
@@ -1620,16 +1620,24 @@ const hhmm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+'
 async function syEnviar(){
   if(!SYNC||syBusy||syAplicando)return;
   const chs=chavesGravaveis();if(!chs.length)return;
-  syBusy=true;let enviou=0,erro=null;
+  syBusy=true;let enviou=0,erro=null,rever=false;
   try{
+    // relê o servidor ANTES de gravar (2026-11-25): não grava por cima de quem gravou depois da última
+    // leitura deste navegador, nem envia uma área que perderia os dias lançados do RH
+    let srv=null;try{srv={};(await SYNC.ler()).forEach(r=>{srv[r.chave]=r})}catch(e){srv=null}
+    const qtdFix=d=>Object.values((d&&d.fix)||{}).reduce((t,x)=>t+Object.keys(x||{}).length,0);
     for(const ch of chs){
       const f=fatia(ch),j=stable(f);
       if(SY.sent[ch]===j)continue;
       if(!SY.sent[ch]&&!f.emps.length&&ch!=='geral')continue; // nada a enviar de uma fatia que nunca existiu
+      const r0=srv&&srv[ch];
+      if(r0&&SY.seen[ch]&&r0.atualizado_em!==SY.seen[ch]){console.warn('Escala 5X2: '+ch+' mudou no servidor desde a última leitura — não gravo por cima; recarrego.');rever=true;continue}
+      if(r0&&Array.isArray(r0.dados&&r0.dados.importacoes)&&r0.dados.importacoes.length&&qtdFix(r0.dados)>0&&qtdFix(f)<qtdFix(r0.dados)*0.5){console.warn('Escala 5X2: envio de '+ch+' bloqueado — perderia os dias lançados do RH; recarrego a versão do servidor.');bkpGuardar(ch,f);delete SY.sent[ch];SY.seen[ch]=null;rever=true;continue}
       try{const r=await SYNC.salvar(ch,f);SY.sent[ch]=j;SY.seen[ch]=r.atualizado_em||SY.seen[ch];enviou++}catch(e){erro=e;console.error('Escala 5X2: falha ao sincronizar '+ch,e)}
     }
     sySave();
   }finally{syBusy=false}
+  if(rever)setTimeout(()=>syBuscar(false),300);
   if(erro){
     const m=String(erro.message||'');
     syErro=m==='sessao'||m==='sem-sessao'?'☁ Sua sessão expirou — saia e entre de novo com seu acesso (Configurações do painel) para sincronizar'
