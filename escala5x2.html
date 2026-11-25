@@ -370,6 +370,8 @@ td.f3{background:#ffedd5!important;box-shadow:inset 0 -3px 0 #f97316}
 .seq6tag.f3tag{background:#f97316}
 td.f1{background:#ede9fe!important;box-shadow:inset 0 0 0 2px #7c3aed}
 .seq6tag.f1tag{background:#7c3aed}
+.fixFolgas{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;border:1px solid var(--acc);background:var(--acc2);color:var(--acc);font:inherit;font-size:11px;font-weight:700;cursor:pointer;vertical-align:1px;white-space:nowrap}
+.fixFolgas:hover{background:var(--acc);color:#fff}
 </style>
 </head>
 <body>
@@ -1495,6 +1497,7 @@ $('btnOcClear').onclick=()=>{if(!state.cal)return;const ms=mondaysOf(state.cal).
 DOW.forEach((d,i)=>{['ocSd','ocEd','ocISd','ocIEd'].forEach(id=>$(id).add(new Option(d,i)))});$('ocISd').value=4;$('ocIEd').value=4;
 $('ocInfOn').addEventListener('change',()=>{const on=$('ocInfOn').checked;$('ocInfBody').hidden=!on;if(on&&!$('ocInfOn').dataset.set){$('ocISd').value=$('ocSd').value;$('ocISt').value=$('ocSt').value;$('ocIEd').value=$('ocEd').value;$('ocIEt').value=$('ocEt').value}$('ocInfOn').dataset.set='1'});$('ocSd').value=4;$('ocEd').value=4;
 $('tbl').addEventListener('click',ev=>{
+  {const fb=ev.target.closest('button.fixFolgas');if(fb){ev.stopPropagation();corrigirFolgas(+fb.dataset.fix);return}}
   const b=ev.target.closest('button.c');if(!b)return;
   const e=+b.dataset.e,i=+b.dataset.i;if(state.grid[e][i]==='V')return;const nv=state.grid[e][i]==='T'?'F':'T';mates(state.cfg.names[e]).forEach(n=>{const k=state.cfg.names.indexOf(n);if(k>=0){state.grid[k][i]=nv;if(fix[n])fix[n][isoD(state.cal.days[i].date)]=nv}});saveState();render();
   const nb=document.querySelector(`button.c[data-e="${e}"][data-i="${i}"]`);if(nb)nb.focus({preventScroll:true});
@@ -1783,6 +1786,41 @@ document.addEventListener('change',ev=>{
 });
 document.addEventListener('click',ev=>{document.querySelectorAll('.eqfDd[open]').forEach(d=>{if(!d.contains(ev.target))d.open=false})});
 // destaca na escala as sequências de 6+ dias seguidos de trabalho (células e ⚠ no nome)
+// CORRIGIR 2 FOLGAS POR SEMANA (pedido do usuário, 2026-11-25): botão em cada colaborador com semana
+// (segunda a domingo, inteira dentro do ciclo, sem férias) com folgas diferente de 2. Menos de 2: um dia de
+// trabalho vira folga (prefere dia sem sobreaviso, colado a outra folga, sem criar 3 folgas seguidas);
+// mais de 2: uma folga vira trabalho (sem criar 6+ dias seguidos). Vale para a equipe (regra da equipe) e
+// os dias ficam fixados na linha. Pede confirmação mostrando as mudanças.
+function saDiaOn(nm,i){try{const iso=isoD(state.cal.days[i].date),ov=ocD[nm]&&ocD[nm][iso];if(ov===1)return true;if(ov===0)return false;return ocDaySet(nm).has(i)}catch(e){return false}}
+function planoFolgas(e){
+  const st=state,cal=st.cal,nm=st.cfg.names[e],g=st.grid[e].slice(),mud=[];
+  const run=(arr,i,v)=>{let a=i,b=i;while(a-1>=0&&arr[a-1]===v)a--;while(b+1<arr.length&&arr[b+1]===v)b++;return b-a+1};
+  for(let w=0;w<cal.weeks;w++){
+    const ds=[0,1,2,3,4,5,6].map(k=>w*7+k);
+    if(!ds.every(i=>cal.days[i]&&cal.days[i].inMonth)||ds.some(i=>g[i]==='V'))continue;
+    let fs=ds.filter(i=>g[i]==='F');
+    while(fs.length<2){
+      const cand=ds.filter(i=>g[i]==='T').map(i=>{const t=g.slice();t[i]='F';const viz=(g[i-1]==='F'||g[i+1]==='F');
+        return{i,sc:(saDiaOn(nm,i)?100:0)+(run(t,i,'F')>=3?40:0)+(viz?-10:0)+(cal.days[i].dow===6?-2:0)}}).sort((a,b)=>a.sc-b.sc||a.i-b.i);
+      if(!cand.length)break;const i=cand[0].i;g[i]='F';mud.push({i,de:'T',para:'F'});fs=ds.filter(i=>g[i]==='F');
+    }
+    while(fs.length>2){
+      const cand=fs.map(i=>{const t=g.slice();t[i]='T';const viz=(g[i-1]==='F'||g[i+1]==='F');
+        return{i,sc:(run(t,i,'T')>=6?100:0)+(viz?0:-10)+(cal.days[i].dow===6?20:0)}}).sort((a,b)=>a.sc-b.sc||b.i-a.i);
+      const i=cand[0].i;g[i]='T';mud.push({i,de:'F',para:'T'});fs=ds.filter(i=>g[i]==='F');
+    }
+  }
+  return mud;
+}
+function corrigirFolgas(e){
+  const st=state,nm=st.cfg.names[e],mud=planoFolgas(e);
+  if(!mud.length){alert(nm+': todas as semanas já têm 2 folgas.');return}
+  const eq=mates(nm),DS=['dom','seg','ter','qua','qui','sex','sáb'];
+  const txt=mud.map(m=>'• '+fmtD(st.cal.days[m.i].date)+' ('+DS[st.cal.days[m.i].date.getUTCDay()]+'): '+(m.para==='F'?'trabalho → FOLGA':'folga → TRABALHO')).join('\n');
+  if(!confirm('Corrigir a escala de '+nm+(eq.length>1?' (e da equipe: '+eq.filter(x=>x!==nm).join(', ')+')':'')+' para 2 folgas por semana (segunda a domingo)?\n\n'+txt))return;
+  mud.forEach(m=>{const iso=isoD(st.cal.days[m.i].date);eq.forEach(n=>{const k=st.cfg.names.indexOf(n);if(k<0)return;st.grid[k][m.i]=m.para;(fix[n]=fix[n]||{})[iso]=m.para})});
+  saveState();render();
+}
 function marcarSeq6(v){
   try{const t=$('tbl');if(!t||!v||!v.alertas6)return;
     v.alertas6.forEach(a=>{
@@ -1797,6 +1835,10 @@ function marcarSeq6(v){
       const nm=tr&&tr.querySelector('td.name');
       if(nm&&!nm.querySelector('.f3tag')){const s=document.createElement('span');s.className='seq6tag f3tag';s.textContent=a.len+' folgas';s.title=a.len+' folgas seguidas ('+fmtD(state.cal.days[a.i0].date)+' a '+fmtD(state.cal.days[a.i1].date)+')';nm.appendChild(s)}
     });
+    {const feitos=new Set();t.querySelectorAll('button.c[data-e]').forEach(b=>{const e=+b.dataset.e;if(feitos.has(e))return;feitos.add(e);
+      let n=0;try{n=planoFolgas(e).length}catch(err){}
+      if(!n)return;const nm=b.closest('tr').querySelector('td.name');if(!nm||nm.querySelector('.fixFolgas'))return;
+      const bt=document.createElement('button');bt.type='button';bt.className='fixFolgas';bt.dataset.fix=e;bt.textContent='Corrigir 2 folgas';bt.title='Ajustar para 2 folgas em cada semana (segunda a domingo): '+n+' mudança(s)';nm.appendChild(bt)})}
     (v.alertasF1||[]).forEach(a=>{
       const b=t.querySelector('button.c[data-e="'+a.e+'"][data-i="'+a.iF+'"]');if(!b)return;
       b.closest('td').classList.add('f1');
