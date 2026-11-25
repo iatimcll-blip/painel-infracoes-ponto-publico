@@ -982,7 +982,8 @@ function enforcePairOC(){infraPairs().forEach(([a,b])=>{(oc[a]||[]).slice().forE
   const temDia=[...da,...db].some(d=>(ocD[a]&&ocD[a][d]!==undefined)||(ocD[b]&&ocD[b][d]!==undefined));
   if(!temDia){setOC(oc,b,iso,false);return}
   const onA=new Set(da.filter(d=>!(ocD[a]&&ocD[a][d]===0)));
-  db.forEach(d=>{if(onA.has(d)&&!(ocD[b]&&ocD[b][d]===0)){(ocD[b]=ocD[b]||{})[d]=0}});
+  // dia marcado explicitamente como sobreaviso (ocD=1, ex.: escala do RH) não é apagado: fica para ajuste manual (dia em vermelho)
+  db.forEach(d=>{if(onA.has(d)&&!(ocD[b]&&(ocD[b][d]===0||ocD[b][d]===1))){(ocD[b]=ocD[b]||{})[d]=0}});
 })})}
 function separateInfra(){
   const cfg=state.cfg,cal=state.cal,g=state.grid;if(!cfg||!g)return;
