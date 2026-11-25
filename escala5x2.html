@@ -626,7 +626,7 @@ function validate(grid,cal,cfg){
     // indicativo de apenas 1 folga na semana (pedido do usuário, 2026-11-25): semanas inteiras dentro do ciclo, sem férias
     for(let w=0;w<W;w++){
       const ds=[0,1,2,3,4,5,6].map(k=>w*7+k);
-      if(!ds.every(i=>cal.days[i]&&cal.days[i].inMonth)||ds.some(i=>g[i]==='V'))continue;
+      if(!ds.every(i=>cal.days[i])||ds.some(i=>g[i]==='V'))continue;
       const fs=ds.filter(i=>g[i]==='F');
       if(fs.length===1){alertasF1.push({e,i0:ds[0],i1:ds[6],iF:fs[0]});issues.folga1.push(`${cfg.names[e]}: só 1 folga na semana de ${fmtD(cal.days[ds[0]].date)} (${fmtD(cal.days[fs[0]].date)})`)}
     }
@@ -1802,16 +1802,17 @@ function planoFolgas(e){
   const run=(arr,i,v)=>{let a=i,b=i;while(a-1>=0&&arr[a-1]===v)a--;while(b+1<arr.length&&arr[b+1]===v)b++;return b-a+1};
   for(let w=0;w<cal.weeks;w++){
     const ds=[0,1,2,3,4,5,6].map(k=>w*7+k);
-    if(!ds.every(i=>cal.days[i]&&cal.days[i].inMonth)||ds.some(i=>g[i]==='V'))continue;
+    if(!ds.every(i=>cal.days[i])||ds.some(i=>g[i]==='V'))continue; // toda semana segunda–domingo exibida (2026-11-25)
+    const fora=i=>cal.days[i].inMonth?0:30; // prefere mudar dias de dentro do ciclo
     let fs=ds.filter(i=>g[i]==='F');
     while(fs.length<2){
       const cand=ds.filter(i=>g[i]==='T').map(i=>{const t=g.slice();t[i]='F';const viz=(g[i-1]==='F'||g[i+1]==='F');
-        return{i,sc:(saDiaOn(nm,i)?100:0)+(run(t,i,'F')>=3?40:0)+(viz?-10:0)+(cal.days[i].dow===6?-2:0)}}).sort((a,b)=>a.sc-b.sc||a.i-b.i);
+        return{i,sc:(saDiaOn(nm,i)?100:0)+(run(t,i,'F')>=3?40:0)+(viz?-10:0)+(cal.days[i].dow===6?-2:0)+fora(i)}}).sort((a,b)=>a.sc-b.sc||a.i-b.i);
       if(!cand.length)break;const i=cand[0].i;g[i]='F';mud.push({i,de:'T',para:'F'});fs=ds.filter(i=>g[i]==='F');
     }
     while(fs.length>2){
       const cand=fs.map(i=>{const t=g.slice();t[i]='T';const viz=(g[i-1]==='F'||g[i+1]==='F');
-        return{i,sc:(run(t,i,'T')>=6?100:0)+(viz?0:-10)+(cal.days[i].dow===6?20:0)}}).sort((a,b)=>a.sc-b.sc||b.i-a.i);
+        return{i,sc:(run(t,i,'T')>=6?100:0)+(viz?0:-10)+(cal.days[i].dow===6?20:0)+fora(i)}}).sort((a,b)=>a.sc-b.sc||b.i-a.i);
       const i=cand[0].i;g[i]='T';mud.push({i,de:'F',para:'T'});fs=ds.filter(i=>g[i]==='F');
     }
   }
