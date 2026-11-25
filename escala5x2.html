@@ -366,6 +366,10 @@ small.ct,.small.ct{font-size:12.5px!important;font-weight:500;color:#475569;marg
 .eqfPanel .eqfAll{border-bottom:1px solid var(--line);border-radius:6px 6px 0 0;margin-bottom:4px;font-weight:600}
 td.seq6{background:#fee2e2!important;box-shadow:inset 0 -3px 0 #dc2626}
 .seq6tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;background:#dc2626;color:#fff;font-size:11px;font-weight:700;vertical-align:1px;white-space:nowrap}
+td.f3{background:#ffedd5!important;box-shadow:inset 0 -3px 0 #f97316}
+.seq6tag.f3tag{background:#f97316}
+td.f1{background:#ede9fe!important;box-shadow:inset 0 0 0 2px #7c3aed}
+.seq6tag.f1tag{background:#7c3aed}
 </style>
 </head>
 <body>
@@ -590,15 +594,18 @@ function generate(cfg){
 function validate(grid,cal,cfg){
   const n=grid.length,W=cal.weeks,N=Math.max(2,cfg.sundayEvery);
   const lim=cfg.maxStreak;
-  const issues={rest:[],streak:[],sunday:[],cover:[],hours:[],seis:[]};const alertas6=[];
+  const issues={rest:[],streak:[],sunday:[],cover:[],hours:[],seis:[],folga3:[],folga1:[]};const alertas6=[],alertasF3=[],alertasF1=[];
   const emp=[];
   const wk=w=>cal.days[w*7].date;
   const wLimit=w=>stageFor(wk(w),cfg).limit;
   const wDaily=w=>dailyHours(wLimit(w),cfg.acordo);
   for(let e=0;e<n;e++){
-    const g=grid[e];let cur6=0,maxS=0,cur=0,monthF=0,monthSunF=0,hoursM=0,sunRun=0,maxSunRun=0,totalOff=0;
+    const g=grid[e];let curF=0,cur6=0,maxS=0,cur=0,monthF=0,monthSunF=0,hoursM=0,sunRun=0,maxSunRun=0,totalOff=0;
     for(let i=0;i<g.length;i++){
       if(g[i]==='T'){cur++;maxS=Math.max(maxS,cur)}else{cur=0;if(g[i]!=='V')totalOff++}
+      // indicativo de 3+ folgas seguidas (pedido do usuário, 2026-11-25): só F (férias não contam), dentro do ciclo
+      {const fd=g[i]==='F'&&cal.days[i].inMonth;curF=fd?curF+1:0;const fimF=fd&&(i===g.length-1||g[i+1]!=='F'||!cal.days[i+1].inMonth);
+       if(fimF&&curF>=3){const i0=i-curF+1;alertasF3.push({e,i0,i1:i,len:curF});issues.folga3.push(`${cfg.names[e]}: ${curF} folgas seguidas (${fmtD(cal.days[i0].date)} a ${fmtD(cal.days[i].date)})`)}}
       // alerta de 6+ dias seguidos: conta só dentro do ciclo exibido (dias de fora ainda não foram planejados)
       {const dentro=g[i]==='T'&&cal.days[i].inMonth;cur6=dentro?cur6+1:0;const fimRun=dentro&&(i===g.length-1||g[i+1]!=='T'||!cal.days[i+1].inMonth);
        if(fimRun&&cur6>=6){const i0=i-cur6+1;alertas6.push({e,i0,i1:i,len:cur6});issues.seis.push(`${cfg.names[e]}: ${cur6} dias seguidos (${fmtD(cal.days[i0].date)} a ${fmtD(cal.days[i].date)})`)}}
@@ -608,6 +615,13 @@ function validate(grid,cal,cfg){
         if(day.dow===6&&g[i]==='F')monthSunF++;
       }
       if(day.dow===6&&cfg.open[6]){if(g[i]==='T'){sunRun++;maxSunRun=Math.max(maxSunRun,sunRun)}else sunRun=0}
+    }
+    // indicativo de apenas 1 folga na semana (pedido do usuário, 2026-11-25): semanas inteiras dentro do ciclo, sem férias
+    for(let w=0;w<W;w++){
+      const ds=[0,1,2,3,4,5,6].map(k=>w*7+k);
+      if(!ds.every(i=>cal.days[i]&&cal.days[i].inMonth)||ds.some(i=>g[i]==='V'))continue;
+      const fs=ds.filter(i=>g[i]==='F');
+      if(fs.length===1){alertasF1.push({e,i0:ds[0],i1:ds[6],iF:fs[0]});issues.folga1.push(`${cfg.names[e]}: só 1 folga na semana de ${fmtD(cal.days[ds[0]].date)} (${fmtD(cal.days[fs[0]].date)})`)}
     }
     for(let w=0;w<W;w++){
       let off=0,vc=0;for(let d=0;d<7;d++){if(g[w*7+d]==='F')off++;else if(g[w*7+d]==='V')vc++}
@@ -628,7 +642,7 @@ function validate(grid,cal,cfg){
     const d=cal.days[i];
     if(cfg.open[d.dow]&&c<cfg.minStaff[d.dow])issues.cover.push(`${fmtD(d.date)} (${DOW[d.dow]}): ${c} de ${cfg.minStaff[d.dow]} pessoas`);
   }
-  return{issues,emp,coverage,alertas6};
+  return{issues,emp,coverage,alertas6,alertasF3,alertasF1};
 }
 function toCSV(names,grid,cal){
   const rows=[['Colaborador',...cal.days.map(d=>fmtD(d.date)+' '+DOW[d.dow])]];
@@ -1220,6 +1234,8 @@ function render(){
   add(I.rest,cfg.comp?'Média de 2 folgas por semana mantida':'2 dias de descanso em todas as semanas','Descanso semanal insuficiente',undefined,'regen');
   add(I.streak,`Máximo de ${cfg.maxStreak} dias seguidos de trabalho respeitado`,'Dias seguidos de trabalho acima do limite',undefined,'regen');
   add(I.seis||[],'Ninguém com 6 ou mais dias seguidos de trabalho','⚠ Colaborador com 6 ou mais dias seguidos de trabalho','fail');
+  add(I.folga3||[],'Ninguém com 3 ou mais folgas seguidas','Colaborador com 3 ou mais folgas seguidas','warn');
+  add(I.folga1||[],'Ninguém com apenas 1 folga na semana','Colaborador com apenas 1 folga na semana','warn');
   if(cfg.open[6])add(I.sunday,`Folga em domingo ao menos 1 vez a cada ${cfg.sundayEvery}`,'Rodízio de domingos fora da meta','warn','regen');
   add(I.cover,'Cobertura mínima atendida em todos os dias','Cobertura mínima não atendida (pouca gente para as folgas exigidas)',undefined,'regen');
   add(I.hours,'Carga semanal dentro do limite legal','Carga semanal acima do limite',undefined,'regen');
@@ -1773,7 +1789,19 @@ function marcarSeq6(v){
       let tr=null;
       for(let i=a.i0;i<=a.i1;i++){const b=t.querySelector('button.c[data-e="'+a.e+'"][data-i="'+i+'"]');if(b){b.closest('td').classList.add('seq6');tr=tr||b.closest('tr')}}
       const nm=tr&&tr.querySelector('td.name');
-      if(nm&&!nm.querySelector('.seq6tag')){const s=document.createElement('span');s.className='seq6tag';s.textContent='⚠ '+a.len+' dias';s.title=a.len+' dias seguidos de trabalho ('+fmtD(state.cal.days[a.i0].date)+' a '+fmtD(state.cal.days[a.i1].date)+')';nm.appendChild(s)}
+      if(nm&&!nm.querySelector('.seq6tag:not(.f3tag)')){const s=document.createElement('span');s.className='seq6tag';s.textContent='⚠ '+a.len+' dias';s.title=a.len+' dias seguidos de trabalho ('+fmtD(state.cal.days[a.i0].date)+' a '+fmtD(state.cal.days[a.i1].date)+')';nm.appendChild(s)}
+    });
+    (v.alertasF3||[]).forEach(a=>{
+      let tr=null;
+      for(let i=a.i0;i<=a.i1;i++){const b=t.querySelector('button.c[data-e="'+a.e+'"][data-i="'+i+'"]');if(b){b.closest('td').classList.add('f3');tr=tr||b.closest('tr')}}
+      const nm=tr&&tr.querySelector('td.name');
+      if(nm&&!nm.querySelector('.f3tag')){const s=document.createElement('span');s.className='seq6tag f3tag';s.textContent=a.len+' folgas';s.title=a.len+' folgas seguidas ('+fmtD(state.cal.days[a.i0].date)+' a '+fmtD(state.cal.days[a.i1].date)+')';nm.appendChild(s)}
+    });
+    (v.alertasF1||[]).forEach(a=>{
+      const b=t.querySelector('button.c[data-e="'+a.e+'"][data-i="'+a.iF+'"]');if(!b)return;
+      b.closest('td').classList.add('f1');
+      const nm=b.closest('tr').querySelector('td.name');
+      if(nm&&!nm.querySelector('.f1tag')){const s=document.createElement('span');s.className='seq6tag f1tag';const n=v.alertasF1.filter(x=>x.e===a.e).length;s.textContent='1 folga/sem'+(n>1?' ×'+n:'');s.title='Só 1 folga na(s) semana(s): '+v.alertasF1.filter(x=>x.e===a.e).map(x=>fmtD(state.cal.days[x.i0].date)).join(', ');nm.appendChild(s)}
     });
   }catch(e){console.error(e)}
 }
