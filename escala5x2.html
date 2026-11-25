@@ -926,7 +926,9 @@ function runFix(fx){const f=FIXES[fx];if(!f)return;let msg='';const snap=takeSna
 let lastItems=null;
 (function(){const b=$('cfgTog'),bd=$('cfgBody');if(!b)return;const set=o=>{bd.hidden=!o;b.setAttribute('aria-expanded',o);b.textContent='⚙ Parâmetros '+(o?'▴':'▾');try{localStorage.setItem('escala5x2cfg',o?'1':'0')}catch(e){}};let o=false;try{o=localStorage.getItem('escala5x2cfg')==='1'}catch(e){}set(o);b.onclick=()=>{if(bd.hidden&&$('viewSec')&&!$('viewSec').hidden)showView('principal');set(bd.hidden)}})();
 function mirrorFilters(){patState();FIDS.forEach(id=>{const a=$(id),b=$(id+'2');if(!a||!b)return;if(b.innerHTML!==a.innerHTML)b.innerHTML=a.innerHTML;b.value=a.value})}
-function fillRoles(){try{renderEqf()}catch(e){}const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS_AZ.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
+function fillRoles(){try{renderEqf()}catch(e){}
+  // filtro "Sem GA" sem ninguém sem GA deixava a escala vazia (ex.: 1ª abertura num navegador novo) — volta para todos
+  try{const g=$('fGA');if(g&&!GA_LOCK&&g.value==='__none'&&!emps.some(e=>!e.ga)){g.value='';mirrorFilters()}}catch(e){}const su=$('fUF');if(su){const cu=su.value;su.innerHTML='<option value="">Todas as UFs</option>'+UFS_AZ.map(u=>`<option value="${u}">${u}</option>`).join('')+(emps.some(e=>!e.uf)?'<option value="__none">Sem UF</option>':'');if([...su.options].some(o=>o.value===cu))su.value=cu}
   const sc=$('fCity');if(sc){const cc=sc.value,cs=[...new Set(emps.map(e=>(e.city||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));sc.innerHTML='<option value="">Todas as cidades</option>'+cs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(cs.length&&emps.some(e=>!(e.city||'').trim())?'<option value="__none">Sem cidade</option>':'');if([...sc.options].some(o=>o.value===cc))sc.value=cc;const dl=$('cityList');if(dl)dl.innerHTML=cs.map(x=>`<option value="${esc(x)}">`).join('')}
   const s=$('fRole');if(!s)return;const cur=s.value;const rs=[...new Set(emps.map(e=>(e.role||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));s.innerHTML='<option value="">Todos os cargos</option>'+rs.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('')+(emps.some(e=>!(e.role||'').trim())?'<option value="__none">Sem cargo</option>':'');if([...s.options].some(o=>o.value===cur))s.value=cur;mirrorFilters()}
 function makeSep(){let last=null;return e=>{const tk=teamKey(emps[e]);const k=tk?'T:'+tk:'S:'+e;const r=(last!==null&&k!==last)?' class="tsep"':'';last=k;return r}}
@@ -1533,6 +1535,11 @@ const SYNC_KEY='escala5x2sync';
 let SY={sent:{},seen:{}};try{SY=Object.assign(SY,JSON.parse(localStorage.getItem(SYNC_KEY)||'{}'))}catch(e){}
 const sySave=()=>{try{localStorage.setItem(SYNC_KEY,JSON.stringify(SY))}catch(e){}};
 let syTimer=null,syBusy=false,syAplicando=false,syOk=false,syErro='';
+// LANÇAMENTOS DE ESCALA (ex.: planilha do RH): cada pacote em assets/ é aplicado UMA vez por área e a marca
+// fica na própria fatia no servidor (dados.importacoes), para nunca reaplicar por cima de ajustes manuais
+var IMPORTS={};try{IMPORTS=JSON.parse(localStorage.getItem('escala5x2imports')||'{}')||{}}catch(e){}
+const salvarImports=()=>{try{localStorage.setItem('escala5x2imports',JSON.stringify(IMPORTS))}catch(e){}};
+const PACOTES_ESCALA=['assets/escala-rh-2026-12-15.json'];
 // havia escala salva NESTE navegador antes desta abertura? (o GA pode ter trabalhado nela antes
 // da sincronização existir) — lido antes de qualquer gravação desta abertura
 const HAD_LOCAL=(()=>{try{return !!localStorage.getItem('escala5x2v2')}catch(e){return false}})();
@@ -1553,6 +1560,7 @@ function fatia(ch){
     ov:(()=>{const r={};Object.keys(ov||{}).sort().forEach(k=>{if(nm.has(k.slice(0,k.lastIndexOf('|'))))r[k]=ov[k]});return r})(),
     vac:vac.filter(v=>nm.has(v.name)).map(v=>({name:v.name,s:v.s,e:v.e})).sort((a,b)=>azSort(a.name+a.s,b.name+b.s))};
   if(ch==='geral'){f.saOff=(saOff||[]).slice().sort();f.params=lerParams()}
+  if(IMPORTS[ch]&&IMPORTS[ch].length)f.importacoes=IMPORTS[ch].slice().sort();
   return f;
 }
 // PARÂMETROS (pedido do usuário, 2026-11-20: "todas as regras implementadas para o Admin terão que
@@ -1599,6 +1607,7 @@ function aplicarFatia(ch,d){
   const juntos=resto.concat(novos);
   if(GA_LOCK){emps=agruparEquipes(juntos.filter(p=>p.ga===GA_LOCK));OUTROS=juntos.filter(p=>p.ga!==GA_LOCK)}else emps=agruparEquipes(juntos);
   if(ch==='geral'&&d.params)aplicarParams(d.params);
+  if(Array.isArray(d.importacoes)){IMPORTS[ch]=[...new Set([...(IMPORTS[ch]||[]),...d.importacoes])];salvarImports()}
 }
 function syStatus(t,err){const el=$('syncSt');if(!el)return;el.hidden=!t;el.textContent=t||'';el.classList.toggle('err',!!err)}
 const hhmm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
@@ -1625,6 +1634,31 @@ async function syEnviar(){
   }else{syErro='';if(enviou||syOk)syStatus('☁ Sincronizado às '+hhmm())}
 }
 function syncAgendar(){if(!SYNC||syAplicando)return;clearTimeout(syTimer);syTimer=setTimeout(syEnviar,2000)}
+async function aplicarPacotesEscala(serverRows){
+  const grav=chavesGravaveis((serverRows||[]).map(r=>r.chave));if(!grav.length)return false;
+  (serverRows||[]).forEach(r=>{if(Array.isArray(r.dados&&r.dados.importacoes)){IMPORTS[r.chave]=[...new Set([...(IMPORTS[r.chave]||[]),...r.dados.importacoes])]}});
+  let aplicou=false;
+  for(const url of PACOTES_ESCALA){
+    let pac;try{pac=await (await fetch(url,{cache:'no-store'})).json()}catch(e){continue}
+    if(!pac||!pac.id||!pac.areas)continue;
+    const F=pac.faixas,dentro=(x,[a,b])=>x>=a&&x<=b;
+    for(const ch of Object.keys(pac.areas)){
+      if(!grav.includes(ch)||(IMPORTS[ch]||[]).includes(pac.id))continue;
+      const area=pac.areas[ch];let n=0;
+      todosEmps().forEach(em=>{const pp=area[em.name];if(!pp)return;n++;
+        const f={};Object.entries(fix[em.name]||{}).forEach(([k,v])=>{if(!dentro(k,F.fix))f[k]=v});Object.assign(f,pp.fix);fix[em.name]=f;
+        oc[em.name]=(oc[em.name]||[]).filter(w=>!dentro(w,F.oc)).concat(pp.oc||[]).sort();
+        const od={};Object.entries(ocD[em.name]||{}).forEach(([k,v])=>{if(!dentro(k,F.ocD))od[k]=v});Object.assign(od,pp.ocD||{});if(Object.keys(od).length)ocD[em.name]=od;else delete ocD[em.name];
+        vac=vac.filter(v=>!(v.name===em.name&&v.e>=pac.ciclo[0]&&v.s<=pac.ciclo[1])).concat((pp.ferias||[]).map(v=>({name:em.name,s:v.s,e:v.e})));
+        em.mode='manual';em.sob=true;
+      });
+      IMPORTS[ch]=[...(IMPORTS[ch]||[]),pac.id];salvarImports();aplicou=true;
+      console.info('Escala 5X2: lançamento '+pac.id+' aplicado em '+ch+' ('+n+' colaboradores).');
+    }
+  }
+  if(aplicou){if(state.cfg)state.cfg.ocDayOv=ocD;_saveState0();renderEmps();if(state.cal)genNew();else render()}
+  return aplicou;
+}
 async function syBuscar(inicial){
   if(!SYNC||!SYNC.disponivel()||syBusy)return;
   let rows;try{rows=await SYNC.ler()}catch(e){syStatus('☁ Sincronização indisponível no servidor',true);return}
@@ -1652,6 +1686,7 @@ async function syBuscar(inicial){
   if(mudou){_saveState0();renderEmps();if(state.cal)genNew();else render()}
   if(!SYNC.podeGravar())syStatus(PAINEL&&PAINEL.role==='ga'?'☁ Sua sessão expirou — saia e entre de novo com seu acesso para sincronizar':'☁ Atualizado às '+hhmm()+' (somente leitura — entre com seu acesso para editar)',PAINEL&&PAINEL.role==='ga');
   else if(!syErro)syStatus('☁ Sincronizado às '+hhmm());
+  try{if(await aplicarPacotesEscala(rows))syStatus('☁ Escala do RH lançada · sincronizando…')}catch(e){console.error('Escala 5X2: falha ao aplicar lançamento',e)}
   await syEnviar();
   renderBkp();
 }
