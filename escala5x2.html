@@ -372,6 +372,11 @@ td.f1{background:#ede9fe!important;box-shadow:inset 0 0 0 2px #7c3aed}
 .seq6tag.f1tag{background:#7c3aed}
 .fixFolgas{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:6px;border:1px solid var(--acc);background:var(--acc2);color:var(--acc);font:inherit;font-size:11px;font-weight:700;cursor:pointer;vertical-align:1px;white-space:nowrap}
 .fixFolgas:hover{background:var(--acc);color:#fff}
+/* início (segunda) e fim (domingo) de cada semana nas colunas (pedido do usuário, 2026-11-25) */
+th.mon::before,th.sun::before{display:block;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;line-height:1;margin-bottom:1px;color:var(--acc)}
+th.mon::before{content:'início'}
+th.sun::before{content:'fim'}
+th.mon:not(.cut-s),td.mon:not(.cut-s){border-left:2px solid var(--acc)!important}
 </style>
 </head>
 <body>
