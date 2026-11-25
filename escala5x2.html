@@ -1816,7 +1816,7 @@ function corrigirFolgas(e){
   const st=state,nm=st.cfg.names[e],mud=planoFolgas(e);
   if(!mud.length){alert(nm+': todas as semanas já têm 2 folgas.');return}
   const eq=mates(nm),DS=['dom','seg','ter','qua','qui','sex','sáb'];
-  const txt=mud.map(m=>'• '+fmtD(st.cal.days[m.i].date)+' ('+DS[st.cal.days[m.i].date.getUTCDay()]+'): '+(m.para==='F'?'trabalho → FOLGA':'folga → TRABALHO')).join('\n');
+  const txt=mud.map(m=>'• '+fmtD(st.cal.days[m.i].date)+' ('+DS[st.cal.days[m.i].date.getUTCDay()]+'): '+(m.para==='F'?'trabalho → FOLGA'+(saDiaOn(nm,m.i)?' (era dia de sobreaviso — o sobreaviso desse dia sai)':''):'folga → TRABALHO')).join('\n');
   if(!confirm('Corrigir a escala de '+nm+(eq.length>1?' (e da equipe: '+eq.filter(x=>x!==nm).join(', ')+')':'')+' para 2 folgas por semana (segunda a domingo)?\n\n'+txt))return;
   mud.forEach(m=>{const iso=isoD(st.cal.days[m.i].date);eq.forEach(n=>{const k=st.cfg.names.indexOf(n);if(k<0)return;st.grid[k][m.i]=m.para;(fix[n]=fix[n]||{})[iso]=m.para})});
   saveState();render();
