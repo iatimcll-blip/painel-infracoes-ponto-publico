@@ -971,7 +971,19 @@ function enforceInfraNow(){if(!state.grid||!state.cfg)return;Object.assign(state
 function infraPairs(){const g={};emps.forEach(e=>{if(isInfra(e)&&(e.city||'').trim()){const k=(e.uf||'')+'|'+e.city.trim().toLowerCase();(g[k]=g[k]||[]).push(e.name)}});const out=Object.values(g).filter(a=>a.length===2);
   Object.keys(subFix).forEach(a=>{const b=subFix[a];if(subFix[b]===a&&a<b){const ea=emps.find(e=>e.name===a),eb=emps.find(e=>e.name===b);if(ea&&eb&&isInfra(ea)&&isInfra(eb)&&!out.some(p=>p.includes(a)||p.includes(b)))out.push([a,b])}});
   return out}
-function enforcePairOC(){infraPairs().forEach(([a,b])=>{(oc[a]||[]).slice().forEach(iso=>{if((oc[b]||[]).includes(iso))setOC(oc,b,iso,false)})})}
+// regra do par de infra: nunca sobreaviso no MESMO DIA. Quando a semana tem ajuste por dia (ocD — ex.: escala
+// lançada da planilha do RH), só o dia que coincide de fato é desligado no segundo do par; sem ajuste por dia,
+// tira a semana do segundo, como antes (pedido do usuário, 2026-11-24: a regra comparava semanas e apagava
+// sobreaviso em dias diferentes)
+function diasDaSemanaOC(iso,nm){const out=[];try{if(state.cfg){const w=onCallWindow(new Date(iso+'T00:00:00Z'),state.cfg,nm);for(let t=Date.UTC(w.start.getUTCFullYear(),w.start.getUTCMonth(),w.start.getUTCDate());t<w.end.getTime();t+=864e5)out.push(isoD(new Date(t)));return out}}catch(e){}const m=new Date(iso+'T00:00:00Z');for(let k=0;k<7;k++)out.push(isoD(new Date(m.getTime()+k*864e5)));return out}
+function enforcePairOC(){infraPairs().forEach(([a,b])=>{(oc[a]||[]).slice().forEach(iso=>{
+  if(!(oc[b]||[]).includes(iso))return;
+  const da=diasDaSemanaOC(iso,a),db=diasDaSemanaOC(iso,b);
+  const temDia=[...da,...db].some(d=>(ocD[a]&&ocD[a][d]!==undefined)||(ocD[b]&&ocD[b][d]!==undefined));
+  if(!temDia){setOC(oc,b,iso,false);return}
+  const onA=new Set(da.filter(d=>!(ocD[a]&&ocD[a][d]===0)));
+  db.forEach(d=>{if(onA.has(d)&&!(ocD[b]&&ocD[b][d]===0)){(ocD[b]=ocD[b]||{})[d]=0}});
+})})}
 function separateInfra(){
   const cfg=state.cfg,cal=state.cal,g=state.grid;if(!cfg||!g)return;
   const names=cfg.names,n=cal.days.length;
